@@ -222,17 +222,17 @@ The hierarchy says initiatives are bound to workspaces, but vtf is separate from
 
 ---
 
-### 10. `blocked` vs Dependency-Blocked Distinction
+### 10. ~~`blocked` vs Dependency-Blocked Distinction~~ (Resolved)
 
-A task can be `blocked` (manually set status — "waiting on external thing") or unclaimable due to unresolved `depends_on` links (automatic — dependencies not done yet). These are different concepts.
+**Decided: Two different concepts, handled differently.**
 
-**Questions:**
-- Should dependency-blocked tasks show differently on the board than manually blocked?
-- Is dependency-blocked a computed state (not a status) that overlays on `todo`?
-- Should the API expose a `claimable` flag that accounts for both?
+| Type | Source | Resolution | Status field |
+|------|--------|-----------|-------------|
+| **Dependency-blocked** | Internal — another task in vtf isn't done yet | Automatic — resolves when dependency completes | Not a status. Computed property on `todo` tasks. |
+| **Manually blocked** | External — something outside the system | Manual — human/agent removes the block | `blocked` status |
 
-**Proposed resolution:**
-- `blocked` remains a manual status (set by human or agent — "waiting on external dependency")
-- Dependency-blocking is a **computed property** — task is in `todo` but has unresolved `depends_on` links, so it's not claimable. The API filters these out of the claimable pool. The board can show them as "waiting" within the Todo column.
+- `blocked` = manual status for external dependencies ("waiting on client API keys", "infra team hasn't provisioned DB")
+- Dependency-blocking = computed property. Task stays in `todo` but has unresolved `depends_on` links. API filters these out of the claimable pool. Board shows them in the Todo column with a "waiting on task X" indicator.
+- API exposes a `claimable` flag on tasks that accounts for both status and dependency state.
 
-**Status:** Open
+**Status:** Resolved
