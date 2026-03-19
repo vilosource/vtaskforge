@@ -457,6 +457,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [implementation-PLAN.md](implementation-PLAN.md) — Phased implementation plan starting with project setup
 - [task-breakdown-GUIDE.md](task-breakdown-GUIDE.md) — How to decompose phases into tasks with dependency DAGs
 - [phase0-findings-ANALYSIS.md](phase0-findings-ANALYSIS.md) — Dry run findings: agent capability vs spec detail, isolation, spec errors
+- [behavioral-verification-DESIGN.md](behavioral-verification-DESIGN.md) — Three-layer verification: behavioral specs, judge agent evaluation, human review (based on VFF)
 
 ## Not Yet Decided
 
