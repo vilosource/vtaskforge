@@ -10,7 +10,7 @@ Designed for these consumers:
 - **vf-agents** (Go) — claim tasks, report results, heartbeat
 - **Scrum Master Agent** — event stream, triage, metrics
 - **Web UI** (SPA) — full CRUD, live updates, reviews
-- **Terminal UI** (Node/TS) — same operations via CLI
+- **Terminal UI** (Python) — same operations via CLI
 - **Intake Tooling** — bulk creation of initiatives/phases/tasks
 - **External Systems** — unblock tasks, future webhook support
 
@@ -19,12 +19,17 @@ Designed for these consumers:
 | Decision | Choice | Rationale |
 |---|---|---|
 | Style | REST | Universal, any language can consume, great tooling |
-| Spec | OpenAPI 3.x | Codegen for Go (vf-agents), TS (UIs), auto-documentation |
+| Spec | OpenAPI 3.x | Codegen for Go (vf-agents), Python (API + TUI), auto-documentation |
 | Versioning | URL-based (`/v1/`) | Simple, visible, easy to route |
 | Events | SSE | One-way, auto-reconnect, works through proxies |
 | Pagination | Cursor-based | Better than offset for real-time data where items move |
 | Auth | Bearer token (see gap #8) | Simple, works for all consumers |
 | Content-Type | `application/json` | All requests and responses |
+
+**Implementation notes:**
+- API server built with **Django REST Framework (DRF)** — provides serializers, viewsets, permissions, and OpenAPI schema generation out of the box
+- Background claim expiry process runs via **Celery** (with Redis or Postgres as broker) — periodic task checks for expired claims every 60 seconds
+- Auth (v1): **DRF TokenAuthentication** backed by Django's pluggable auth system — simple bearer tokens, upgrade path to OAuth2/JWT later
 
 Alternatives considered:
 - JSON-RPC — natural for actions but less tooling and convention

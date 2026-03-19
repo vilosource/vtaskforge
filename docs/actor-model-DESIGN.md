@@ -111,7 +111,7 @@ Zoom into vtaskforge showing its deployable components.
 
 flowchart TB
     subgraph "🏭 vtaskforge System"
-        API("⚙️ API Server<br/>Node/TS<br/>Port 3000")
+        API("⚙️ API Server<br/>Django/Python<br/>Port 8000")
         DB[("🗄️ Postgres<br/>Task Storage<br/>Port 5432")]
         EVENTS("📡 Event Bus<br/>SSE/WebSocket<br/>Real-time Updates")
         WEBSPA("🎨 Web UI SPA<br/>Browser App")
@@ -279,7 +279,7 @@ What runs where — infrastructure layout with network connections.
 flowchart TB
     subgraph "☁️ Cloud Infrastructure"
         subgraph "🖥️ Server Host"
-            API("⚙️ vtaskforge API<br/>:3000")
+            API("⚙️ vtaskforge API<br/>Django/Python<br/>:8000")
             DB[("🗄️ Postgres<br/>:5432")]
         end
 
@@ -300,7 +300,7 @@ flowchart TB
     end
 
     subgraph "💻 Developer Machine"
-        TUI("💻 Terminal UI<br/>Ink/Node")
+        TUI("💻 Terminal UI<br/>Python CLI (Click/Typer + Textual)")
         KBCLI("📚 mykb CLI")
         KBSTORE[("💾 ~/.mykb/<br/>SQLite + JSONL")]
     end
@@ -310,9 +310,9 @@ flowchart TB
     end
 
     API -.->|"HTTPS:443"| WEBUI
-    API <-->|"TCP:3000"| TUI
-    API <-->|"TCP:3000"| POOL
-    API <-->|"SSE:3000"| SCRUMDAEMON
+    API <-->|"TCP:8000"| TUI
+    API <-->|"TCP:8000"| POOL
+    API <-->|"SSE:8000"| SCRUMDAEMON
     API <-->|"TCP:5432"| DB
 
     POOL <-->|"Docker API"| DOCKER

@@ -177,7 +177,7 @@ Review flag cascade precedence: task (explicit) > phase default > initiative def
 Both human and agent consumers share the same API layer. UI clients are thin — no business logic, just rendering and event subscription.
 
 ```
-Postgres ← API Server (RPC + Events) → Terminal UI (Ink)
+Postgres ← API Server (RPC + Events) → Terminal UI (Python CLI)
                                       → Web UI (SPA)
                                       → Agent clients
 ```
@@ -243,7 +243,7 @@ Users switch between DAG view and Kanban view depending on intent:
 ### Decided
 
 - **Two UI targets**: Terminal UI and Web UI, both consuming the same RPC API and event stream
-- **Terminal UI**: Ink (React for CLI) — keeps the stack in TypeScript/Node, shares types and RPC client with the core tool
+- **Terminal UI**: Textual or Click/Typer (Python) — same language as the API server
 - **Web UI**: SPA (framework TBD) — same API, same events, richer interaction
 - **Real-time updates**: Both UIs subscribe to the event stream (SSE/WebSocket) — board updates live as agents claim and complete tasks
 - **Thin UI layer**: No business logic in UI clients. All state management and validation lives in the API server.
@@ -350,9 +350,9 @@ See Review System Design below for the full status flow diagram.
 
 ### Alternatives Considered
 
-- **Textual** (Python) — polished TUI but different language stack
-- **Bubbletea** (Go) — performant but different stack
-- **Blessed/neo-blessed** (Node) — older, less maintained than Ink
+- **Ink** (React for CLI, Node/TS) — polished TUI but different language from the API server
+- **Bubbletea** (Go) — performant but different language stack
+- **Blessed/neo-blessed** (Node) — older, less maintained
 
 ## Design Topics to Explore
 
