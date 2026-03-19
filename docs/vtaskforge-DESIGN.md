@@ -171,13 +171,54 @@ Postgres ← API Server (RPC + Events) → Terminal UI (Ink)
                                       → Agent clients
 ```
 
-### Kanban Board
+### Two Primary Views
 
-Primary view for initiatives — columns map to task statuses:
+#### DAG View (Pipeline Graph)
 
-| Todo | Doing | Blocked | Done |
+Primary view for understanding an initiative's execution plan. Inspired by GitLab's pipeline graph visualization.
+
+- Phases rendered as clusters/groups of nodes
+- Tasks as nodes within phases, connected by dependency arrows
+- Color-coded by status (green=done, blue=doing, yellow=review, red=needs_attention, grey=todo)
+- Dependency arrows show execution flow across tasks and phases
+- Active tasks visually highlighted (animation/pulse)
+
+**Click a task node → Modal view:**
+- Full task details (description, acceptance criteria, notes)
+- Event timeline (status history)
+- Linked context (areas, files, docs, commits, MRs)
+- Dependency graph (what it waits on, what waits on it)
+- Context-sensitive action buttons:
+
+| Task status | Available actions |
+|---|---|
+| `draft` | Edit fields, submit for review, chat with architect agent |
+| `pending_start_review` | Approve, reject, request changes |
+| `todo` | Assign to agent, edit, block |
+| `doing` | View progress, block |
+| `pending_completion_review` | Review deliverable, approve, reject, request changes |
+| `needs_attention` | Triage, rewrite, reassign, create prerequisite task |
+| `blocked` | Unblock, edit block reason |
+| `done` | View result, linked commits/MRs |
+
+**Click a phase cluster → Phase detail panel:**
+- Phase description, progress bar (tasks done / total)
+- Dependencies on other phases
+- Actions: activate manually, complete manually
+
+#### Kanban Board
+
+Secondary view for managing work by status. Columns map to task statuses:
+
+| Draft | Review | Todo | In Progress | Attention | Done |
 
 Cards show: task title, assigned agent, phase, linked KB areas. Expandable for full context.
+
+#### View Toggle
+
+Users switch between DAG view and Kanban view depending on intent:
+- **DAG view** — understanding the plan, seeing dependencies, reviewing execution flow
+- **Kanban view** — managing current work, focusing on status and throughput
 
 ### Decided
 
