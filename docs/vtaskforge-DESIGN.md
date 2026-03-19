@@ -278,6 +278,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [actor-model-DESIGN.md](actor-model-DESIGN.md) — Actor types, system boundary, development team model, interaction flows
 - [agent-pool-manager-PROPOSAL.md](agent-pool-manager-PROPOSAL.md) — Proposal to evolve vf-agents into the agent pool manager
 - [scrum-master-agent-PROPOSAL.md](scrum-master-agent-PROPOSAL.md) — Autonomous process agent for flow facilitation and triage
+- [design-gaps-ANALYSIS.md](design-gaps-ANALYSIS.md) — Identified gaps in the design requiring resolution
 
 ## Not Yet Decided
 
