@@ -25,7 +25,7 @@ services:
       - POSTGRES_USER=vtf
       - POSTGRES_PASSWORD=vtfdev
     ports:
-      - "5432:5432"
+      - "5436:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vtf -d vtaskforge"]
       interval: 5s
