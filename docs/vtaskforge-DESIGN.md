@@ -53,31 +53,31 @@ Task:
   id: nanoid
   title: "Filter archived entries from kb load output"
   status: draft | pending_start_review | todo | doing | pending_completion_review | changes_requested | blocked | deferred | cancelled | done
-  phase: "phase-1-zone-filtering"
-  initiative: "zone-filter-fix"
+  phase_id: <phase-nanoid>
+  initiative_id: <initiative-nanoid>
 
-  # Agent context
+  # Agent context (core fields on the task itself)
   description: "kb load and scorer.ts don't filter by zone..."
   acceptance_criteria: ["archived entries excluded from kb load", "tests pass"]
-  areas: ["mykb"]
-  files: ["src/core/db.ts", "src/extension/hooks/scorer.ts"]
-  docs: ["zone-filter-BUGFIX.md"]
-
-  # Tracking
-  blockers: []
   notes: []
-  commits: []
+
+  # Review flags
+  needs_review_before_start: true | false
+  needs_review_on_completion: true | false
+
+  # All relationships are links (separate table)
+  # links: depends_on, blocks, relates_to, commit, mr, area, doc, file
 ```
+
+Areas, files, docs, commits, and task dependencies are all managed via the **link system** rather than inline arrays. This keeps the task record lean and relationships queryable.
 
 ## Open Questions
 
-- **Intake**: How does a plan document become a structured initiative? Likely a dedicated command/process.
 - **Hooks/automation**: How do status updates get triggered? Explicit commands, hooks, or automatic detection?
 - **Agent capabilities/matching**: How to route the right task to the right agent type.
 - **Concurrency**: What happens when two agents try to claim the same task.
-- **Naming**: `tt`? Something else?
 - **Nesting depth**: Phase > Task is confirmed. Do tasks need subtasks?
-- **Jira integration**: At initiative level? Optional link? TBD.
+- **Jira integration**: At initiative level? Optional link via link system? TBD.
 - **Postgres hosting**: Local for now, production hosting decided later.
 
 ## UI Architecture
@@ -113,7 +113,7 @@ Tasks aren't just for agents — humans need to refine, review, and approve them
 #### Task Editing
 
 - **Web UI**: Click a task to open a detail view. Edit all fields inline — title, description, acceptance criteria, files, areas, docs. Changes go through the same RPC API.
-- **Terminal UI**: Different flow — likely CLI commands (`tt task edit <id>`) or open in `$EDITOR`. Not a chat interface, but full editing capability.
+- **Terminal UI**: Different flow — likely CLI commands (`vtf task edit <id>`) or open in `$EDITOR`. Not a chat interface, but full editing capability.
 
 #### Agent-Assisted Refinement (Web UI)
 
@@ -186,23 +186,74 @@ See Review System Design below for the full status flow diagram.
 
 The following topics have been identified but not yet designed. Each should be discussed and resolved before or during implementation.
 
-### 1. Intake — Plan to Initiative
+### 1. ~~Intake — Plan to Initiative~~ (Resolved)
 
-How does a markdown implementation plan become a structured initiative with phases and tasks? Likely an agent-assisted process: an intake agent reads the plan doc, proposes a task breakdown, and the human reviews/approves. This would be the first real user of the review system.
+**Decided: Out of scope for vtaskforge.** Intake/parsing of plan documents is a consumer concern — a Claude Code skill, an agent, or a manual process that calls the vtf API. vtaskforge provides CRUD for initiatives, phases, and tasks. How they get populated is not vtf's problem.
 
-Key questions: What format constraints on the input plan? Is it a one-shot conversion or iterative refinement? How are existing tasks updated when the plan evolves?
+vtf's API surface for this:
+- `vtf initiative create --name "..." --workspace <id>`
+- `vtf phase create --initiative <id> --name "..."`
+- `vtf task create --phase <id> --title "..." [--description, --areas, --files, ...]`
+- `vtf task update <id> [--title, --description, --areas, --files, ...]`
 
-### 2. Task Dependencies
+Tasks are rich objects built up incrementally — create with minimal fields, then enrich via update and link commands. Bulk creation supported via `--from <file.yaml>` for intake tools.
 
-Phases are sequential, but tasks within a phase are currently independent. Adding task-level dependencies (simple DAG within a phase) would unlock parallel agent execution — agents grab any unblocked task rather than waiting for the whole phase to complete.
+### 2. ~~Task Dependencies~~ (Resolved) → Links & Relations
 
-Key questions: Simple "depends_on" list or full DAG? Cross-phase dependencies? How does this affect the kanban view (blocked-by vs blocked status)?
+Generalized into a **link system** that handles dependencies and all other relationships between entities.
 
-### 3. Observability / Activity Log
+**Link types:**
 
-A timeline per task capturing operational events: claimed by agent X at 14:00, blocked at 14:02, unblocked at 14:15, completed at 14:30. Different from review history — this is operational telemetry for understanding bottlenecks and agent performance.
+| Type | Meaning | Execution constraint |
+|------|---------|---------------------|
+| `depends_on` | Task A depends on Task B | A can't start until B is done |
+| `blocks` | Task A blocks Task B | Inverse of depends_on |
+| `relates_to` | Informational link | No constraint |
+| `commit` | Task → git commit SHA | Deliverable tracking |
+| `mr` | Task → merge request URL | Deliverable tracking |
+| `area` | Task → mykb KB area | Context for agents |
+| `doc` | Task → document reference | Context for agents |
 
-Key questions: Stored on the task or in a separate events table? What events are captured? Should the kanban board show a timeline view?
+**CLI:**
+
+```bash
+vtf link add <source-id> --depends-on <target-id>
+vtf link add <source-id> --blocks <target-id>
+vtf link add <source-id> --relates-to <target-id>
+vtf link add <source-id> --commit <sha>
+vtf link add <source-id> --mr <url>
+vtf link add <source-id> --area <kb-area>
+vtf link add <source-id> --doc <path-or-url>
+vtf link rm <link-id>
+vtf link list <entity-id>
+```
+
+**Storage:** Generic `links` table — `source_id`, `target_id`, `link_type`, `metadata`. Extensible for new link types without schema changes.
+
+**Execution impact:** `depends_on`/`blocks` links form a DAG within a phase. Agents can only claim tasks whose dependencies are all `done`. This unlocks parallel execution — agents grab any unblocked task rather than waiting for the whole phase.
+
+### 3. ~~Observability / Activity Log~~ (Resolved)
+
+**Decided: vtaskforge owns task-level observability only.** Agent session capture (turns, tool calls, tokens, health) belongs to a separate agent pool manager system.
+
+**Task event log** — separate `task_events` table, append-only:
+
+| Event type | Data |
+|-----------|------|
+| `status_changed` | from, to, timestamp, triggered_by |
+| `claimed` | agent_id, timestamp |
+| `review_submitted` | reviewer_id, reviewer_type, decision, reason |
+| `link_added` | link_type, target, added_by |
+| `link_removed` | link_type, target, removed_by |
+| `field_updated` | field, old_value, new_value, updated_by |
+
+Enables: task timeline view, cycle time metrics (draft→done), rework rate (changes_requested count), time in review.
+
+**Agent session telemetry is out of scope** — the agent pool manager tracks session internals (turns, tool calls, tokens, container health). The two systems link via `agent_id` + `task_id`. Prior art: VFF's observe package (Source→Parser→Emitter pipeline in `vilo-forge-factory/internal/observe/`) proved this pattern at scale.
+
+**Agent pool manager:** The leading proposal is to evolve `vf-agents` (github.com/vilosource/vf-agents) into the agent pool manager, absorbing VFF's observe pipeline. See [agent-pool-manager-PROPOSAL.md](agent-pool-manager-PROPOSAL.md) for details.
+
+**Surfacing:** Task detail view shows the event timeline. Kanban cards show last event as a summary line.
 
 ### 4. Context Budget
 
