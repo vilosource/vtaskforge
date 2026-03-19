@@ -21,18 +21,18 @@ Full shapes documented in vtaskforge-DESIGN.md under "Entity Shapes".
 
 ---
 
-### 2. Status Transitions — Not Formalized
+### 2. ~~Status Transitions — Not Formalized~~ (Resolved)
 
-We list 11 task statuses but don't define which transitions are valid. Without a formal state machine, invalid transitions could occur.
+**Decided:** Full state machine defined and enforced by the API server.
 
-**Questions:**
-- Can a task go from `draft` directly to `todo` (skipping review)?
-- Can `done` go back to `doing` (reopen)?
-- Can `cancelled` be reversed?
-- Who can trigger which transitions? (v1: anyone, but still need the valid set)
-- Should the API server enforce valid transitions or just log warnings?
+- `done` and `cancelled` are terminal — no transitions out. Create a new task instead.
+- `cancelled` and `deferred` are reachable from any non-terminal state.
+- `changes_requested` routing uses `review_return_to` field (Option A) — stores which gate triggered the rejection so resubmit goes to the right place.
+- API returns an error on invalid transitions.
 
-**Status:** Open
+Full state machine documented in vtaskforge-DESIGN.md under Review System Design.
+
+**Status:** Resolved
 
 ---
 

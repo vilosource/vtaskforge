@@ -118,6 +118,7 @@ Task:
   # Review flags (null = inherit from phase → initiative)
   needs_review_before_start: true | false | null
   needs_review_on_completion: true | false | null
+  review_return_to: pending_start_review | pending_completion_review | null
 
   # All relationships are links (separate table)
   # links: depends_on, blocks, relates_to, commit, mr, area, doc, file, jira
@@ -273,19 +274,49 @@ The review system is designed behind interfaces so the mechanism is extensible w
 
 Both flags are independently settable per task, with cascading defaults (task > phase > initiative).
 
-**Flow:**
+**State Machine:**
+
+Valid transitions enforced by the API server:
 
 ```
-draft → pending_start_review → todo → doing → pending_completion_review → done
-              ↓                         ↓              ↓
-        changes_requested ←──────── needs_attention    changes_requested
-              ↓                         ↓              ↓
-           (refine, resubmit)    (triage, rework)   (fix, resubmit)
-                        cancelled ←── (any state)
+draft ──→ pending_start_review       (needs_review_before_start = true)
+draft ──→ todo                       (needs_review_before_start = false)
+
+pending_start_review ──→ todo                  (approved)
+pending_start_review ──→ changes_requested     (rejected, sets review_return_to)
+
+todo ──→ doing                       (claimed by agent)
+todo ──→ blocked                     (external dependency)
+
+doing ──→ pending_completion_review  (needs_review_on_completion = true)
+doing ──→ done                       (needs_review_on_completion = false)
+doing ──→ needs_attention            (agent gave up)
+doing ──→ blocked                    (external dependency discovered)
+
+pending_completion_review ──→ done                  (approved)
+pending_completion_review ──→ changes_requested     (rejected, sets review_return_to)
+
+changes_requested ──→ review_return_to value        (resubmitted — routed by field)
+changes_requested ──→ draft                         (needs major rework)
+
+needs_attention ──→ draft            (needs rewrite)
+needs_attention ──→ todo             (triaged, back to pool)
+needs_attention ──→ cancelled        (not worth pursuing)
+
+blocked ──→ todo                     (unblocked, back to pool)
+blocked ──→ doing                    (unblocked, same agent continues)
+
+deferred ──→ todo                    (reactivated)
+
+Any non-terminal ──→ cancelled       (cancel from any state)
+Any non-terminal ──→ deferred        (defer from any state)
+
+done                                 (terminal — no transitions out)
+cancelled                            (terminal — no transitions out)
 ```
 
-- `changes_requested` is a single status reachable from either review gate
-- Which review triggered it is captured in the ReviewDecision history
+**`changes_requested` routing:** The `review_return_to` field on the task stores which review gate triggered the rejection (`pending_start_review` or `pending_completion_review`). On resubmit, the task returns to that gate automatically. Field is only meaningful when status is `changes_requested`.
+
 - Enables queries like "show me all tasks that needed rework" without structural complexity
 
 **Reviewer types:**
