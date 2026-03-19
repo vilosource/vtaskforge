@@ -237,79 +237,471 @@ Phase 0 structured as a vtaskforge initiative — tasks with dependencies formin
 
 #### Task 0.1: Project scaffolding & .gitignore
 
-Create the full directory structure, `.gitignore`, and empty `__init__.py` files for all apps.
+Create the full directory structure and `.gitignore`.
 
-- **Acceptance criteria:** Git repo has the complete directory tree as specified in Project Structure above.
+**Files to create:**
+```
+.gitignore
+requirements/           (empty dir)
+src/
+src/manage.py           (placeholder — replaced in task 0.5)
+src/vtaskforge/
+src/vtaskforge/__init__.py
+src/vtaskforge/settings/
+src/vtaskforge/settings/__init__.py
+src/core/__init__.py
+src/core/apps.py        (placeholder AppConfig)
+src/initiatives/__init__.py
+src/initiatives/apps.py
+src/tasks/__init__.py
+src/tasks/apps.py
+src/links/__init__.py
+src/links/apps.py
+src/reviews/__init__.py
+src/reviews/apps.py
+src/events/__init__.py
+src/events/apps.py
+src/agents/__init__.py
+src/agents/apps.py
+tests/__init__.py
+```
+
+**.gitignore must include:**
+```
+__pycache__/
+*.pyc
+*.pyo
+.env
+db.sqlite3
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+.DS_Store
+```
+
+- **Acceptance criteria:**
+  - All directories and files above exist in the repo
+  - `.gitignore` covers all listed patterns
+  - `find src -name "*.py" | wc -l` shows the expected file count
 - **Depends on:** nothing
+
+---
 
 #### Task 0.2: Requirements files
 
-Create `requirements/base.txt`, `dev.txt`, `prod.txt` with all Python dependencies.
+Create `requirements/base.txt`, `dev.txt`, `prod.txt`.
 
-- **Acceptance criteria:** `pip install -r requirements/dev.txt` succeeds without errors.
+**base.txt — core dependencies:**
+```
+Django>=5.1,<5.2
+djangorestframework>=3.15,<4.0
+django-cors-headers>=4.3,<5.0
+dj-database-url>=2.1,<3.0
+psycopg2-binary>=2.9,<3.0
+celery[redis]>=5.4,<6.0
+django-celery-beat>=2.6,<3.0
+redis>=5.0,<6.0
+nanoid>=2.0,<3.0
+```
+
+**dev.txt:**
+```
+-r base.txt
+pytest>=8.0,<9.0
+pytest-django>=4.8,<5.0
+pytest-celery>=1.0,<2.0
+factory-boy>=3.3,<4.0
+flake8>=7.0,<8.0
+```
+
+**prod.txt:**
+```
+-r base.txt
+gunicorn>=22.0,<23.0
+whitenoise>=6.5,<7.0
+```
+
+- **Acceptance criteria:**
+  - `pip install -r requirements/dev.txt` succeeds in a Python 3.12 environment
+  - All three files exist with version pinning as shown
+  - `dev.txt` includes `-r base.txt` (inherits base)
+  - `prod.txt` includes `-r base.txt`
 - **Depends on:** 0.1
+
+---
 
 #### Task 0.3: Dockerfile
 
-Python 3.12-slim base, system deps (libpq-dev, gcc), pip install from requirements, source copy.
+Create a Dockerfile optimized for development (requirements as separate layer).
 
-- **Acceptance criteria:** `docker build .` completes without errors.
+**Specification:**
+- Base image: `python:3.12-slim`
+- Working directory: `/app`
+- System deps: `libpq-dev`, `gcc` (needed for psycopg2)
+- Copy `requirements/` first, install with `--no-cache-dir` from `requirements/dev.txt`
+- Copy `src/` (overridden by volume mount in dev)
+- Set `PYTHONUNBUFFERED=1` and `PYTHONPATH=/app/src`
+- Do NOT include `CMD` — each service specifies its own command in docker-compose
+
+Reference the Dockerfile template in the "Docker Dev Setup" section above.
+
+- **Acceptance criteria:**
+  - `docker build -t vtaskforge .` completes without errors
+  - Image size is reasonable (< 500MB)
+  - `docker run --rm vtaskforge python --version` outputs Python 3.12.x
+  - `docker run --rm vtaskforge pip list` shows Django, DRF, celery installed
 - **Depends on:** 0.2
+
+---
 
 #### Task 0.4: docker-compose.yml
 
-All 5 services (api, db, redis, celery, celery-beat). Source mount, healthchecks, environment variables, named volume for Postgres.
+Create docker-compose.yml with all 5 services.
 
-- **Acceptance criteria:** `docker compose config` validates. `docker compose up -d` starts all services.
+**Services:**
+
+1. **api** — builds from Dockerfile, runs `python src/manage.py runserver 0.0.0.0:8000`, mounts `./src:/app/src`, exposes port 8000, depends on db (healthy) + redis
+2. **db** — `postgres:16-alpine`, volume `pgdata`, env: `POSTGRES_DB=vtaskforge`, `POSTGRES_USER=vtf`, `POSTGRES_PASSWORD=vtfdev`, port 5432, healthcheck with `pg_isready -U vtf -d vtaskforge`
+3. **redis** — `redis:7-alpine`, port 6379
+4. **celery** — same build as api, runs `celery -A vtaskforge worker -l info`, same volume mount, depends on db + redis
+5. **celery-beat** — same build as api, runs `celery -A vtaskforge beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler`, same volume mount, depends on redis
+
+**All custom services share these env vars:**
+- `DJANGO_SETTINGS_MODULE=vtaskforge.settings.dev`
+- `DATABASE_URL=postgres://vtf:vtfdev@db:5432/vtaskforge`
+- `CELERY_BROKER_URL=redis://redis:6379/0`
+
+**Volume:** `pgdata` (named volume for Postgres data persistence)
+
+Reference the docker-compose.yml template in the "Docker Dev Setup" section above.
+
+- **Acceptance criteria:**
+  - `docker compose config` validates without errors
+  - `docker compose up -d` starts all 5 services
+  - `docker compose ps` shows all 5 services running
+  - `docker compose down && docker compose up -d` works without manual steps
+  - Postgres healthcheck passes
+  - Modifying a `.py` file in `./src/` triggers Django's auto-reloader in the api container
 - **Depends on:** 0.3
+
+---
 
 #### Task 0.5: Django project & settings
 
-`manage.py`, `wsgi.py`, `urls.py`, `celery.py`. Settings split into `base.py`, `dev.py`, `prod.py`. DB via `DATABASE_URL`, secret key from env, `INSTALLED_APPS` configured.
+Create the Django project configuration files.
 
-- **Acceptance criteria:** `manage.py check` passes inside container. `manage.py migrate` runs without errors.
+**Files to create/modify:**
+
+`src/manage.py` — standard Django manage.py, default settings module: `vtaskforge.settings.dev`
+
+`src/vtaskforge/wsgi.py` — standard WSGI config
+
+`src/vtaskforge/urls.py` — URL configuration:
+- `/admin/` — Django admin
+- `/v1/` — API namespace (empty for now, health endpoint added in task 0.7)
+- Default handler for 404 should return JSON, not HTML
+
+`src/vtaskforge/celery.py` — Celery app:
+- App name: `vtaskforge`
+- Auto-discover tasks from all installed apps
+- Load config from Django settings with `CELERY_` prefix
+
+`src/vtaskforge/__init__.py` — import celery app so it's loaded on Django startup
+
+`src/vtaskforge/settings/base.py`:
+- `SECRET_KEY` from `os.environ.get('SECRET_KEY', 'dev-insecure-key-change-in-prod')`
+- `INSTALLED_APPS`: Django defaults + `rest_framework`, `corsheaders`, `django_celery_beat`, `core`
+- `MIDDLEWARE`: include `corsheaders.middleware.CorsMiddleware`
+- `DATABASES`: configured via `dj_database_url.config(default=os.environ.get('DATABASE_URL'))`
+- `REST_FRAMEWORK`: default renderer = JSON, default parser = JSON
+- `CELERY_BROKER_URL` from env
+- `DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'`
+- Custom 404 handler that returns JSON
+
+`src/vtaskforge/settings/dev.py`:
+- `from .base import *`
+- `DEBUG = True`
+- `ALLOWED_HOSTS = ['*']`
+- `CORS_ALLOW_ALL_ORIGINS = True`
+
+`src/vtaskforge/settings/prod.py`:
+- `from .base import *`
+- `DEBUG = False`
+- `ALLOWED_HOSTS` from env (comma-separated)
+- `CORS_ALLOW_ALL_ORIGINS = False`
+
+- **Acceptance criteria:**
+  - `docker compose exec api python src/manage.py check` passes with no warnings
+  - `docker compose exec api python src/manage.py migrate` runs without errors
+  - Django admin accessible at `http://localhost:8000/admin/`
+  - `http://localhost:8000/nonexistent` returns JSON 404, not HTML
+  - No hardcoded secrets in `base.py` (SECRET_KEY from env)
+  - `DJANGO_SETTINGS_MODULE` correctly resolves to dev settings in container
 - **Depends on:** 0.4
+
+---
 
 #### Task 0.6: Core app — mixins
 
-`NanoIDMixin` for nanoid primary keys, `TimestampMixin` for `created_at` / `updated_at` auto-fields.
+Create reusable model mixins in `src/core/mixins.py`.
 
-- **Acceptance criteria:** Mixins are importable. Unit test verifies NanoID generation and timestamp behavior.
+**NanoIDMixin:**
+- Generates a nanoid as the primary key (`id` field)
+- Use the `nanoid` Python package
+- ID length: 21 characters (nanoid default)
+- Field type: `CharField(max_length=21, primary_key=True, default=generate_nanoid, editable=False)`
+- The `generate_nanoid` function should be a module-level callable (not a lambda) so Django can serialize it in migrations
+
+**TimestampMixin:**
+- `created_at = DateTimeField(auto_now_add=True)`
+- `updated_at = DateTimeField(auto_now=True)`
+
+Both mixins should be abstract models (`class Meta: abstract = True`).
+
+**Files:**
+- Create `src/core/mixins.py`
+- Update `src/core/__init__.py` if needed
+
+**Test file:** `tests/test_mixins.py`
+- Test that NanoIDMixin generates a 21-char string ID
+- Test that two generated IDs are different (uniqueness)
+- Test that TimestampMixin fields are auto-populated
+
+- **Acceptance criteria:**
+  - `from core.mixins import NanoIDMixin, TimestampMixin` works
+  - NanoID generates 21-character alphanumeric strings
+  - Two calls to `generate_nanoid()` produce different values
+  - TimestampMixin has `created_at` and `updated_at` fields with `auto_now_add` and `auto_now`
+  - All tests in `tests/test_mixins.py` pass
 - **Depends on:** 0.5
+
+---
 
 #### Task 0.7: Core app — health endpoint
 
-`GET /v1/health` returns JSON with DB and Redis connection status. Returns appropriate error status when either service is down.
+Create `GET /v1/health` endpoint that checks DB and Redis connectivity.
 
-- **Acceptance criteria:** Returns `200` with `{"db": "ok", "redis": "ok"}` when healthy. Returns error status when DB or Redis is down.
+**Files:**
+- Create `src/core/views.py` — health check view
+- Update `src/vtaskforge/urls.py` — wire `/v1/health` route
+
+**View implementation:**
+- Use a DRF `APIView` (not a viewset — this is a simple endpoint)
+- Check DB: execute `django.db.connection.ensure_connection()` inside a try/except
+- Check Redis: use `django.core.cache` or direct `redis.Redis` connection ping
+- Response format:
+  ```json
+  {
+    "status": "healthy",
+    "checks": {
+      "db": "ok",
+      "redis": "ok"
+    }
+  }
+  ```
+- If any check fails, return HTTP 503 with the failing check showing `"error: <message>"`:
+  ```json
+  {
+    "status": "unhealthy",
+    "checks": {
+      "db": "ok",
+      "redis": "error: Connection refused"
+    }
+  }
+  ```
+- No authentication required on this endpoint
+
+**URL wiring:**
+- `src/vtaskforge/urls.py` should include a `/v1/` namespace
+- Health endpoint at `/v1/health`
+
+- **Acceptance criteria:**
+  - `curl http://localhost:8000/v1/health` returns `200` with `{"status": "healthy", "checks": {"db": "ok", "redis": "ok"}}`
+  - Stopping the db container and hitting `/v1/health` returns `503` with db showing error
+  - Stopping the redis container and hitting `/v1/health` returns `503` with redis showing error
+  - Response content-type is `application/json`
 - **Depends on:** 0.5
+
+---
 
 #### Task 0.8: Celery setup
 
-Celery app config in `celery.py`, auto-discover tasks, test task (`add(x, y)`), celery-beat scheduler.
+Configure Celery with a test task to verify the worker pipeline works.
 
-- **Acceptance criteria:** Test task can be dispatched and returns correct result. Execution visible in worker logs.
+**Files:**
+- `src/vtaskforge/celery.py` should already exist from task 0.5 — verify it auto-discovers tasks
+- Create `src/core/tasks.py` — test task:
+  ```python
+  from vtaskforge.celery import app
+
+  @app.task
+  def add(x, y):
+      return x + y
+  ```
+
+**Verification approach:**
+- From Django shell (`manage.py shell`):
+  ```python
+  from core.tasks import add
+  result = add.delay(2, 3)
+  print(result.get(timeout=10))  # Should print 5
+  ```
+- Celery worker logs should show the task being received and completed
+
+**Celery beat:**
+- `django-celery-beat` should be installed and migrated (tables created)
+- Beat starts without errors — no scheduled tasks needed in Phase 0, just verify the scheduler boots
+
+- **Acceptance criteria:**
+  - `docker compose logs celery` shows "celery@... ready" message
+  - `docker compose logs celery-beat` shows beat starting without errors
+  - From Django shell: `add.delay(2, 3).get(timeout=10)` returns `5`
+  - Task execution appears in celery worker logs
+  - `django_celery_beat` tables exist after migration
 - **Depends on:** 0.5
+
+---
 
 #### Task 0.9: Django app stubs
 
-Create 6 app stubs: `initiatives`, `tasks`, `links`, `reviews`, `events`, `agents`. Each with `__init__.py` and `apps.py`, registered in `INSTALLED_APPS`.
+Create 6 app stubs. These are empty shells — no models, views, or serializers. Just the app registration so they're ready for Phase 1.
 
-- **Acceptance criteria:** `manage.py check` passes. All 7 apps (including `core`) listed in `INSTALLED_APPS`.
+**Apps to create (under `src/`):**
+- `initiatives` — label: `initiatives`
+- `tasks` — label: `tasks`
+- `links` — label: `links`
+- `reviews` — label: `reviews`
+- `events` — label: `events`
+- `agents` — label: `agents`
+
+**Each app needs:**
+- `__init__.py` (empty, should already exist from task 0.1)
+- `apps.py` with `AppConfig`:
+  ```python
+  from django.apps import AppConfig
+
+  class InitiativesConfig(AppConfig):
+      default_auto_field = 'django.db.models.BigAutoField'
+      name = 'initiatives'
+  ```
+
+**Update `INSTALLED_APPS` in `src/vtaskforge/settings/base.py`** to include all 7 apps:
+```python
+LOCAL_APPS = [
+    'core',
+    'initiatives',
+    'tasks',
+    'links',
+    'reviews',
+    'events',
+    'agents',
+]
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+```
+
+- **Acceptance criteria:**
+  - `docker compose exec api python src/manage.py check` passes with no warnings
+  - All 7 apps appear in the Django app registry
+  - No models, views, serializers, or URLs in the stub apps — just `__init__.py` and `apps.py`
 - **Depends on:** 0.5
+
+---
 
 #### Task 0.10: Test suite setup
 
-Configure `pytest-django`, create `conftest.py`, write tests for: health endpoint OK, health endpoint DB failure, health endpoint Redis failure, celery test task execution.
+Set up pytest-django and write smoke tests for health endpoint and Celery.
 
-- **Acceptance criteria:** `docker compose exec api pytest` — all tests pass on a clean `docker compose up`.
+**Files:**
+- `src/conftest.py` or `tests/conftest.py` — pytest-django configuration:
+  ```python
+  import pytest
+
+  @pytest.fixture(scope='session')
+  def django_db_setup():
+      pass  # Use default test DB settings
+
+  # Set DJANGO_SETTINGS_MODULE
+  ```
+- `pytest.ini` or `pyproject.toml` — pytest config with `DJANGO_SETTINGS_MODULE = vtaskforge.settings.dev`
+- `tests/test_health.py` — health endpoint tests
+- `tests/test_celery.py` — celery task test
+
+**Tests to write:**
+
+`tests/test_health.py`:
+1. `test_health_returns_200` — `GET /v1/health` returns 200 with both checks "ok"
+2. `test_health_returns_503_when_db_down` — mock DB connection to raise, verify 503 with db error
+3. `test_health_returns_503_when_redis_down` — mock Redis connection to raise, verify 503 with redis error
+4. `test_health_response_format` — verify JSON structure matches expected format
+
+`tests/test_celery.py`:
+1. `test_add_task` — call `add(2, 3)` synchronously (use `CELERY_TASK_ALWAYS_EAGER=True` in test settings), verify returns 5
+
+**Testing approach:**
+- Use `pytest-django`'s `client` fixture for HTTP tests
+- Use `CELERY_TASK_ALWAYS_EAGER = True` for celery tests (runs tasks synchronously, no Redis needed in tests)
+- Mock DB/Redis failures using `unittest.mock.patch`
+
+- **Acceptance criteria:**
+  - `docker compose exec api pytest` runs and discovers all tests
+  - All tests pass (minimum 5 tests)
+  - Tests use a separate test database (not the dev database)
+  - Celery tests don't require a running Redis (eager mode)
+  - `pytest` output shows test names and pass/fail status
 - **Depends on:** 0.7, 0.8
+
+---
 
 #### Task 0.11: CLAUDE.md & documentation
 
-Project purpose, dev setup instructions, how to run tests, management commands, rebuild instructions, environment variables reference.
+Create `CLAUDE.md` in the project root (`/home/jasonvi/GitHub/vtaskforge/CLAUDE.md`).
 
-- **Acceptance criteria:** A developer with no context can follow CLAUDE.md and have a running dev environment.
+**Sections to include:**
+
+1. **Project purpose** — one paragraph: "vtaskforge is a distributed task execution system for LLM agents. Django/DRF API server backed by Postgres, with Celery for background processing. See docs/ for full design."
+
+2. **Dev setup:**
+   ```
+   docker compose up -d
+   docker compose exec api python src/manage.py migrate
+   docker compose exec api python src/manage.py createsuperuser
+   ```
+
+3. **Running tests:**
+   ```
+   docker compose exec api pytest
+   docker compose exec api pytest -v          # verbose
+   docker compose exec api pytest tests/test_health.py  # specific file
+   ```
+
+4. **Django management commands:**
+   ```
+   docker compose exec api python src/manage.py <command>
+   ```
+
+5. **Rebuilding** — only needed when `requirements/*.txt` changes:
+   ```
+   docker compose build
+   docker compose up -d
+   ```
+
+6. **Environment variables:**
+   | Variable | Default | Description |
+   |---|---|---|
+   | `DJANGO_SETTINGS_MODULE` | `vtaskforge.settings.dev` | Settings module |
+   | `DATABASE_URL` | `postgres://vtf:vtfdev@db:5432/vtaskforge` | Postgres connection |
+   | `CELERY_BROKER_URL` | `redis://redis:6379/0` | Redis broker |
+   | `SECRET_KEY` | `dev-insecure-key-change-in-prod` | Django secret key |
+
+7. **Project structure** — brief description of Django apps and their purpose
+
+- **Acceptance criteria:**
+  - `CLAUDE.md` exists at project root
+  - All 7 sections are present
+  - Commands in the doc actually work when copy-pasted
+  - No references to features that don't exist yet (Phase 0 only)
 - **Depends on:** 0.10
 
 #### Dependency DAG
