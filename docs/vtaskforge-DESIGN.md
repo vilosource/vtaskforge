@@ -361,6 +361,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [agent-pool-manager-PROPOSAL.md](agent-pool-manager-PROPOSAL.md) — Proposal to evolve vf-agents into the agent pool manager
 - [scrum-master-agent-PROPOSAL.md](scrum-master-agent-PROPOSAL.md) — Autonomous process agent for flow facilitation and triage
 - [design-gaps-ANALYSIS.md](design-gaps-ANALYSIS.md) — Identified gaps in the design requiring resolution
+- [gitlab-pipeline-analogy-REFERENCE.md](gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
 
 ## Not Yet Decided
 
