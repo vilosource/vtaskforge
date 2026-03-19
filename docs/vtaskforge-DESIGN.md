@@ -45,7 +45,62 @@ Initiative(s)
 - **KB area linking** — tasks reference mykb knowledge areas so agents can `kb load` relevant context.
 - **Tasks as agent work packets** — each task carries: title, description, acceptance criteria, linked areas, relevant files, related docs, blockers, notes.
 
-## Task Shape (Draft)
+## Entity Shapes (Draft)
+
+### Initiative
+
+```
+Initiative:
+  id: nanoid
+  name: "Auth system rewrite"
+  description: "Replace legacy auth middleware..."
+  status: active | completed | archived
+  owner: <actor_id>
+  tags: ["backend", "security"]
+  target_date: ISO 8601 | null
+
+  # Review defaults (cascade to phases → tasks)
+  default_needs_review_before_start: true | false
+  default_needs_review_on_completion: true | false
+
+  # Metadata
+  created_at: ISO 8601
+  created_by: <actor_id>
+
+  # All references via link system (docs, jira, areas, etc.)
+```
+
+- Status is independently set, not auto-derived (except: completing the last phase auto-completes the initiative)
+- Tags are freeform strings for filtering and search
+
+### Phase
+
+```
+Phase:
+  id: nanoid
+  name: "Phase 1 — Core filtering"
+  description: "Implement zone-based filtering across all query paths"
+  initiative_id: <initiative-nanoid>
+  status: pending | active | completed
+
+  # Review defaults (override initiative, cascade to tasks. null = inherit)
+  default_needs_review_before_start: true | false | null
+  default_needs_review_on_completion: true | false | null
+
+  # Metadata
+  created_at: ISO 8601
+  created_by: <actor_id>
+
+  # Dependencies via link system (DAG — phases can depend on other phases)
+  # No depends_on links = no dependencies (can start immediately)
+```
+
+- Phase dependencies form a **DAG** via the link system, not a linear sequence
+- Multiple phases can be `active` simultaneously
+- A phase becomes activatable when all its `depends_on` phase links are `completed`
+- Completing the last phase auto-completes the initiative
+
+### Task
 
 ```
 Task:
@@ -60,15 +115,42 @@ Task:
   acceptance_criteria: ["archived entries excluded from kb load", "tests pass"]
   notes: []
 
-  # Review flags
-  needs_review_before_start: true | false
-  needs_review_on_completion: true | false
+  # Review flags (null = inherit from phase → initiative)
+  needs_review_before_start: true | false | null
+  needs_review_on_completion: true | false | null
 
   # All relationships are links (separate table)
-  # links: depends_on, blocks, relates_to, commit, mr, area, doc, file
+  # links: depends_on, blocks, relates_to, commit, mr, area, doc, file, jira
 ```
 
-Areas, files, docs, commits, and task dependencies are all managed via the **link system** rather than inline arrays. This keeps the task record lean and relationships queryable.
+### Links (Universal)
+
+Links connect any entity (initiative, phase, or task) to other entities or external references. All stored in a single generic table.
+
+```
+Link:
+  id: nanoid
+  source_id: <any entity nanoid>
+  target_id: <entity nanoid or external reference string>
+  link_type: depends_on | blocks | relates_to | commit | mr | area | doc | file | jira
+  metadata: {} (optional, type-specific data)
+  created_at: ISO 8601
+  created_by: <actor_id>
+```
+
+| Type | Meaning | Applies to | Execution constraint |
+|------|---------|-----------|---------------------|
+| `depends_on` | Source depends on target | Tasks, Phases | Source can't start until target is done/completed |
+| `blocks` | Source blocks target | Tasks, Phases | Inverse of depends_on |
+| `relates_to` | Informational link | All | No constraint |
+| `commit` | Git commit SHA | Tasks | Deliverable tracking |
+| `mr` | Merge request URL | Tasks, Initiatives | Deliverable tracking |
+| `area` | mykb KB area | All | Context for agents |
+| `doc` | Document reference | All | Context |
+| `file` | Source file path | Tasks | Context for agents |
+| `jira` | Jira issue/epic key | All | External tracking |
+
+Review flag cascade precedence: task (explicit) > phase default > initiative default.
 
 ## Open Questions
 

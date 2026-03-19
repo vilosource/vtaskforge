@@ -6,17 +6,18 @@ Identified gaps in the current design that need resolution before or during impl
 
 ## Gaps
 
-### 1. Initiative & Phase Shape — Not Defined
+### 1. ~~Initiative & Phase Shape — Not Defined~~ (Resolved)
 
-We have a Task shape but no equivalent for Initiative or Phase. What fields do they carry?
+**Decided:**
 
-**Questions:**
-- Initiative: id, name, workspace_id, description, default review flags, status (active/completed/archived)?
-- Phase: id, name, initiative_id, order/sequence, status?
-- Do phases have their own review flag defaults that cascade to tasks?
-- Does an initiative have an overall status derived from its phases, or independently set?
+- **Initiative**: id, name, description, status (active/completed/archived), owner, tags, target_date, default review flags. Completing last phase auto-completes the initiative.
+- **Phase**: id, name, description, initiative_id, status (pending/active/completed), review flag overrides (null = inherit). Dependencies are a DAG via the link system — multiple phases can be active simultaneously.
+- **Links are universal** — initiatives, phases, and tasks can all be link sources. Added `jira` link type.
+- **Review flag cascade**: task (explicit) > phase default > initiative default.
 
-**Status:** Open
+Full shapes documented in vtaskforge-DESIGN.md under "Entity Shapes".
+
+**Status:** Resolved
 
 ---
 
