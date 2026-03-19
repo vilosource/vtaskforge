@@ -58,10 +58,13 @@ services:
     volumes:
       - ./src:/app/src
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_started
     environment:
       - DJANGO_SETTINGS_MODULE=vtaskforge.settings.dev
+      - DATABASE_URL=postgres://vtf:vtfdev@db:5432/vtaskforge
       - CELERY_BROKER_URL=redis://redis:6379/0
 
 volumes:
