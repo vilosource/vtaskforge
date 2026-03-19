@@ -456,6 +456,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [api-surface-DESIGN.md](api-surface-DESIGN.md) — Full REST API surface, SSE events, error model, agent liveness
 - [implementation-PLAN.md](implementation-PLAN.md) — Phased implementation plan starting with project setup
 - [task-breakdown-GUIDE.md](task-breakdown-GUIDE.md) — How to decompose phases into tasks with dependency DAGs
+- [phase0-findings-ANALYSIS.md](phase0-findings-ANALYSIS.md) — Dry run findings: agent capability vs spec detail, isolation, spec errors
 
 ## Not Yet Decided
 
