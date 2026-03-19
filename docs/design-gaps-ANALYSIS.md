@@ -53,13 +53,11 @@ Two agents try to claim the same task simultaneously. The strategy needs to be d
 
 ---
 
-### 4. `file` Link Type Missing from Table
+### 4. ~~`file` Link Type Missing from Table~~ (Resolved)
 
-The task shape and CLI examples reference `file` links but the link types table in the design doc only lists 7 types. `file` is used but not formally defined.
+Added `file` link type to the design doc table. `file` = Task → source file path, no execution constraint, context for agents.
 
-**Resolution:** Add `file` to the link types table.
-
-**Status:** Open (minor — just a doc fix)
+**Status:** Resolved
 
 ---
 

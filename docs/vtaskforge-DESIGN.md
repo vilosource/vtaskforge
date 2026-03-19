@@ -213,6 +213,7 @@ Generalized into a **link system** that handles dependencies and all other relat
 | `mr` | Task → merge request URL | Deliverable tracking |
 | `area` | Task → mykb KB area | Context for agents |
 | `doc` | Task → document reference | Context for agents |
+| `file` | Task → source file path | Context for agents |
 
 **CLI:**
 
