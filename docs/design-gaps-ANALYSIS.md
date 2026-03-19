@@ -204,21 +204,17 @@ How do agents and humans authenticate with the API?
 
 ---
 
-### 9. Workspace Binding — Unclear
+### 9. ~~Workspace Binding — Unclear~~ (Resolved)
 
-The hierarchy says initiatives are bound to workspaces, but vtf is separate from mykb. How does vtf know about mykb workspaces?
+**Decided: No workspace binding. vtf stands alone.**
 
-**Options:**
-- `workspace_id` is just a string label in vtf — no API call to mykb, just a reference
-- vtf queries mykb to validate workspace exists (coupling)
-- Workspace concept is vtf-native, separate from mykb workspaces (duplication)
+Initiatives are standalone entities — no mandatory binding to mykb workspaces or any external system. External references (mykb workspace, Jira epic, wiki page) are optional links via the link system, not structural requirements.
 
-**Questions:**
-- Is `workspace_id` just a tag/label for grouping initiatives?
-- Should vtf validate that the workspace exists in mykb?
-- What happens if a workspace is archived in mykb but has active initiatives in vtf?
+This keeps vtf decoupled and usable without mykb. The link system already handles the real integration — tasks link to KB areas, docs, and external references as needed.
 
-**Status:** Open
+Removed `workspace_id` from hierarchy and CLI examples.
+
+**Status:** Resolved
 
 ---
 

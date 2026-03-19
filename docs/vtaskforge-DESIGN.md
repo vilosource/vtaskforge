@@ -24,15 +24,14 @@ The core idea: each task is an **agent work packet** — it contains enough cont
 ## Hierarchy
 
 ```
-Workspace (mykb context)
- └── Initiative(s)
-      └── Phase(s)
-           └── Task(s)
+Initiative(s)
+ └── Phase(s)
+      └── Task(s)
 ```
 
-- A workspace can have multiple initiatives
-- Initiatives are bound to one workspace (not shared/movable)
-- Artifacts (design docs) exist at both workspace and initiative level
+- Initiatives are standalone — no mandatory binding to external systems
+- External references (mykb workspaces, Jira epics, etc.) are optional links, not structural requirements
+- Artifacts (design docs) exist at both initiative and task level via the link system
 - Cross-initiative dependencies are informal (text notes, not enforced)
 
 ## Decided So Far
@@ -191,7 +190,7 @@ The following topics have been identified but not yet designed. Each should be d
 **Decided: Out of scope for vtaskforge.** Intake/parsing of plan documents is a consumer concern — a Claude Code skill, an agent, or a manual process that calls the vtf API. vtaskforge provides CRUD for initiatives, phases, and tasks. How they get populated is not vtf's problem.
 
 vtf's API surface for this:
-- `vtf initiative create --name "..." --workspace <id>`
+- `vtf initiative create --name "..."`
 - `vtf phase create --initiative <id> --name "..."`
 - `vtf task create --phase <id> --title "..." [--description, --areas, --files, ...]`
 - `vtf task update <id> [--title, --description, --areas, --files, ...]`
