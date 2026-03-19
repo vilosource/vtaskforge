@@ -135,23 +135,23 @@ Key decisions:
 
 ---
 
-### 8. Auth Model — Undefined
+### 8. ~~Auth Model — Undefined~~ (Resolved)
 
-How do agents and humans authenticate with the API?
+**Decided: Django's pluggable auth system with DRF TokenAuthentication for v1.**
 
-**Options:**
-- API keys (simple, v1-friendly)
-- JWT tokens (standard, supports claims/roles)
-- mTLS (for agent-to-API, more complex)
-- OAuth2 (for web UI, standard browser flow)
+- V1: DRF `TokenAuthentication` — simple bearer tokens for all consumers (agents, humans, external systems)
+- Each agent gets a token on registration, humans get tokens via Django admin or CLI
+- Token maps to actor identity (actor_id, actor_type, actor_role)
+- Passed as `Authorization: Bearer <token>` header
 
-**Questions:**
-- v1: just API keys for everything?
-- How are agent identities provisioned? Manual key generation?
-- Does the web UI use a different auth flow than CLI/agents?
-- Is auth required for local-only deployments?
+Future upgrades (just swap/add auth backends, no API changes):
+- `SessionAuthentication` for web UI (cookie-based)
+- `django-oauth-toolkit` for OAuth2
+- Custom backend for short-lived agent JWT tokens
 
-**Status:** Open
+Django's auth is pluggable by design — adding backends doesn't touch the API or business logic.
+
+**Status:** Resolved
 
 ---
 
