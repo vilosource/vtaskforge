@@ -455,6 +455,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [gitlab-pipeline-analogy-REFERENCE.md](gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
 - [api-surface-DESIGN.md](api-surface-DESIGN.md) — Full REST API surface, SSE events, error model, agent liveness
 - [implementation-PLAN.md](implementation-PLAN.md) — Phased implementation plan starting with project setup
+- [task-breakdown-GUIDE.md](task-breakdown-GUIDE.md) — How to decompose phases into tasks with dependency DAGs
 
 ## Not Yet Decided
 
