@@ -6,9 +6,61 @@ Status: Design (2026-03-19)
 
 vtaskforge models a development team where humans and AI agents collaborate on structured work. This document defines the actors, their roles, system boundaries, and interaction patterns.
 
-## System Boundary
+## C1 — System Context
 
-vtaskforge tracks two types of actors internally. All external systems interact via the RPC API and event stream.
+Bird's eye view of vtaskforge and the actors/systems around it.
+
+```mermaid
+%%{init: {
+  "theme": "neutral",
+  "themeVariables": {
+    "primaryColor": "#ff6b6b",
+    "primaryTextColor": "#000",
+    "primaryBorderColor": "#ff4757",
+    "lineColor": "#5f27cd",
+    "secondaryColor": "#00d2d3",
+    "tertiaryColor": "#ff9ff3"
+  },
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 50,
+    "curve": "basis"
+  }
+}}%%
+
+flowchart TB
+    HUMAN("👤 Product Owner<br/>Human")
+    VTF("🏭 vtaskforge<br/>Distributed Task<br/>Execution System")
+    AGENTS("🤖 vf-agents<br/>Agent Pool Manager")
+    KB("🧠 mykb<br/>Knowledge Base")
+    SCRUM("🎯 Scrum Master Agent<br/>Process Automation")
+    WEBUI("🌐 Web UI<br/>Browser Interface")
+    TUI("💻 Terminal UI<br/>CLI Interface")
+    INTAKE("📝 Intake Tooling<br/>Markdown Converter")
+
+    HUMAN -.->|"defines initiatives<br/>reviews tasks"| VTF
+    HUMAN -->|"manages via browser"| WEBUI
+    HUMAN -->|"monitors via CLI"| TUI
+
+    VTF <-->|"claims & executes<br/>tasks"| AGENTS
+    VTF -->|"event stream<br/>monitoring"| SCRUM
+    VTF <-->|"real-time updates"| WEBUI
+    VTF <-->|"task data"| TUI
+
+    AGENTS <-->|"loads context<br/>for execution"| KB
+    INTAKE -->|"converts plans to<br/>structured tasks"| VTF
+    SCRUM -.->|"process insights<br/>nudges"| HUMAN
+
+    classDef person fill:#ff9ff3,stroke:#d63384,stroke-width:3px,color:#000
+    classDef system fill:#ff6b6b,stroke:#ff4757,stroke-width:4px,color:#000
+    classDef supporting fill:#00d2d3,stroke:#0097e6,stroke-width:3px,color:#000
+    classDef automation fill:#26de81,stroke:#2ed573,stroke-width:3px,color:#000
+
+    class HUMAN person
+    class VTF system
+    class AGENTS,KB,WEBUI,TUI,INTAKE supporting
+    class SCRUM automation
+```
 
 ### Internal actors (vtf knows about)
 
@@ -35,43 +87,157 @@ actor_role: executor | reviewer | architect | scrum_master
 | **Web UI** | Human interaction — kanban board, task editing, agent chat | RPC API + event stream |
 | **Terminal UI** | Human monitoring — kanban view, CLI task management | RPC API + event stream |
 
-### Boundary diagram
+## C2 — Container (vtaskforge internals)
+
+Zoom into vtaskforge showing its deployable components.
 
 ```mermaid
+%%{init: {
+  "theme": "neutral",
+  "themeVariables": {
+    "primaryColor": "#ff6b6b",
+    "primaryTextColor": "#000",
+    "primaryBorderColor": "#ff4757",
+    "lineColor": "#5f27cd",
+    "secondaryColor": "#00d2d3",
+    "tertiaryColor": "#ff9ff3"
+  },
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 50,
+    "curve": "basis"
+  }
+}}%%
+
 flowchart TB
-    subgraph VTF["vtaskforge System"]
-        direction TB
-        Human["Human\n(Product Owner)"]
-        Agent["Agent\n(executor, reviewer, architect, scrum_master)"]
-
-        subgraph Core["Core Entities"]
-            Initiatives["Initiatives"]
-            Phases["Phases"]
-            Tasks["Tasks"]
-            Links["Links"]
-            Reviews["Reviews"]
-            Events["Task Events"]
-        end
+    subgraph "🏭 vtaskforge System"
+        API("⚙️ API Server<br/>Node/TS<br/>Port 3000")
+        DB[("🗄️ Postgres<br/>Task Storage<br/>Port 5432")]
+        EVENTS("📡 Event Bus<br/>SSE/WebSocket<br/>Real-time Updates")
+        WEBSPA("🎨 Web UI SPA<br/>Browser App")
     end
 
-    subgraph External["External Systems"]
-        PoolMgr["vf-agents\n(Pool Manager)"]
-        ScrumAgent["Scrum Master Agent"]
-        WebUI["Web UI"]
-        TermUI["Terminal UI"]
-        Intake["Intake Tooling"]
+    HUMAN("👤 Product Owner")
+    AGENTS("🤖 vf-agents<br/>Pool Manager")
+    SCRUM("🎯 Scrum Master Agent")
+    TUI("💻 Terminal UI")
+    INTAKE("📝 Intake Tooling")
+
+    HUMAN -->|"HTTPS"| WEBSPA
+    AGENTS <-->|"RPC API"| API
+    SCRUM -->|"Event Stream"| EVENTS
+    TUI <-->|"API Calls"| API
+    INTAKE -->|"Task Creation"| API
+
+    API <-->|"SQL Queries"| DB
+    API -->|"Publishes Events"| EVENTS
+    EVENTS -->|"Live Updates"| WEBSPA
+
+    classDef container fill:#ff6b6b,stroke:#ff4757,stroke-width:3px,color:#000
+    classDef database fill:#4834d4,stroke:#3742fa,stroke-width:3px,color:#000
+    classDef external fill:#00d2d3,stroke:#0097e6,stroke-width:3px,color:#000
+    classDef person fill:#ff9ff3,stroke:#d63384,stroke-width:3px,color:#000
+
+    class API,EVENTS,WEBSPA container
+    class DB database
+    class AGENTS,SCRUM,TUI,INTAKE external
+    class HUMAN person
+```
+
+## System Landscape
+
+The full ecosystem — all systems and their relationships.
+
+```mermaid
+%%{init: {
+  "theme": "neutral",
+  "themeVariables": {
+    "primaryColor": "#ff6b6b",
+    "primaryTextColor": "#000",
+    "primaryBorderColor": "#ff4757",
+    "lineColor": "#5f27cd",
+    "secondaryColor": "#00d2d3",
+    "tertiaryColor": "#ff9ff3"
+  },
+  "flowchart": {
+    "nodeSpacing": 40,
+    "rankSpacing": 40,
+    "curve": "basis"
+  }
+}}%%
+
+flowchart TB
+    HUMAN("👤 Product Owner")
+
+    subgraph "🏭 vtaskforge Core"
+        VTF("🎯 vtaskforge API")
+        DB[("🗄️ Postgres")]
+        EVENTS("📡 Event Stream")
     end
 
-    PoolMgr -->|RPC API| VTF
-    ScrumAgent -->|RPC API| VTF
-    WebUI -->|RPC API| VTF
-    TermUI -->|RPC API| VTF
-    Intake -->|RPC API| VTF
+    subgraph "🤖 Agent Ecosystem"
+        POOL("🏊 vf-agents<br/>Pool Manager")
+        EXEC("🔧 Executor Agents")
+        REV("👨‍⚖️ Reviewer Agents")
+        ARCH("🏗️ Architect Agents")
+        SCRUM("🎯 Scrum Master")
+    end
 
-    VTF -->|Event Stream| ScrumAgent
-    VTF -->|Event Stream| PoolMgr
-    VTF -->|Event Stream| WebUI
-    VTF -->|Event Stream| TermUI
+    subgraph "🧠 Knowledge System"
+        KB("📚 mykb CLI")
+        KBDATA[("💾 ~/.mykb/<br/>Knowledge Storage")]
+    end
+
+    subgraph "🖥️ User Interfaces"
+        WEBUI("🌐 Web UI SPA")
+        TUI("💻 Terminal UI")
+    end
+
+    subgraph "🔄 Supporting Tools"
+        INTAKE("📝 Intake Tooling")
+        REGISTRY("📦 ghcr.io<br/>Container Registry")
+    end
+
+    HUMAN --> WEBUI
+    HUMAN --> TUI
+    HUMAN -.-> VTF
+
+    VTF <--> DB
+    VTF --> EVENTS
+    VTF <--> POOL
+    VTF <--> INTAKE
+
+    POOL --> REGISTRY
+    POOL <--> EXEC
+    POOL <--> REV
+    POOL <--> ARCH
+
+    EXEC <--> KB
+    REV <--> KB
+    ARCH <--> KB
+    KB <--> KBDATA
+
+    EVENTS --> SCRUM
+    EVENTS --> WEBUI
+    EVENTS --> TUI
+
+    SCRUM -.-> HUMAN
+
+    classDef person fill:#ff9ff3,stroke:#d63384,stroke-width:3px,color:#000
+    classDef core fill:#ff6b6b,stroke:#ff4757,stroke-width:4px,color:#000
+    classDef agent fill:#26de81,stroke:#2ed573,stroke-width:3px,color:#000
+    classDef knowledge fill:#a55eea,stroke:#8854d0,stroke-width:3px,color:#000
+    classDef interface fill:#00d2d3,stroke:#0097e6,stroke-width:3px,color:#000
+    classDef support fill:#ff9f43,stroke:#ff7675,stroke-width:3px,color:#000
+    classDef storage fill:#4834d4,stroke:#3742fa,stroke-width:3px,color:#000
+
+    class HUMAN person
+    class VTF,EVENTS core
+    class POOL,EXEC,REV,ARCH,SCRUM agent
+    class KB knowledge
+    class WEBUI,TUI interface
+    class INTAKE,REGISTRY support
+    class DB,KBDATA storage
 ```
 
 ## Development Team Model
@@ -88,58 +254,181 @@ The system maps directly to a real-world development team:
 | **Project Board** | vtaskforge | Tracks all state, enforces rules, emits events |
 | **DevOps / Workstations** | vf-agents infrastructure | Provides execution environment (containers, runtimes, credentials) |
 
+## Deployment Diagram
+
+What runs where — infrastructure layout with network connections.
+
 ```mermaid
+%%{init: {
+  "theme": "neutral",
+  "themeVariables": {
+    "primaryColor": "#ff6b6b",
+    "primaryTextColor": "#000",
+    "primaryBorderColor": "#ff4757",
+    "lineColor": "#5f27cd",
+    "secondaryColor": "#00d2d3",
+    "tertiaryColor": "#ff9ff3"
+  },
+  "flowchart": {
+    "nodeSpacing": 50,
+    "rankSpacing": 50,
+    "curve": "basis"
+  }
+}}%%
+
 flowchart TB
-    subgraph Team["Development Team"]
-        PO["Product Owner\n(Human)"]
-        DEV["Developer\n(Executor Agent via vf-agents)"]
-        TL["Tech Lead\n(Reviewer Agent)"]
-        ARCH["Solutions Architect\n(Architect Agent)"]
-        SM["Scrum Master\n(Scrum Master Agent)"]
-        DEVOPS["DevOps\n(vf-agents infrastructure)"]
+    subgraph "☁️ Cloud Infrastructure"
+        subgraph "🖥️ Server Host"
+            API("⚙️ vtaskforge API<br/>:3000")
+            DB[("🗄️ Postgres<br/>:5432")]
+        end
+
+        subgraph "📦 Container Registry"
+            REGISTRY("🏪 ghcr.io<br/>vf-agents-*")
+        end
     end
 
-    subgraph Board["Central Coordination"]
-        VTF["vtaskforge\n(Project Board)"]
+    subgraph "🏠 Agent Host"
+        POOL("🏊 vf-agents binary<br/>Go CLI")
+        DOCKER("🐳 Docker Runtime")
+        subgraph "🤖 Agent Containers"
+            EXEC("🔧 Executor")
+            REV("👨‍⚖️ Reviewer")
+            ARCH("🏗️ Architect")
+        end
+        SCRUMDAEMON("🎯 Scrum Master<br/>Daemon Process")
     end
 
-    PO -->|Defines requirements| VTF
-    PO -->|Reviews deliverables| VTF
+    subgraph "💻 Developer Machine"
+        TUI("💻 Terminal UI<br/>Ink/Node")
+        KBCLI("📚 mykb CLI")
+        KBSTORE[("💾 ~/.mykb/<br/>SQLite + JSONL")]
+    end
 
-    DEV -->|Claims work| VTF
-    DEV -->|Reports progress| VTF
+    subgraph "🌐 Browser"
+        WEBUI("🎨 Web UI SPA<br/>React/TS")
+    end
 
-    TL -->|Code reviews| VTF
-    TL -.->|Technical guidance| DEV
+    API -.->|"HTTPS:443"| WEBUI
+    API <-->|"TCP:3000"| TUI
+    API <-->|"TCP:3000"| POOL
+    API <-->|"SSE:3000"| SCRUMDAEMON
+    API <-->|"TCP:5432"| DB
 
-    ARCH -->|System design| VTF
-    ARCH -.->|Architecture reviews| TL
+    POOL <-->|"Docker API"| DOCKER
+    DOCKER --> EXEC
+    DOCKER --> REV
+    DOCKER --> ARCH
+    POOL -->|"HTTPS:443"| REGISTRY
 
-    SM -->|Process facilitation| VTF
-    SM -.->|Removes blockers| DEV
-    SM -.->|Status reporting| PO
+    KBCLI <--> KBSTORE
+    EXEC -.->|"File I/O"| KBCLI
+    REV -.->|"File I/O"| KBCLI
+    ARCH -.->|"File I/O"| KBCLI
 
-    DEVOPS -.->|Provides infrastructure| DEV
-    DEVOPS -->|Manages agent pool| VTF
+    classDef cloud fill:#87ceeb,stroke:#4682b4,stroke-width:3px,color:#000
+    classDef server fill:#ff6b6b,stroke:#ff4757,stroke-width:3px,color:#000
+    classDef agent fill:#26de81,stroke:#2ed573,stroke-width:3px,color:#000
+    classDef dev fill:#00d2d3,stroke:#0097e6,stroke-width:3px,color:#000
+    classDef storage fill:#4834d4,stroke:#3742fa,stroke-width:3px,color:#000
+    classDef browser fill:#ff9ff3,stroke:#d63384,stroke-width:3px,color:#000
+    classDef registry fill:#ff9f43,stroke:#ff7675,stroke-width:3px,color:#000
 
-    VTF -.->|Work distribution| DEV
-    VTF -.->|Status visibility| SM
-    VTF -.->|Review gates| TL
+    class API,DB server
+    class POOL,DOCKER,EXEC,REV,ARCH,SCRUMDAEMON agent
+    class TUI,KBCLI dev
+    class DB,KBSTORE storage
+    class WEBUI browser
+    class REGISTRY registry
+```
+
+## Dynamic — Task Claiming and Execution Flow
+
+Runtime sequence showing how a task gets claimed, executed, reviewed, and completed.
+
+```mermaid
+%%{init: {
+  "theme": "neutral",
+  "themeVariables": {
+    "primaryColor": "#ff6b6b",
+    "primaryTextColor": "#000",
+    "primaryBorderColor": "#ff4757",
+    "lineColor": "#5f27cd",
+    "secondaryColor": "#00d2d3",
+    "tertiaryColor": "#ff9ff3"
+  }
+}}%%
+
+sequenceDiagram
+    participant VTF as 🏭 vtaskforge API
+    participant POOL as 🏊 vf-agents Pool
+    participant KB as 📚 mykb
+    participant EXEC as 🤖 Executor Agent
+    participant REV as 👨‍⚖️ Reviewer Agent
+
+    Note over VTF,REV: 🚀 Task Execution Flow
+
+    VTF->>+POOL: 📡 task_available event
+    Note right of POOL: Pool manager receives<br/>task notification
+
+    POOL->>+VTF: 🎯 claim_task(task_id)
+    VTF-->>-POOL: ✅ task claimed
+
+    POOL->>+VTF: 📋 get_task_details(task_id)
+    VTF-->>-POOL: 📄 task spec + context
+
+    POOL->>+KB: 🧠 load context areas
+    KB-->>-POOL: 📚 knowledge base entries
+
+    Note over POOL,EXEC: Agent Materialization
+    POOL->>+EXEC: 🐳 start container with<br/>instructions + KB context
+    EXEC-->>-POOL: 🟢 agent ready
+
+    EXEC->>EXEC: 💻 execute task<br/>write code, run tests
+
+    EXEC->>+VTF: 📤 report_completion(results)
+    VTF-->>-EXEC: ✅ completion recorded
+
+    alt 🔍 Review Required
+        VTF->>+REV: 📨 review_request(task_id)
+        REV->>+KB: 🧠 load review context
+        KB-->>-REV: 📚 standards + patterns
+        REV->>REV: 🔍 review code + results
+        REV->>+VTF: ✅ approve / ❌ reject
+        VTF-->>-REV: 📝 review recorded
+    end
+
+    VTF->>VTF: 🏁 mark task done
+    VTF->>POOL: 📡 task_completed event
+
+    Note over VTF,REV: 🎉 Task Complete!
 ```
 
 ## Actor Interaction Flow
 
-How actors collaborate through a typical task lifecycle:
+How actors collaborate through a typical task lifecycle, including the failure path.
 
 ```mermaid
+%%{init: {
+  "theme": "neutral",
+  "themeVariables": {
+    "primaryColor": "#ff6b6b",
+    "primaryTextColor": "#000",
+    "primaryBorderColor": "#ff4757",
+    "lineColor": "#5f27cd",
+    "secondaryColor": "#00d2d3",
+    "tertiaryColor": "#ff9ff3"
+  }
+}}%%
+
 sequenceDiagram
-    participant H as Human
-    participant IT as Intake Tooling
-    participant VT as vtaskforge
-    participant RA as Reviewer Agent
-    participant PM as vf-agents (Pool Mgr)
-    participant EA as Executor Agent
-    participant SM as Scrum Master Agent
+    participant H as 👤 Human
+    participant IT as 📝 Intake Tooling
+    participant VT as 🏭 vtaskforge
+    participant RA as 👨‍⚖️ Reviewer Agent
+    participant PM as 🏊 vf-agents (Pool Mgr)
+    participant EA as 🤖 Executor Agent
+    participant SM as 🎯 Scrum Master Agent
 
     Note over H,SM: Task Lifecycle Flow
 
