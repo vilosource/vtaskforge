@@ -166,17 +166,70 @@ ENV PYTHONPATH=/app/src
 | `events` | Task events + SSE | Create app only, no models yet |
 | `agents` | Agent registration, tokens | Create app only, no models yet |
 
-### Deliverables
+### Completion Checklist
 
-Phase 0 is complete when:
+Phase 0 is NOT complete until every item below is verified. No exceptions.
 
-1. `docker compose up` boots all services (api, db, redis, celery, celery-beat)
-2. `GET /v1/health` returns `200 OK` with DB and Redis connection status
-3. Django admin is accessible at `/admin/`
-4. All Django apps are created and registered in settings
-5. Celery worker connects to Redis and processes a test task
-6. `pytest` runs with a passing smoke test (health endpoint)
-7. CLAUDE.md documents dev commands
+#### Infrastructure
+- [ ] `docker compose up -d` starts all 5 services (api, db, redis, celery, celery-beat) without errors
+- [ ] `docker compose ps` shows all 5 services in "running" state
+- [ ] `docker compose down && docker compose up -d` (cold start) works without manual intervention
+- [ ] Postgres container passes healthcheck (`pg_isready`)
+- [ ] Source code changes in `./src/` are reflected immediately in the running api container without rebuild (hot reload verified)
+- [ ] Rebuilding image (`docker compose build`) is only required when `requirements/*.txt` files change
+
+#### API Server
+- [ ] `GET /v1/health` returns `200 OK` with JSON body containing `db: "ok"` and `redis: "ok"`
+- [ ] `GET /v1/health` returns appropriate error status when DB is down
+- [ ] `GET /v1/health` returns appropriate error status when Redis is down
+- [ ] Django admin is accessible at `/admin/` and login works with a superuser
+- [ ] API returns `application/json` content type on all responses
+- [ ] API returns proper 404 JSON response for unknown routes (not Django HTML debug page)
+
+#### Django Apps
+- [ ] All 7 apps created: `core`, `initiatives`, `tasks`, `links`, `reviews`, `events`, `agents`
+- [ ] All 7 apps registered in `INSTALLED_APPS`
+- [ ] `core` app contains `NanoIDMixin` (or equivalent) for generating nanoid primary keys
+- [ ] `core` app contains `TimestampMixin` with `created_at` and `updated_at` fields
+- [ ] `python manage.py check` passes with no warnings
+- [ ] `python manage.py migrate` runs without errors (even if no custom migrations yet)
+
+#### Settings
+- [ ] Settings split into `base.py`, `dev.py`, `prod.py`
+- [ ] `dev.py` has `DEBUG=True`, permissive CORS, console email backend
+- [ ] `prod.py` has `DEBUG=False`, restricted ALLOWED_HOSTS (values TBD)
+- [ ] Database configured via `DATABASE_URL` environment variable
+- [ ] Celery broker configured via `CELERY_BROKER_URL` environment variable
+- [ ] Secret key sourced from environment variable (not hardcoded) in `base.py`
+
+#### Celery
+- [ ] Celery worker connects to Redis and shows "ready" in logs
+- [ ] Celery beat starts without errors
+- [ ] A test task (e.g., `add(2, 3)`) can be dispatched and returns the correct result
+- [ ] Test task execution is visible in celery worker logs
+
+#### Testing
+- [ ] `pytest` runs inside the container: `docker compose exec api pytest`
+- [ ] Health endpoint smoke test passes (test `GET /v1/health` returns 200)
+- [ ] Test uses `pytest-django` with a test database (not the dev database)
+- [ ] At least one test per: health endpoint OK, health endpoint DB failure, celery test task
+- [ ] All tests pass on a clean `docker compose up` (no manual setup steps)
+
+#### Documentation
+- [ ] `CLAUDE.md` exists in project root with:
+  - [ ] Project purpose (one paragraph)
+  - [ ] Dev setup instructions (`docker compose up`)
+  - [ ] How to run tests
+  - [ ] How to run Django management commands
+  - [ ] How to rebuild after requirements change
+  - [ ] Environment variables reference
+- [ ] `docs/implementation-PLAN.md` Phase 0 checklist is fully checked off
+
+#### Code Quality
+- [ ] No hardcoded secrets in any committed file
+- [ ] `.gitignore` covers: `__pycache__`, `*.pyc`, `.env`, `db.sqlite3`, `*.egg-info`, `.pytest_cache`
+- [ ] No Django debug toolbar or development-only middleware leaking into `base.py`
+- [ ] All Python files pass `flake8` (or equivalent linter) with zero errors
 
 ### Dev Commands (for CLAUDE.md)
 
