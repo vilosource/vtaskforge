@@ -231,6 +231,103 @@ Phase 0 is NOT complete until every item below is verified. No exceptions.
 - [ ] No Django debug toolbar or development-only middleware leaking into `base.py`
 - [ ] All Python files pass `flake8` (or equivalent linter) with zero errors
 
+### Task Breakdown
+
+Phase 0 structured as a vtaskforge initiative — tasks with dependencies forming a DAG.
+
+#### Task 0.1: Project scaffolding & .gitignore
+
+Create the full directory structure, `.gitignore`, and empty `__init__.py` files for all apps.
+
+- **Acceptance criteria:** Git repo has the complete directory tree as specified in Project Structure above.
+- **Depends on:** nothing
+
+#### Task 0.2: Requirements files
+
+Create `requirements/base.txt`, `dev.txt`, `prod.txt` with all Python dependencies.
+
+- **Acceptance criteria:** `pip install -r requirements/dev.txt` succeeds without errors.
+- **Depends on:** 0.1
+
+#### Task 0.3: Dockerfile
+
+Python 3.12-slim base, system deps (libpq-dev, gcc), pip install from requirements, source copy.
+
+- **Acceptance criteria:** `docker build .` completes without errors.
+- **Depends on:** 0.2
+
+#### Task 0.4: docker-compose.yml
+
+All 5 services (api, db, redis, celery, celery-beat). Source mount, healthchecks, environment variables, named volume for Postgres.
+
+- **Acceptance criteria:** `docker compose config` validates. `docker compose up -d` starts all services.
+- **Depends on:** 0.3
+
+#### Task 0.5: Django project & settings
+
+`manage.py`, `wsgi.py`, `urls.py`, `celery.py`. Settings split into `base.py`, `dev.py`, `prod.py`. DB via `DATABASE_URL`, secret key from env, `INSTALLED_APPS` configured.
+
+- **Acceptance criteria:** `manage.py check` passes inside container. `manage.py migrate` runs without errors.
+- **Depends on:** 0.4
+
+#### Task 0.6: Core app — mixins
+
+`NanoIDMixin` for nanoid primary keys, `TimestampMixin` for `created_at` / `updated_at` auto-fields.
+
+- **Acceptance criteria:** Mixins are importable. Unit test verifies NanoID generation and timestamp behavior.
+- **Depends on:** 0.5
+
+#### Task 0.7: Core app — health endpoint
+
+`GET /v1/health` returns JSON with DB and Redis connection status. Returns appropriate error status when either service is down.
+
+- **Acceptance criteria:** Returns `200` with `{"db": "ok", "redis": "ok"}` when healthy. Returns error status when DB or Redis is down.
+- **Depends on:** 0.5
+
+#### Task 0.8: Celery setup
+
+Celery app config in `celery.py`, auto-discover tasks, test task (`add(x, y)`), celery-beat scheduler.
+
+- **Acceptance criteria:** Test task can be dispatched and returns correct result. Execution visible in worker logs.
+- **Depends on:** 0.5
+
+#### Task 0.9: Django app stubs
+
+Create 6 app stubs: `initiatives`, `tasks`, `links`, `reviews`, `events`, `agents`. Each with `__init__.py` and `apps.py`, registered in `INSTALLED_APPS`.
+
+- **Acceptance criteria:** `manage.py check` passes. All 7 apps (including `core`) listed in `INSTALLED_APPS`.
+- **Depends on:** 0.5
+
+#### Task 0.10: Test suite setup
+
+Configure `pytest-django`, create `conftest.py`, write tests for: health endpoint OK, health endpoint DB failure, health endpoint Redis failure, celery test task execution.
+
+- **Acceptance criteria:** `docker compose exec api pytest` — all tests pass on a clean `docker compose up`.
+- **Depends on:** 0.7, 0.8
+
+#### Task 0.11: CLAUDE.md & documentation
+
+Project purpose, dev setup instructions, how to run tests, management commands, rebuild instructions, environment variables reference.
+
+- **Acceptance criteria:** A developer with no context can follow CLAUDE.md and have a running dev environment.
+- **Depends on:** 0.10
+
+#### Dependency DAG
+
+```
+0.1 ──→ 0.2 ──→ 0.3 ──→ 0.4 ──→ 0.5 ──┬──→ 0.6
+                                         ├──→ 0.7 ──┐
+                                         ├──→ 0.8 ──┼──→ 0.10 ──→ 0.11
+                                         └──→ 0.9   │
+                                                     │
+                              (0.7 and 0.8 must both  │
+                               complete before 0.10) ─┘
+```
+
+Tasks 0.6, 0.7, 0.8, 0.9 can execute in parallel after 0.5 completes.
+
+---
+
 ### Dev Commands (for CLAUDE.md)
 
 ```bash
