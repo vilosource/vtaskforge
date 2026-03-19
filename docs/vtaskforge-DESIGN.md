@@ -454,6 +454,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [design-gaps-ANALYSIS.md](design-gaps-ANALYSIS.md) — Identified gaps in the design requiring resolution
 - [gitlab-pipeline-analogy-REFERENCE.md](gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
 - [api-surface-DESIGN.md](api-surface-DESIGN.md) — Full REST API surface, SSE events, error model, agent liveness
+- [implementation-PLAN.md](implementation-PLAN.md) — Phased implementation plan starting with project setup
 
 ## Not Yet Decided
 
