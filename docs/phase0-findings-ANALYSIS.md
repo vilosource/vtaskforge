@@ -110,6 +110,46 @@ Every acceptance criterion could be checked with a concrete command (`curl`, `do
 ### Task Boundaries Were Clean
 No two parallel tasks modified the same file. The decomposition correctly identified independent units of work. This is the key to safe parallelism.
 
+### Issue #6: Review Discipline Broke Down Without Formal Enforcement
+
+**What:** The supervisor (me) reviewed task outputs informally and inconsistently. Some tasks got thorough verification, others were rubber-stamped based on the agent's self-reported results.
+
+**Actual review quality per task:**
+
+| Task | Review approach | Quality |
+|---|---|---|
+| 0.1 | Checked file count, read one file | Cursory |
+| 0.2 | Read both files, verified content | Thorough |
+| 0.3 | Trusted agent's self-reported verification | Lazy — didn't run docker commands myself |
+| 0.4 | Read full docker-compose.yml | Thorough |
+| 0.5 | Ran docker compose ps and curl | Good |
+| 0.6 | Ran nanoid generation in Django shell | Good |
+| 0.7 | Ran curl myself | Good |
+| 0.8 | Ran add.delay(2,3) myself | Good |
+| 0.9 | Ran manage.py check only | Cursory — didn't verify INSTALLED_APPS list |
+| 0.10 | Ran full pytest -v | Thorough |
+| 0.11 | Read full CLAUDE.md | Thorough, but didn't test every command |
+
+**Problems identified:**
+
+1. **No formal review process.** Review was ad-hoc — some tasks got deep verification, others got "agent said it works, good enough."
+2. **No review checklist.** Acceptance criteria existed but weren't systematically walked through item by item.
+3. **Reviewer and supervisor were the same person.** No separation of concerns. The person deciding "ship it" was the same person who dispatched the task.
+4. **No review record.** No audit trail of what was checked, by whom, and what passed/failed. If a bug surfaces later, there's no way to trace whether the review missed it.
+5. **Agent self-reporting was trusted without verification.** Task 0.3 was marked complete based on the agent saying "docker build completed without errors" — the supervisor didn't independently verify this.
+
+**Root cause:** There was no system enforcing review discipline. The supervisor had the *option* to review thoroughly but no *obligation* to. Under time pressure or fatigue, review quality degraded.
+
+**Design implications:**
+
+This directly validates vtaskforge's review system design:
+
+1. **`needs_review_on_completion` should be the default, not the exception.** Without it, review discipline is voluntary and inconsistent.
+2. **Reviews need a structured format.** The reviewer should walk through each acceptance criterion and record pass/fail for each one — not just a blanket "approved." This maps to the ReviewDecision interface recording specific checks.
+3. **Reviewer should be distinct from the dispatcher.** The person/agent who created or dispatched the task shouldn't be the sole reviewer. This is a future concern (v1 = "any human") but the architecture should support it.
+4. **Agent self-reporting is necessary but insufficient.** The executor agent should report what it did and what it verified, but the reviewer must independently verify critical acceptance criteria. Trust but verify.
+5. **Review checklists should be auto-generated from acceptance criteria.** When a task is submitted for completion review, the system should present the reviewer with the acceptance criteria as a checklist to check off — not free-form "looks good."
+
 ## Recommendations for vtaskforge Design
 
 Based on this dry run:
@@ -122,8 +162,14 @@ Based on this dry run:
 
 4. **Spec detail calibration** should be part of the task breakdown guide. Add a section mapping agent capability to spec detail level.
 
-5. **Verification should be a formal step.** In this run, the supervisor verified each task's acceptance criteria. In vtaskforge, this maps to `needs_review_on_completion`. The reviewer should have a checklist to verify, not just a subjective "looks good."
+5. **Reviews must be structured, not ad-hoc.** Acceptance criteria should become a reviewer checklist with per-item pass/fail tracking. The system should enforce this — no "approved" without checking each criterion.
 
 6. **Port exposure should be minimal** in Docker dev environments. Only expose what the host actually needs (the API port). Internal-only services stay internal.
 
 7. **The scrum master agent needs "reassign to more capable agent" as a triage action** when tasks fail due to spec detail vs agent capability mismatch.
+
+8. **`needs_review_on_completion` should default to true.** This dry run proved that without enforced review, discipline degrades. Opt out of review explicitly, don't opt in.
+
+9. **Reviewer and dispatcher should be separable.** V1 allows any human, but the architecture should support assigning different reviewers. A reviewer agent could handle routine checks (did tests pass? did the files get created?) while humans review design decisions.
+
+10. **Agent self-reports should be part of the review, not a substitute for it.** The executor's completion report is input to the reviewer, but the reviewer must independently verify critical criteria.
