@@ -215,11 +215,20 @@ Primary view for understanding an initiative's execution plan. Inspired by GitLa
 
 #### Kanban Board
 
-Secondary view for managing work by status. Columns map to task statuses:
+Secondary view for managing work by status. Fixed column layout (v1):
 
-| Draft | Review | Todo | In Progress | Attention | Done |
+| Column | Statuses | Visual |
+|---|---|---|
+| **Draft** | `draft` | Grey cards |
+| **Review** | `pending_start_review`, `pending_completion_review` | Yellow cards, badge shows which gate |
+| **Ready** | `todo` | Blue cards. Dependency-blocked tasks shown with "waiting on X" indicator |
+| **In Progress** | `doing` | Blue cards, highlighted/animated |
+| **Attention** | `changes_requested`, `needs_attention`, `blocked` | Red/orange cards, badge shows specific status |
+| **Done** | `done` | Green cards |
 
-Cards show: task title, assigned agent, phase, linked KB areas. Expandable for full context.
+- `deferred` and `cancelled` hidden by default, visible via toggle/filter
+- Cards show: task title, assigned agent, phase, status badge, linked KB areas
+- Status badge within grouped columns preserves granularity without column sprawl
 
 #### View Toggle
 

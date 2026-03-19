@@ -76,28 +76,24 @@ Added `file` link type to the design doc table. `file` = Task → source file pa
 
 ---
 
-### 5. Kanban Columns Don't Match Statuses
+### 5. ~~Kanban Columns Don't Match Statuses~~ (Resolved)
 
-The kanban section shows 4 columns (`Todo | Doing | Blocked | Done`) but we now have 11 statuses. Need a mapping.
-
-**Proposed column grouping:**
+**Decided: 6 fixed columns (v1), badges for granularity within grouped columns.**
 
 | Column | Statuses |
 |--------|----------|
-| Draft | draft |
-| Review | pending_start_review, pending_completion_review |
-| Todo | todo |
-| In Progress | doing |
-| Attention | changes_requested, needs_attention, blocked |
-| Done | done |
-| Hidden/Filtered | deferred, cancelled |
+| Draft | `draft` |
+| Review | `pending_start_review`, `pending_completion_review` (badge shows which gate) |
+| Ready | `todo` (dependency-blocked shown with indicator) |
+| In Progress | `doing` |
+| Attention | `changes_requested`, `needs_attention`, `blocked` (badge shows specific status) |
+| Done | `done` |
 
-**Questions:**
-- Is this the right grouping?
-- Should users be able to customize column mappings?
-- Should deferred/cancelled be visible with a toggle?
+- `deferred` and `cancelled` hidden by default, visible via toggle
+- Fixed columns for v1, customizable layout is a future concern
+- One Review column (not split by gate type) — badge distinguishes, pile-up in one column signals bottleneck
 
-**Status:** Open
+**Status:** Resolved
 
 ---
 
