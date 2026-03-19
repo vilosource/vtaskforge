@@ -235,4 +235,9 @@ The hierarchy says initiatives are bound to workspaces, but vtf is separate from
 - Dependency-blocking = computed property. Task stays in `todo` but has unresolved `depends_on` links. API filters these out of the claimable pool. Board shows them in the Todo column with a "waiting on task X" indicator.
 - API exposes a `claimable` flag on tasks that accounts for both status and dependency state.
 
+**External block interface:** Manual blocks can also be resolved by external autonomous systems (CI pipelines, provisioning tools, other services). The API provides:
+- `task.block` — sets `blocked` status with a reason and optional external reference (URL, ticket ID)
+- `task.unblock` — any authenticated caller (human, agent, or external system) can unblock via API, with a resolution note
+- V1: simple API endpoint. Future: webhook subscriptions, polling integrations.
+
 **Status:** Resolved
