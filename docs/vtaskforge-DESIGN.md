@@ -41,7 +41,7 @@ Workspace (mykb context)
 - **Postgres** as central store — multiple agents on different machines need access.
 - **Web RPC + events** for all communication — localhost or public IP makes no difference to the system. Location-agnostic from day one.
 - **Pull + push task distribution** — agents claim tasks from a pool by default, but tasks can be pinned to a specific agent.
-- **Task statuses**: draft, pending_start_review, todo, doing, pending_completion_review, changes_requested, blocked, deferred, cancelled, done (full lifecycle).
+- **Task statuses**: draft, pending_start_review, todo, doing, pending_completion_review, changes_requested, needs_attention, blocked, deferred, cancelled, done (full lifecycle).
 - **Result = commit + status update** — the code is the deliverable. Agent pushes a commit or MR and marks the task done.
 - **KB area linking** — tasks reference mykb knowledge areas so agents can `kb load` relevant context.
 - **Tasks as agent work packets** — each task carries: title, description, acceptance criteria, linked areas, relevant files, related docs, blockers, notes.
@@ -52,7 +52,7 @@ Workspace (mykb context)
 Task:
   id: nanoid
   title: "Filter archived entries from kb load output"
-  status: draft | pending_start_review | todo | doing | pending_completion_review | changes_requested | blocked | deferred | cancelled | done
+  status: draft | pending_start_review | todo | doing | pending_completion_review | changes_requested | needs_attention | blocked | deferred | cancelled | done
   phase_id: <phase-nanoid>
   initiative_id: <initiative-nanoid>
 
@@ -155,10 +155,10 @@ Both flags are independently settable per task, with cascading defaults (task > 
 
 ```
 draft → pending_start_review → todo → doing → pending_completion_review → done
-              ↓                                        ↓
-        changes_requested ←──────────────────── changes_requested
-              ↓                                        ↓
-           (refine, resubmit)                   (fix, resubmit)
+              ↓                         ↓              ↓
+        changes_requested ←──────── needs_attention    changes_requested
+              ↓                         ↓              ↓
+           (refine, resubmit)    (triage, rework)   (fix, resubmit)
                         cancelled ←── (any state)
 ```
 
@@ -255,17 +255,19 @@ Enables: task timeline view, cycle time metrics (draft→done), rework rate (cha
 
 **Surfacing:** Task detail view shows the event timeline. Kanban cards show last event as a summary line.
 
-### 4. Context Budget
+### 4. ~~Context Budget~~ (Resolved — Out of Scope)
 
-Tasks link to KB areas, files, and docs, but LLM agents have context limits. The task shape could include an estimated context size so the system can warn "this task's context exceeds agent X's capacity" before assignment.
+**Decided: Agent pool manager concern, not vtaskforge's.** vtaskforge doesn't know about agent capabilities or context windows. The pool manager (vf-agents) knows agent capacity and can decide if a task's linked context fits before assignment.
 
-Key questions: How to estimate context size? Static (sum of linked file sizes) or dynamic (actual token count)? Should this influence agent matching?
+### 5. ~~Failure Handling~~ (Resolved)
 
-### 5. Failure Handling
+**Decided: Two-layer responsibility.**
 
-What happens when an agent fails a task? Options: retry with same agent, reassign to a different agent type, escalate to human, back to pool. A failed attempt could trigger `changes_requested` with failure context attached.
+1. **vf-agents (developer)** handles execution-level failures (container crash, timeout, OOM). It retries if appropriate, and if it gives up, unassigns itself from the task with a note explaining why — just like a real developer unassigning a ticket they can't complete.
 
-Key questions: Max retries? Automatic escalation path? How to capture failure context (logs, error messages, partial work)?
+2. **vtaskforge (board)** receives the unassignment. Task moves to `needs_attention` status with the agent's failure context attached. A human or expert agent (scrum master role) triages: rewrite the task, create prerequisite tasks, reassign, or escalate.
+
+New status: **`needs_attention`** — the executing agent gave up and needs help. Distinct from `changes_requested` (review gate outcome). See [scrum-master-agent-PROPOSAL.md](scrum-master-agent-PROPOSAL.md) for the process agent that triages these.
 
 ### 6. ~~Naming~~ (Resolved)
 
