@@ -125,6 +125,10 @@ Task:
   # Agent assignment
   requires: ["architect", "opus"]         # tag-based matching (optional)
   assigned_to: <agent_id> | null          # pinned to specific agent (optional)
+  claimed_by: <agent_id> | null           # currently claimed by
+  claimed_at: ISO 8601 | null
+  claim_timeout: duration | null          # null = inherit from phase/initiative (default: 30m)
+  claim_expires_at: ISO 8601 | null       # set on claim, extended on heartbeat
 
   # All relationships are links (separate table)
   # links: depends_on, blocks, relates_to, commit, mr, area, doc, file, jira
@@ -449,6 +453,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 - [scrum-master-agent-PROPOSAL.md](scrum-master-agent-PROPOSAL.md) — Autonomous process agent for flow facilitation and triage
 - [design-gaps-ANALYSIS.md](design-gaps-ANALYSIS.md) — Identified gaps in the design requiring resolution
 - [gitlab-pipeline-analogy-REFERENCE.md](gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
+- [api-surface-DESIGN.md](api-surface-DESIGN.md) — Full REST API surface, SSE events, error model, agent liveness
 
 ## Not Yet Decided
 

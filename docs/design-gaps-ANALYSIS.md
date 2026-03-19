@@ -97,101 +97,41 @@ Added `file` link type to the design doc table. `file` = Task → source file pa
 
 ---
 
-### 6. API Surface — Undefined
+### 6. ~~API Surface — Undefined~~ (Resolved)
 
-No RPC methods listed. The API is central to the architecture — every external system depends on it.
+**Decided: REST + OpenAPI + SSE.** Full API surface documented in [api-surface-DESIGN.md](api-surface-DESIGN.md).
 
-**Draft method list:**
+Key decisions:
+- REST with OpenAPI 3.x spec — codegen for Go (vf-agents) and TS (UIs)
+- URL-based versioning (`/v1/`)
+- SSE for real-time events with `Last-Event-ID` reconnection support
+- Cursor-based pagination on all list endpoints
+- Consistent error model with typed error codes
+- Idempotency-Key header on all POST operations
+- Task lifecycle actions as POST sub-resources (e.g., `/tasks/:id/claim`)
+- Agent liveness via claim timeout + heartbeat (background expiry process)
+- Bulk import endpoint for intake tooling
+- Task notes as append-only comments (separate from reviews)
+- Agent registration with tags and status tracking
+- `?expand=links,reviews,events` for reducing round trips
 
-```
-# Initiatives
-initiative.create
-initiative.get
-initiative.list
-initiative.update
-initiative.archive
-
-# Phases
-phase.create
-phase.get
-phase.list
-phase.update
-phase.reorder
-
-# Tasks
-task.create
-task.get
-task.list
-task.update
-task.claim
-task.unclaim
-task.complete
-task.fail (needs_attention)
-
-# Reviews
-review.submit
-review.list (per task)
-
-# Links
-link.add
-link.remove
-link.list
-
-# Events
-events.subscribe (SSE/WebSocket)
-
-# Task Events (read-only)
-task_events.list (per task)
-task_events.query (across tasks — metrics)
-```
-
-**Questions:**
-- RPC style: REST, JSON-RPC, gRPC, or tRPC?
-- Pagination strategy for list endpoints?
-- Filtering/query language for task lists?
-
-**Status:** Open
+**Status:** Resolved
 
 ---
 
-### 7. Event Types — Undefined
+### 7. ~~Event Types — Undefined~~ (Resolved)
 
-The event stream is consumed by scrum master, UIs, and pool manager but no event types are specified.
+**Decided:** Full event type list defined in [api-surface-DESIGN.md](api-surface-DESIGN.md) under the Event Stream section.
 
-**Draft event types:**
+Event types cover: task lifecycle (created, updated, status_changed, claimed, unclaimed, completed, failed, blocked, unblocked, heartbeat), reviews (submitted), links (added, removed), initiatives (created, updated, completed, archived), phases (created, updated, activated, completed), agents (registered, deregistered, status_changed).
 
-```
-task.created
-task.updated
-task.status_changed
-task.claimed
-task.unclaimed
-task.completed
-task.needs_attention
+Key decisions:
+- SSE format with event ID, type, and JSON data payload
+- Consumers filter on subscription via query params (`?initiative=id&type=x`)
+- `Last-Event-ID` header for reconnection replay (24h retention)
+- Events are the same records stored in the `task_events` table — one source of truth
 
-review.submitted
-review.approved
-review.rejected
-review.changes_requested
-
-link.added
-link.removed
-
-initiative.created
-initiative.updated
-initiative.archived
-
-phase.created
-phase.updated
-```
-
-**Questions:**
-- Event payload format? (full entity snapshot vs delta?)
-- Do consumers filter by event type on subscription, or receive all?
-- Event ordering guarantees?
-- Replay/catch-up for consumers that reconnect?
-
-**Status:** Open
+**Status:** Resolved
 
 ---
 
