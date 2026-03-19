@@ -19,7 +19,7 @@ The core idea: each task is an **agent work packet** — it contains enough cont
 | Initiative | A refined implementation plan with phases and tasks. Born from design/planning collaboration. |
 | Phase | Ordered grouping within an initiative. Sequential execution. |
 | Task | An agent-executable work packet. Full context for cold handoff. |
-| Agent | An LLM worker (local or remote) that claims and executes tasks. |
+| Agent | An LLM worker (local or remote) that claims and executes tasks. Roles: executor, reviewer, architect, scrum_master. |
 
 ## Hierarchy
 
@@ -272,6 +272,12 @@ New status: **`needs_attention`** — the executing agent gave up and needs help
 ### 6. ~~Naming~~ (Resolved)
 
 Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
+
+## Related Documents
+
+- [actor-model-DESIGN.md](actor-model-DESIGN.md) — Actor types, system boundary, development team model, interaction flows
+- [agent-pool-manager-PROPOSAL.md](agent-pool-manager-PROPOSAL.md) — Proposal to evolve vf-agents into the agent pool manager
+- [scrum-master-agent-PROPOSAL.md](scrum-master-agent-PROPOSAL.md) — Autonomous process agent for flow facilitation and triage
 
 ## Not Yet Decided
 
