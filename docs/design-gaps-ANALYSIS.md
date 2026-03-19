@@ -36,21 +36,35 @@ Full state machine documented in vtaskforge-DESIGN.md under Review System Design
 
 ---
 
-### 3. Concurrency — Two Agents Claiming Same Task
+### 3. ~~Concurrency — Two Agents Claiming Same Task~~ (Resolved)
 
-Two agents try to claim the same task simultaneously. The strategy needs to be decided.
+**Decided: Atomic UPDATE with WHERE clause.** Same pattern as GitLab runner job claiming.
 
-**Options:**
-- Postgres `SELECT FOR UPDATE` — row-level lock during claim
-- Optimistic locking — version field, claim fails if version changed
-- Advisory locks — Postgres advisory lock on task_id
-- First-write-wins — unique constraint on (task_id, status=doing)
+```sql
+UPDATE tasks
+SET status = 'doing', claimed_by = $agent_id, claimed_at = NOW()
+WHERE id = $task_id
+  AND status = 'todo'
+  AND (assigned_to IS NULL OR assigned_to = $agent_id)
+  AND (requires IS NULL OR requires <@ $agent_tags)
+RETURNING id;
+```
 
-**Questions:**
-- What does the losing agent see? Error? "Already claimed" response?
-- Should the API return alternative available tasks when a claim fails?
+- Two agents race: one wins (200 OK), one loses (409 Conflict — "task already claimed")
+- No locks needed — Postgres row-level MVCC handles it
+- WHERE clause also enforces tag matching and pinned assignment
 
-**Status:** Open
+**Agent matching (three levels):**
+
+| Level | Field | Meaning |
+|---|---|---|
+| Open | both null | Any agent can claim |
+| Tagged | `requires: ["opus"]` | Only agents whose tags contain all required tags |
+| Pinned | `assigned_to: "agent-id"` | Only this specific agent |
+
+Agents register with tags (like GitLab runners): `["executor", "opus", "high-reasoning"]`.
+
+**Status:** Resolved
 
 ---
 

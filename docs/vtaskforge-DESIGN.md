@@ -39,7 +39,9 @@ Initiative(s)
 - **Separate system from mykb** — own tool (`vtaskforge`), own storage. Not `kb initiative`.
 - **Postgres** as central store — multiple agents on different machines need access.
 - **Web RPC + events** for all communication — localhost or public IP makes no difference to the system. Location-agnostic from day one.
-- **Pull + push task distribution** — agents claim tasks from a pool by default, but tasks can be pinned to a specific agent.
+- **Pull + push task distribution** — agents claim tasks from a pool by default, but tasks can be pinned to a specific agent or require specific tags.
+- **Agent matching** — three levels: open (any agent), tagged (agents matching `requires` tags), pinned (specific `assigned_to` agent). Modeled after GitLab runner tags.
+- **Atomic claims** — task claiming uses atomic Postgres UPDATE with WHERE clause (status=todo + tag matching + assignment check). Two agents racing: one wins, one gets 409 Conflict.
 - **Task statuses**: draft, pending_start_review, todo, doing, pending_completion_review, changes_requested, needs_attention, blocked, deferred, cancelled, done (full lifecycle).
 - **Result = commit + status update** — the code is the deliverable. Agent pushes a commit or MR and marks the task done.
 - **KB area linking** — tasks reference mykb knowledge areas so agents can `kb load` relevant context.
@@ -119,6 +121,10 @@ Task:
   needs_review_before_start: true | false | null
   needs_review_on_completion: true | false | null
   review_return_to: pending_start_review | pending_completion_review | null
+
+  # Agent assignment
+  requires: ["architect", "opus"]         # tag-based matching (optional)
+  assigned_to: <agent_id> | null          # pinned to specific agent (optional)
 
   # All relationships are links (separate table)
   # links: depends_on, blocks, relates_to, commit, mr, area, doc, file, jira
