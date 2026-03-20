@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path, re_path
 
-from core.views import HealthCheckView
+from core.views import BulkImportView, HealthCheckView
 
 
 def custom_404(request, exception=None):
@@ -22,6 +22,7 @@ def catch_all_404(request, path=''):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('v1/health', HealthCheckView.as_view(), name='health-check'),
+    path('v1/bulk/import', BulkImportView.as_view(), name='bulk-import'),
     path('v1/', include('workplans.urls')),
     path('v1/', include('agents.urls')),
     path('v1/', include('tasks.urls')),

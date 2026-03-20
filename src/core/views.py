@@ -7,6 +7,77 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.bulk_import import perform_bulk_import
+
+
+class BulkImportView(APIView):
+    """POST /v1/bulk/import — create workplan + phases + tasks + links atomically."""
+
+    def post(self, request):
+        payload = request.data
+
+        # Validate top-level required fields
+        if "workplan" not in payload:
+            return Response(
+                {"error": {"code": "VALIDATION_ERROR", "message": "workplan is required"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(payload["workplan"], dict) or "name" not in payload["workplan"]:
+            return Response(
+                {"error": {"code": "VALIDATION_ERROR", "message": "workplan.name is required"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate phases
+        for i, phase in enumerate(payload.get("phases", [])):
+            if "ref" not in phase:
+                return Response(
+                    {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].ref is required"}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if "name" not in phase:
+                return Response(
+                    {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].name is required"}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            for j, task in enumerate(phase.get("tasks", [])):
+                if "ref" not in task:
+                    return Response(
+                        {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].tasks[{j}].ref is required"}},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if "title" not in task:
+                    return Response(
+                        {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].tasks[{j}].title is required"}},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        try:
+            ref_map = perform_bulk_import(payload)
+        except ValueError as e:
+            return Response(
+                {"error": {"code": "VALIDATION_ERROR", "message": str(e)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build created counts
+        phases_count = len(payload.get("phases", []))
+        tasks_count = sum(len(p.get("tasks", [])) for p in payload.get("phases", []))
+        links_count = len(payload.get("links", []))
+
+        return Response(
+            {
+                "ref_map": ref_map,
+                "created": {
+                    "workplans": 1,
+                    "phases": phases_count,
+                    "tasks": tasks_count,
+                    "links": links_count,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class HealthCheckView(APIView):
     """GET /v1/health — checks DB and Redis connectivity."""
