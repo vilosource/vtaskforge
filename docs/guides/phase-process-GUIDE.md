@@ -405,3 +405,25 @@ Deeper analysis of Phase 1 patterns. Full analysis discussed in session, key cha
 6. **Parallel execution planned.** Phase 1 was fully sequential. Phase 2 will try worktree isolation on independent tasks to test vtaskforge's core value proposition.
 
 7. **Dogfooding planned.** Once CLI + bulk import exist, Phase 3 specs will be imported into vtaskforge and executed through the system itself.
+
+### Iteration 3 — Post-Phase 3 (2026-03-20)
+
+Phase 3 executed 6/7 tasks with standardized executor prompts (no hand-crafted glue). All passed first attempt. Dogfooding via vtf-dogfood release stack validated.
+
+Key finding: **Blast Radius Discovery**
+
+Task 3.4 (pagination) changed the API response format from flat lists to paginated objects. The CLI, which mocks API responses in its tests, was not updated. CLI tests passed (mocks return old format) but the CLI was broken against the real API.
+
+Root cause: Mock-based tests create frozen copies of interfaces. When the real interface changes, mocks don't update. Tests become lies.
+
+This is not vtaskforge-specific — it's a universal problem: **when a task changes an interface, all consumers (including mocked ones) must be updated.**
+
+Process changes:
+
+1. **Executor blast radius discovery.** The executor agent's system prompt now requires searching the entire codebase for consumers of any changed interface — including mocked consumers in test files. This is an agent BEHAVIOR, not a spec field. The agent discovers the blast radius instead of relying on the spec writer to predict it.
+
+2. **Judge blast radius verification.** The judge independently searches for consumers of changed interfaces and verifies the executor updated all of them. Stale mocks (returning old format) are a FAIL verdict.
+
+3. **Simplified spec template.** Removed mandatory contracts, affected_files, behavioral_spec, and pattern fields. These added complexity without proven value. The blast radius is discovered by the agent, not predicted by the spec. Optional fields remain available when useful.
+
+4. **vtf-dogfood release stack.** Production Docker image (built, not mounted) running on port 8001 with separate Postgres. Dogfood data survives dev test runs. The DB wipe issue was specific to self-hosting (same DB for tracking and development), not a product deficiency.
