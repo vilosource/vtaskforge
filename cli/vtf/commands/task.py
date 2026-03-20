@@ -41,8 +41,9 @@ def list_tasks(ctx, status, workplan, phase):
 
 @task.command()
 @click.argument("id")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def show(ctx, id):
+def show(ctx, id, as_json):
     """Show task details."""
     client = ctx.obj["client"]
     try:
@@ -50,6 +51,12 @@ def show(ctx, id):
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
+
+    if as_json:
+        import json
+        click.echo(json.dumps(t, indent=2))
+        return
+
     click.echo(f"ID:          {t['id']}")
     click.echo(f"Title:       {t['title']}")
     click.echo(f"Status:      {t['status']}")
@@ -57,8 +64,21 @@ def show(ctx, id):
     click.echo(f"Workplan:    {t.get('workplan', '')}")
     click.echo(f"Claimed by:  {t.get('claimed_by', 'none')}")
     click.echo(f"Requires:    {', '.join(t.get('requires', []))}")
+    if t.get('agent_model'):
+        click.echo(f"Agent model: {t['agent_model']}")
+    if t.get('isolation') and t['isolation'] != 'sequential':
+        click.echo(f"Isolation:   {t['isolation']}")
+    if t.get('judge'):
+        click.echo(f"Judge:       Yes")
+    if t.get('test_command'):
+        cmds = t['test_command']
+        if isinstance(cmds, dict):
+            for k, v in cmds.items():
+                click.echo(f"Test ({k}):  {v}")
     if t.get('description'):
         click.echo(f"\nDescription:\n{t['description']}")
+    if t.get('spec'):
+        click.echo(f"\nSpec: ({len(t['spec'])} chars, use --json for full content)")
 
 
 @task.command()
