@@ -108,6 +108,17 @@ class TaskViewSet(ModelViewSet):
         task.claim_expires_at = now + timeout
         task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
 
+        try:
+            from events.models import TaskEvent
+            TaskEvent.objects.create(
+                task=task,
+                event_type="claimed",
+                data={"agent_id": agent_id},
+                triggered_by=agent_id,
+            )
+        except Exception:
+            pass
+
         serializer = self.get_serializer(task)
         return Response(serializer.data)
 
@@ -123,11 +134,23 @@ class TaskViewSet(ModelViewSet):
             exc = InvalidTransition(task.status, "todo", [])
             return invalid_transition_response(exc)
 
+        previous_agent = task.claimed_by
         task.status = "todo"
         task.claimed_by = None
         task.claimed_at = None
         task.claim_expires_at = None
         task.save(update_fields=["status", "claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
+
+        try:
+            from events.models import TaskEvent
+            TaskEvent.objects.create(
+                task=task,
+                event_type="unclaimed",
+                data={"agent_id": previous_agent} if previous_agent else {},
+                triggered_by=previous_agent or "",
+            )
+        except Exception:
+            pass
 
         serializer = self.get_serializer(task)
         return Response(serializer.data)

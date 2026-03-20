@@ -81,6 +81,17 @@ def validate_transition(task, new_status: str) -> None:
 
 def perform_transition(task, new_status: str, triggered_by: str = ""):
     validate_transition(task, new_status)
+    old_status = task.status
     task.status = new_status
     task.save(update_fields=["status", "updated_at"])
+    try:
+        from events.models import TaskEvent
+        TaskEvent.objects.create(
+            task=task,
+            event_type="status_changed",
+            data={"from": old_status, "to": new_status},
+            triggered_by=triggered_by,
+        )
+    except Exception:
+        pass  # don't break transitions if event creation fails
     return task

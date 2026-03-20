@@ -25,6 +25,7 @@ urlpatterns = [
     path('v1/', include('workplans.urls')),
     path('v1/', include('agents.urls')),
     path('v1/', include('tasks.urls')),
+    path('v1/', include('events.urls')),
     path('v1/', include('links.urls')),
     path('v1/', include('reviews.urls')),
 ]
