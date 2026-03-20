@@ -1,0 +1,148 @@
+id: "4.3"
+name: "Workplan list page"
+depends_on: ["4.2"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Build the home page of the web UI: a list of workplans fetched from
+  GET /v1/workplans/. Users click a workplan to navigate to its Kanban board.
+
+  This is the first real data-fetching page and establishes patterns for:
+  loading states, error states, empty states, and react-query usage.
+
+files:
+  create:
+    - web/src/pages/WorkplanList.tsx
+    - web/src/pages/WorkplanList.test.tsx
+    - web/src/api/workplans.ts
+    - web/tests/workplan-list.spec.ts
+  modify:
+    - web/src/App.tsx
+  affected: []
+
+contracts:
+  establishes:
+    - name: "workplan-list-page"
+      description: "/ route shows a table of workplans with name, status, and task counts"
+  depends_on:
+    - name: "api-client"
+    - name: "app-routing"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/api/client.ts — API client from task 4.2
+    - web/src/App.tsx — routing from task 4.2
+    - docs/design/api-surface-DESIGN.md — GET /v1/workplans/ response shape
+    - docs/design/vtaskforge-DESIGN.md — workplan entity shape
+
+    Step 1: API hooks
+    Create web/src/api/workplans.ts:
+    ```typescript
+    import { useQuery } from '@tanstack/react-query';
+    import { apiGet } from './client';
+
+    export interface Workplan {
+      id: string;
+      name: string;
+      description: string;
+      status: string;
+      tags: string[];
+      created_at: string;
+    }
+
+    interface PaginatedResponse<T> {
+      results: T[];
+      next: string | null;
+      previous: string | null;
+    }
+
+    export function useWorkplans() {
+      return useQuery({
+        queryKey: ['workplans'],
+        queryFn: () => apiGet<PaginatedResponse<Workplan>>('/v1/workplans/'),
+      });
+    }
+    ```
+
+    Step 2: WorkplanList component
+    Replace the placeholder from 4.2 with a real component:
+    - Calls useWorkplans() hook
+    - Shows loading spinner while fetching
+    - Shows error message on failure (with retry button)
+    - Shows "No workplans yet" empty state
+    - Renders a table/list with columns: Name, Status, Tags
+    - Each row is a link to /workplans/:id
+
+    ```typescript
+    export function WorkplanList() {
+      const { data, isLoading, error, refetch } = useWorkplans();
+
+      if (isLoading) return <div className="loading">Loading workplans...</div>;
+      if (error) return <div className="error">Failed to load workplans. <button onClick={() => refetch()}>Retry</button></div>;
+
+      const workplans = data?.results ?? [];
+      if (workplans.length === 0) return <div className="empty">No workplans yet.</div>;
+
+      return (
+        <div className="workplan-list">
+          <h1>Workplans</h1>
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Status</th><th>Tags</th></tr>
+            </thead>
+            <tbody>
+              {workplans.map(wp => (
+                <tr key={wp.id}>
+                  <td><Link to={`/workplans/${wp.id}`}>{wp.name}</Link></td>
+                  <td>{wp.status}</td>
+                  <td>{wp.tags.join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    ```
+
+    Step 3: Unit tests (Vitest + React Testing Library + MSW)
+    web/src/pages/WorkplanList.test.tsx:
+    - Mock GET /v1/workplans/ with MSW
+    - Test: loading state renders
+    - Test: workplans render in a table after loading
+    - Test: empty state renders when results is empty
+    - Test: error state renders on fetch failure
+    - Test: clicking a workplan name navigates to /workplans/:id
+
+    Step 4: E2E test (Playwright)
+    web/tests/workplan-list.spec.ts:
+    - Navigate to /
+    - Wait for workplan list to load (requires real API running)
+    - Verify at least one workplan is visible (or empty state)
+    - Click a workplan and verify navigation to /workplans/:id
+
+  constraints:
+    - Use @tanstack/react-query for data fetching, NOT useEffect + useState
+    - Handle all three states: loading, error, empty
+    - Use semantic HTML (table for tabular data)
+    - The Workplan type definition must match the API response shape
+    - Paginated response shape: { results: [], next, previous }
+  references:
+    - web/src/api/client.ts
+    - web/src/App.tsx
+    - docs/design/api-surface-DESIGN.md
+
+acceptance_criteria:
+  - "/ route shows a list of workplans fetched from GET /v1/workplans/"
+  - "Loading spinner shows while data is being fetched"
+  - "Error message with retry button shows on fetch failure"
+  - "Empty state message shows when no workplans exist"
+  - "Clicking a workplan navigates to /workplans/:id"
+  - "cd web && npx vitest run src/pages/WorkplanList.test.tsx passes"
+
+test_command:
+  unit: "cd web && npx vitest run src/pages/WorkplanList.test.tsx"
+  e2e: "cd web && npx playwright test tests/workplan-list.spec.ts"

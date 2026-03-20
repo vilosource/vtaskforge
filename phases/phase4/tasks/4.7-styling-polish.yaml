@@ -1,0 +1,149 @@
+id: "4.7"
+name: "Styling and polish"
+depends_on: ["4.5", "4.6"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Apply consistent styling across all web UI components. The design goal is
+  clean and functional — not fancy. Status colors from the design doc, responsive
+  layout, proper loading/error/empty states everywhere.
+
+  This task consolidates all visual polish into one pass rather than styling
+  each component individually.
+
+files:
+  create:
+    - web/src/styles/global.css
+    - web/src/styles/kanban.css
+    - web/src/styles/modal.css
+    - web/src/styles/components.css
+  modify:
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/pages/WorkplanList.tsx
+    - web/src/components/TaskCard.tsx
+    - web/src/components/KanbanColumn.tsx
+    - web/src/components/TaskDetail.tsx
+    - web/src/components/LiveIndicator.tsx
+    - web/src/components/ActionButtons.tsx
+    - web/src/components/EventTimeline.tsx
+    - web/src/components/AddNoteForm.tsx
+    - web/index.html
+  affected: []
+
+contracts:
+  establishes:
+    - name: "status-colors"
+      description: "Consistent color scheme: green=done, blue=doing/todo, yellow=review, red/orange=attention, grey=draft"
+  depends_on:
+    - name: "kanban-board"
+    - name: "task-detail-modal"
+    - name: "live-indicator"
+
+implementation:
+  approach: |
+    Read these files first:
+    - All components created in tasks 4.3-4.6
+    - docs/design/vtaskforge-DESIGN.md — Kanban board visual spec (colors, cards, columns)
+
+    Step 1: Global styles
+    web/src/styles/global.css:
+    - CSS reset / normalize
+    - CSS custom properties (variables) for the color scheme:
+      ```css
+      :root {
+        --color-done: #22c55e;
+        --color-doing: #3b82f6;
+        --color-todo: #60a5fa;
+        --color-review: #eab308;
+        --color-attention: #ef4444;
+        --color-draft: #9ca3af;
+        --color-bg: #ffffff;
+        --color-bg-secondary: #f3f4f6;
+        --color-text: #111827;
+        --color-text-secondary: #6b7280;
+        --color-border: #e5e7eb;
+      }
+      ```
+    - Base typography (system font stack, readable sizes)
+    - Container max-width and padding
+
+    Step 2: Kanban board styles
+    web/src/styles/kanban.css:
+    - Horizontal scrolling container for columns (flexbox, overflow-x: auto)
+    - Column: fixed width (~280px), full height, vertical scroll for cards
+    - Column header: sticky, colored top border matching status color
+    - Column count badge
+    - Responsive: on narrow screens, columns stack or allow horizontal scroll
+
+    Step 3: Task card styles
+    Part of web/src/styles/kanban.css or separate:
+    - Card: white background, subtle border, border-radius, hover shadow
+    - Status badge: small colored pill with status text
+    - Claimed-by: small text below title
+    - Phase indicator: small tag
+
+    Step 4: Modal styles
+    web/src/styles/modal.css:
+    - Overlay: semi-transparent black backdrop, centered content
+    - Modal container: max-width 800px, max-height 90vh, scrollable
+    - Sections with clear visual separation (borders or spacing)
+    - Action buttons at bottom, sticky if modal scrolls
+    - Close button (X) in top right corner
+
+    Step 5: Component styles
+    web/src/styles/components.css:
+    - Loading spinner (CSS-only, no images)
+    - Error message box (red border, retry button)
+    - Empty state (centered text, muted color)
+    - Status badge component (reusable across cards and modal)
+    - Form inputs (note form, reason input for review)
+    - Button styles (primary, secondary, danger)
+    - LiveIndicator dot animation (pulse for connected)
+
+    Step 6: Apply styles to all components
+    Import the CSS files in components. Add appropriate class names.
+    Each component should import only the styles it needs.
+
+    Step 7: Verify all states
+    Walk through every component and verify:
+    - Loading state has a spinner
+    - Error state has a message and retry button
+    - Empty state has helpful text
+    - Colors match the design doc spec
+    - Text is readable, spacing is consistent
+    - Modal is scrollable when content overflows
+
+    Step 8: Responsive check
+    - Desktop (1200px+): all columns visible side by side
+    - Tablet (768px-1199px): columns may need horizontal scroll
+    - Ensure nothing breaks at any width (no overflow, no cut-off text)
+
+  constraints:
+    - Use plain CSS files, NOT CSS-in-JS, Tailwind, or Sass
+    - CSS custom properties for colors — easy to swap for dark mode later
+    - No CSS frameworks (Bootstrap, etc.)
+    - Status colors MUST match the design doc specification
+    - Loading spinners must be CSS-only (no image assets)
+    - Modal must be accessible: focus trap, Escape to close, aria attributes
+    - Minimum touch target size for buttons: 44x44px (accessibility)
+  references:
+    - docs/design/vtaskforge-DESIGN.md — Kanban board visual spec
+    - All web/src/components/ and web/src/pages/ files
+
+acceptance_criteria:
+  - "Status colors match design doc: green=done, blue=doing/todo, yellow=review, red/orange=attention, grey=draft"
+  - "Kanban columns have colored top border matching their status group"
+  - "Task cards have hover effect and clear visual hierarchy"
+  - "Modal has overlay backdrop and centered content"
+  - "Loading spinner is visible during data fetches"
+  - "Error states show message with retry button"
+  - "Empty states show helpful text"
+  - "Layout works on desktop (1200px+) without horizontal scrolling of columns"
+  - "Layout is usable on tablet (768px) with horizontal scroll for columns"
+  - "All buttons meet minimum 44x44px touch target"
+  - "cd web && npx vitest run passes (no visual regressions in component tests)"
+
+test_command:
+  unit: "cd web && npx vitest run"

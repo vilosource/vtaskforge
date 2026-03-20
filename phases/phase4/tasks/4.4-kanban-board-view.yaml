@@ -1,0 +1,182 @@
+id: "4.4"
+name: "Kanban board view"
+depends_on: ["4.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Build the Kanban board view at /workplans/:id. This is the primary view for
+  managing work — tasks are displayed as cards in status-based columns.
+
+  Column layout per the design doc:
+  - Draft (grey): draft
+  - Review (yellow): pending_start_review, pending_completion_review
+  - Ready (blue): todo
+  - In Progress (blue highlighted): doing
+  - Attention (red/orange): changes_requested, needs_attention, blocked
+  - Done (green): done
+  - deferred/cancelled: hidden by default
+
+  Task cards show: title, status badge, claimed_by agent, phase name.
+  Clicking a card opens the task detail modal (built in task 4.5).
+
+files:
+  create:
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/pages/KanbanBoard.test.tsx
+    - web/src/components/KanbanColumn.tsx
+    - web/src/components/TaskCard.tsx
+    - web/src/api/tasks.ts
+    - web/tests/kanban.spec.ts
+  modify:
+    - web/src/pages/BoardView.tsx
+  affected: []
+
+contracts:
+  establishes:
+    - name: "kanban-board"
+      description: "/workplans/:id renders Kanban board with status columns and task cards"
+    - name: "task-card"
+      description: "TaskCard component displays title, status badge, claimed_by, phase"
+    - name: "kanban-column"
+      description: "KanbanColumn component renders a list of TaskCards with column header and count"
+  depends_on:
+    - name: "api-client"
+    - name: "workplan-list-page"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/api/client.ts — API client
+    - web/src/pages/BoardView.tsx — placeholder from task 4.2
+    - docs/design/vtaskforge-DESIGN.md — Kanban board section (column layout, card content)
+    - docs/design/api-surface-DESIGN.md — GET /v1/tasks/?workplan=:id
+
+    Step 1: API hooks for tasks
+    Create web/src/api/tasks.ts:
+    ```typescript
+    import { useQuery } from '@tanstack/react-query';
+    import { apiGet } from './client';
+
+    export interface Task {
+      id: string;
+      title: string;
+      status: string;
+      phase_id: string;
+      workplan_id: string;
+      claimed_by: string | null;
+      claimed_at: string | null;
+      assigned_to: string | null;
+      requires: string[];
+      description: string;
+      acceptance_criteria: string[];
+      notes: string[];
+      created_at: string;
+      updated_at: string;
+    }
+
+    interface PaginatedResponse<T> {
+      results: T[];
+      next: string | null;
+      previous: string | null;
+    }
+
+    export function useTasksByWorkplan(workplanId: string) {
+      return useQuery({
+        queryKey: ['tasks', 'workplan', workplanId],
+        queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?workplan=${workplanId}`),
+        enabled: !!workplanId,
+      });
+    }
+    ```
+
+    Note: If the task list is paginated, the board needs to fetch all tasks.
+    For v1, assume workplans have <50 tasks (default page size). If needed,
+    add pagination handling later.
+
+    Step 2: Column mapping
+    Define the column configuration as a constant:
+    ```typescript
+    const COLUMNS = [
+      { id: 'draft', label: 'Draft', statuses: ['draft'], color: 'grey' },
+      { id: 'review', label: 'Review', statuses: ['pending_start_review', 'pending_completion_review'], color: 'yellow' },
+      { id: 'ready', label: 'Ready', statuses: ['todo'], color: 'blue' },
+      { id: 'in-progress', label: 'In Progress', statuses: ['doing'], color: 'blue-highlight' },
+      { id: 'attention', label: 'Attention', statuses: ['changes_requested', 'needs_attention', 'blocked'], color: 'red' },
+      { id: 'done', label: 'Done', statuses: ['done'], color: 'green' },
+    ];
+    ```
+
+    Step 3: KanbanColumn component
+    web/src/components/KanbanColumn.tsx:
+    - Receives: column config, tasks for that column
+    - Renders: column header with label and task count, list of TaskCard components
+    - data-column attribute on the container for e2e test targeting
+
+    Step 4: TaskCard component
+    web/src/components/TaskCard.tsx:
+    - Receives: task object, onClick handler
+    - Renders: task title, status badge (shows specific status within grouped columns),
+      claimed_by (if set), phase
+    - Clickable — onClick opens task detail (wired by parent)
+    - data-task-id attribute for e2e targeting
+
+    Step 5: KanbanBoard page
+    web/src/pages/KanbanBoard.tsx:
+    - Uses useParams() to get workplan ID from URL
+    - Fetches tasks with useTasksByWorkplan(id)
+    - Groups tasks into columns by status
+    - Renders columns with KanbanColumn components
+    - Loading, error, empty states
+    - Filtered statuses: deferred and cancelled are hidden by default
+    - Optional toggle to show deferred/cancelled
+
+    Step 6: Wire into BoardView
+    Update web/src/pages/BoardView.tsx to render KanbanBoard instead of placeholder.
+
+    Step 7: Unit tests (Vitest + MSW)
+    web/src/pages/KanbanBoard.test.tsx:
+    - Mock GET /v1/tasks/?workplan=test-wp with tasks in various statuses
+    - Test: tasks appear in correct columns based on status
+    - Test: deferred and cancelled tasks are hidden by default
+    - Test: loading state renders
+    - Test: empty state renders when no tasks
+    - Test: task card shows title, status badge, claimed_by
+    - Test: clicking a task card calls onClick handler
+
+    Step 8: E2E test (Playwright)
+    web/tests/kanban.spec.ts:
+    - Navigate to /workplans/:id (requires seeded data via API)
+    - Verify columns are visible
+    - Verify tasks appear in correct columns
+    - Verify clicking a task card (at this point, may just verify click fires — modal is 4.5)
+
+  constraints:
+    - Column layout must match the design doc exactly (6 visible columns)
+    - deferred and cancelled tasks MUST be hidden by default
+    - Status badge must show the specific status within grouped columns (e.g., "blocked" not just "Attention")
+    - Task cards must have data-task-id attribute for e2e testing
+    - Columns must have data-column attribute for e2e testing
+    - Do not implement drag-and-drop (status changes happen via task detail actions)
+    - Do not install a Kanban library — use CSS flexbox/grid
+  references:
+    - web/src/api/client.ts
+    - docs/design/vtaskforge-DESIGN.md — Kanban board section
+    - docs/design/api-surface-DESIGN.md — task list endpoint
+
+acceptance_criteria:
+  - "/workplans/:id route renders Kanban board with 6 columns"
+  - "Tasks fetched from GET /v1/tasks/?workplan=:id"
+  - "Tasks appear in correct columns based on status mapping"
+  - "Draft tasks in Draft column, todo in Ready, doing in In Progress, etc."
+  - "deferred and cancelled tasks are hidden by default"
+  - "Task cards show title, status badge, and claimed_by"
+  - "Each column shows task count in header"
+  - "Clicking a task card triggers onClick handler"
+  - "Loading and error states are handled"
+  - "cd web && npx vitest run src/pages/KanbanBoard.test.tsx passes"
+
+test_command:
+  unit: "cd web && npx vitest run src/pages/KanbanBoard.test.tsx"
+  e2e: "cd web && npx playwright test tests/kanban.spec.ts"

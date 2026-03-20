@@ -1,0 +1,46 @@
+tasks:
+  - id: "4.1"
+    name: "API fixes for web UI"
+    depends_on: []
+
+  - id: "4.2"
+    name: "React SPA setup"
+    depends_on: ["4.1"]
+
+  - id: "4.3"
+    name: "Workplan list page"
+    depends_on: ["4.2"]
+
+  - id: "4.4"
+    name: "Kanban board view"
+    depends_on: ["4.3"]
+
+  - id: "4.5"
+    name: "Task detail modal"
+    depends_on: ["4.4"]
+
+  - id: "4.6"
+    name: "SSE live updates"
+    depends_on: ["4.4"]
+
+  - id: "4.7"
+    name: "Styling and polish"
+    depends_on: ["4.5", "4.6"]
+
+  - id: "4.8"
+    name: "Build and deploy to dogfood"
+    depends_on: ["4.7"]
+
+  - id: "4.9"
+    name: "Playwright black-box suite"
+    depends_on: ["4.8"]
+
+# Parallel groups:
+#   Step 1: 4.1
+#   Step 2: 4.2
+#   Step 3: 4.3
+#   Step 4: 4.4
+#   Step 5: 4.5 || 4.6  (parallel — modal vs SSE, different concerns)
+#   Step 6: 4.7
+#   Step 7: 4.8
+#   Step 8: 4.9

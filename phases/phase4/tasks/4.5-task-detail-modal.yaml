@@ -1,0 +1,228 @@
+id: "4.5"
+name: "Task detail modal"
+depends_on: ["4.4"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Build the task detail modal that opens when clicking a task card on the Kanban
+  board. This is the most complex UI component — it shows all task data, event
+  timeline, reviews, notes, links, and context-sensitive action buttons.
+
+  The modal fetches expanded task data via GET /v1/tasks/:id?expand=links,reviews,events
+  (added in task 4.1) and renders it in a structured layout.
+
+  Action buttons change based on task status per the design doc's state machine.
+
+files:
+  create:
+    - web/src/components/TaskDetail.tsx
+    - web/src/components/TaskDetail.test.tsx
+    - web/src/components/EventTimeline.tsx
+    - web/src/components/ActionButtons.tsx
+    - web/src/components/AddNoteForm.tsx
+    - web/src/api/taskActions.ts
+    - web/tests/task-detail.spec.ts
+  modify:
+    - web/src/pages/KanbanBoard.tsx
+  affected:
+    - web/src/api/tasks.ts
+
+contracts:
+  establishes:
+    - name: "task-detail-modal"
+      description: "Clicking a task card opens a modal with full task details, event timeline, reviews, and context-sensitive actions"
+    - name: "task-actions"
+      description: "Action buttons call lifecycle endpoints (submit, claim, complete, etc.) and refresh the board on success"
+  depends_on:
+    - name: "kanban-board"
+    - name: "task-card"
+    - name: "task-expand"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/components/TaskCard.tsx — card component from task 4.4
+    - web/src/pages/KanbanBoard.tsx — board that will open the modal
+    - web/src/api/client.ts — apiPost for actions
+    - web/src/api/tasks.ts — task types and hooks
+    - docs/design/vtaskforge-DESIGN.md — task detail modal section, action table
+    - docs/design/api-surface-DESIGN.md — task lifecycle endpoints, notes, reviews
+
+    Step 1: Task actions API
+    Create web/src/api/taskActions.ts:
+    ```typescript
+    import { apiPost } from './client';
+
+    export const submitTask = (id: string) => apiPost(`/v1/tasks/${id}/submit/`);
+    export const claimTask = (id: string, agentId: string) => apiPost(`/v1/tasks/${id}/claim/`, { agent_id: agentId });
+    export const completeTask = (id: string) => apiPost(`/v1/tasks/${id}/complete/`);
+    export const failTask = (id: string, reason: string) => apiPost(`/v1/tasks/${id}/fail/`, { reason });
+    export const blockTask = (id: string, reason: string) => apiPost(`/v1/tasks/${id}/block/`, { reason });
+    export const unblockTask = (id: string) => apiPost(`/v1/tasks/${id}/unblock/`);
+    export const deferTask = (id: string) => apiPost(`/v1/tasks/${id}/defer/`);
+    export const cancelTask = (id: string) => apiPost(`/v1/tasks/${id}/cancel/`);
+    export const resubmitTask = (id: string) => apiPost(`/v1/tasks/${id}/resubmit/`);
+    export const addNote = (id: string, text: string, actorId: string) =>
+      apiPost(`/v1/tasks/${id}/notes/`, { text, actor_id: actorId });
+
+    // Review actions
+    export const approveTask = (id: string, reviewerId: string) =>
+      apiPost(`/v1/tasks/${id}/reviews/`, {
+        decision: 'approved', reviewer_id: reviewerId, reviewer_type: 'human'
+      });
+    export const rejectTask = (id: string, reviewerId: string, reason: string) =>
+      apiPost(`/v1/tasks/${id}/reviews/`, {
+        decision: 'rejected', reason, reviewer_id: reviewerId, reviewer_type: 'human'
+      });
+    export const requestChanges = (id: string, reviewerId: string, reason: string) =>
+      apiPost(`/v1/tasks/${id}/reviews/`, {
+        decision: 'changes_requested', reason, reviewer_id: reviewerId, reviewer_type: 'human'
+      });
+    ```
+
+    Also add a hook for fetching expanded task detail:
+    ```typescript
+    // In web/src/api/tasks.ts
+    export function useTaskDetail(taskId: string | null) {
+      return useQuery({
+        queryKey: ['task', taskId],
+        queryFn: () => apiGet<TaskDetail>(`/v1/tasks/${taskId}/?expand=links,reviews,events`),
+        enabled: !!taskId,
+      });
+    }
+    ```
+
+    Step 2: EventTimeline component
+    web/src/components/EventTimeline.tsx:
+    - Receives: list of events (from expanded task data)
+    - Renders: chronological list of events with timestamp, event_type, and data
+    - Status changes show "from -> to" with colored badges
+
+    Step 3: ActionButtons component
+    web/src/components/ActionButtons.tsx:
+    - Receives: task status, onAction callback
+    - Renders context-sensitive buttons based on current status:
+
+    | Status | Buttons |
+    |--------|---------|
+    | draft | Submit |
+    | pending_start_review | Approve, Reject, Request Changes |
+    | pending_completion_review | Approve, Reject, Request Changes |
+    | todo | Claim |
+    | doing | Complete, Fail, Block |
+    | blocked | Unblock |
+    | changes_requested | Resubmit |
+    | needs_attention | Rewrite (->draft), Back to pool (->todo), Cancel |
+    | Any non-terminal | Defer, Cancel |
+    | done, cancelled | No actions (terminal) |
+
+    Approve/Reject/Request Changes buttons show a reason input field when clicked.
+    Claim button shows an agent ID input (or select from available agents).
+    Fail/Block buttons show a reason input field.
+
+    Step 4: AddNoteForm component
+    web/src/components/AddNoteForm.tsx:
+    - Text input + submit button
+    - Calls addNote action on submit
+    - Clears input on success
+    - Shows error on failure
+
+    Step 5: TaskDetail modal component
+    web/src/components/TaskDetail.tsx:
+    - Receives: taskId (string | null), onClose callback
+    - When taskId is set, renders as a modal overlay
+    - Fetches task detail with useTaskDetail(taskId)
+    - Layout sections:
+      1. Header: title, status badge, close button
+      2. Description: full description text
+      3. Acceptance criteria: bulleted list
+      4. Assignment: claimed_by, assigned_to, requires tags
+      5. Links: list of linked entities (areas, docs, files, depends_on)
+      6. Reviews: list of review decisions
+      7. Event timeline: chronological event list
+      8. Notes: list of notes + AddNoteForm at bottom
+      9. Actions: ActionButtons component at the bottom
+    - Loading state while fetching
+    - Error state on fetch failure
+    - Clicking outside the modal or pressing Escape closes it
+
+    Step 6: Wire modal into KanbanBoard
+    Update web/src/pages/KanbanBoard.tsx:
+    - Add state: selectedTaskId (string | null)
+    - Pass onClick to TaskCard that sets selectedTaskId
+    - Render TaskDetail modal when selectedTaskId is set
+    - When an action succeeds, invalidate the task list query to refresh the board
+    - Close modal on success of terminal actions (cancel, defer)
+
+    Step 7: react-query mutations for actions
+    Use useMutation from @tanstack/react-query for action buttons:
+    ```typescript
+    const submitMutation = useMutation({
+      mutationFn: () => submitTask(taskId),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      },
+    });
+    ```
+
+    Step 8: Unit tests (Vitest + MSW)
+    web/src/components/TaskDetail.test.tsx:
+    - Mock GET /v1/tasks/:id?expand=links,reviews,events
+    - Test: modal renders task title and description
+    - Test: acceptance criteria rendered as list
+    - Test: event timeline shows events
+    - Test: correct action buttons for draft status (Submit visible)
+    - Test: correct action buttons for todo status (Claim visible)
+    - Test: correct action buttons for doing status (Complete, Fail, Block visible)
+    - Test: Submit button calls POST /v1/tasks/:id/submit/
+    - Test: Claim button shows agent input and calls POST /v1/tasks/:id/claim/
+    - Test: Escape key closes modal
+    - Test: add note form submits POST /v1/tasks/:id/notes/
+
+    Step 9: E2E test (Playwright)
+    web/tests/task-detail.spec.ts:
+    - Navigate to /workplans/:id (seeded data)
+    - Click a task card
+    - Verify modal opens with task title
+    - Verify action buttons match the task's status
+    - Close modal (Escape key)
+    - Verify modal is gone
+
+  constraints:
+    - Modal must be a proper overlay (not a separate page/route)
+    - Action buttons MUST match the state machine from the design doc exactly
+    - Use useMutation for actions, invalidate queries on success
+    - Modal must close on Escape key and click outside
+    - Do not install a modal library — implement with a simple overlay div
+    - Event timeline must be sorted chronologically (oldest first)
+    - The agent ID for claim should accept free text input (no agent list fetch required for v1)
+  references:
+    - web/src/components/TaskCard.tsx
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/api/client.ts
+    - docs/design/vtaskforge-DESIGN.md — task detail modal, action table, state machine
+    - docs/design/api-surface-DESIGN.md — lifecycle endpoints, notes, reviews
+
+acceptance_criteria:
+  - "Clicking a task card on the Kanban board opens a modal overlay"
+  - "Modal shows task title, description, acceptance criteria, links, reviews, events, notes"
+  - "Action buttons match the task's current status per the design doc"
+  - "draft task shows Submit button"
+  - "todo task shows Claim button"
+  - "doing task shows Complete, Fail, Block buttons"
+  - "pending_start_review/pending_completion_review shows Approve, Reject, Request Changes"
+  - "blocked task shows Unblock button"
+  - "needs_attention shows Rewrite, Back to pool, Cancel"
+  - "Non-terminal tasks show Defer and Cancel"
+  - "Action buttons call the correct lifecycle endpoint"
+  - "Board refreshes after a successful action"
+  - "Escape key closes the modal"
+  - "Add note form submits a note and refreshes the note list"
+  - "cd web && npx vitest run src/components/TaskDetail.test.tsx passes"
+
+test_command:
+  unit: "cd web && npx vitest run src/components/TaskDetail.test.tsx"
+  e2e: "cd web && npx playwright test tests/task-detail.spec.ts"

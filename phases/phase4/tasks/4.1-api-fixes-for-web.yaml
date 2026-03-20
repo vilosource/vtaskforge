@@ -1,0 +1,167 @@
+id: "4.1"
+name: "API fixes for web UI"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Pre-requisite API changes needed before frontend work begins. Four changes:
+
+  1. Add SessionAuthentication to DRF so the web SPA can use cookie-based auth
+     (alongside existing TokenAuthentication for CLI/agents).
+  2. Add ?expand=links,reviews,events support on GET /v1/tasks/:id to return
+     nested related data in a single request (avoids N+1 round trips from UI).
+  3. Verify that ?status=doing,blocked (comma-separated multi-status filter)
+     works on the task list endpoint. Fix if broken.
+  4. Update SSE endpoint to support session auth (cookie-based) in addition
+     to token auth — needed for browser EventSource which can't set custom headers.
+
+  These are security-critical changes (auth) and must be reviewed.
+
+files:
+  create: []
+  modify:
+    - src/vtaskforge/settings/base.py
+    - src/tasks/views.py
+    - src/tasks/serializers.py
+    - src/events/stream.py
+  affected:
+    - tests/tasks/test_api.py
+    - tests/events/test_stream.py
+
+contracts:
+  establishes:
+    - name: "session-auth"
+      description: "SessionAuthentication is available alongside TokenAuthentication for cookie-based browser auth"
+    - name: "task-expand"
+      description: "GET /v1/tasks/:id?expand=links,reviews,events returns nested related data"
+  modifies:
+    - name: "sse-stream"
+      description: "SSE endpoint now accepts session auth (cookie) in addition to token auth"
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/vtaskforge/settings/base.py — REST_FRAMEWORK config, MIDDLEWARE
+    - src/tasks/views.py — TaskViewSet retrieve and list actions
+    - src/tasks/serializers.py — TaskSerializer
+    - src/events/stream.py — SSE stream_events view
+    - tests/tasks/test_api.py — existing task API tests
+    - tests/events/test_stream.py — existing SSE tests
+    - docs/design/api-surface-DESIGN.md — endpoint specs
+
+    Step 1: SessionAuthentication
+    In src/vtaskforge/settings/base.py, add SessionAuthentication to DEFAULT_AUTHENTICATION_CLASSES:
+    ```python
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    ```
+
+    IMPORTANT: SessionAuthentication enforces CSRF on unsafe methods (POST, PATCH, DELETE).
+    The web SPA will need to handle CSRF tokens. For the API, this is fine — the SPA
+    fetches the CSRF cookie and includes it in headers. No changes needed to CSRF middleware
+    since it's already in MIDDLEWARE.
+
+    Step 2: ?expand support on task detail
+    In src/tasks/serializers.py, create an expanded serializer or make TaskSerializer
+    dynamic. When the view passes expand fields via context, include nested serializers:
+
+    ```python
+    class TaskDetailSerializer(TaskSerializer):
+        """Extended serializer with optional nested data."""
+        links = serializers.SerializerMethodField()
+        reviews = serializers.SerializerMethodField()
+        events = serializers.SerializerMethodField()
+
+        def get_links(self, obj):
+            if 'links' not in self.context.get('expand', []):
+                return None
+            from links.serializers import LinkSerializer
+            links = obj.source_links.all()
+            return LinkSerializer(links, many=True).data
+
+        def get_reviews(self, obj):
+            if 'reviews' not in self.context.get('expand', []):
+                return None
+            from reviews.serializers import ReviewSerializer
+            return ReviewSerializer(obj.reviews.all(), many=True).data
+
+        def get_events(self, obj):
+            if 'events' not in self.context.get('expand', []):
+                return None
+            from events.serializers import TaskEventSerializer
+            return TaskEventSerializer(obj.events.all(), many=True).data
+    ```
+
+    In src/tasks/views.py, override get_serializer_class() or get_serializer_context()
+    on the retrieve action to pass the expand parameter:
+    ```python
+    def get_serializer_class(self):
+        if self.action == 'retrieve' and self.request.query_params.get('expand'):
+            return TaskDetailSerializer
+        return TaskSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        expand = self.request.query_params.get('expand', '')
+        context['expand'] = [x.strip() for x in expand.split(',') if x.strip()]
+        return context
+    ```
+
+    Fields not requested in expand should be omitted from the response (return None
+    or exclude from fields). The approach above returns None for non-expanded fields.
+    An alternative is to dynamically remove fields — either approach is acceptable.
+
+    Step 3: Multi-status filter verification
+    Check if the existing filter on ?status= handles comma-separated values.
+    Look at how status filtering is implemented in TaskViewSet's get_queryset().
+    If it uses `filter(status=value)`, it won't handle "doing,blocked".
+    Fix: split on comma and use `filter(status__in=statuses)`.
+
+    Step 4: SSE session auth
+    The SSE endpoint in src/events/stream.py uses @api_view with IsAuthenticated.
+    DRF's @api_view respects DEFAULT_AUTHENTICATION_CLASSES, so after Step 1 adds
+    SessionAuthentication, the SSE endpoint will automatically support cookie auth.
+
+    However, verify this works: browser EventSource sends cookies automatically but
+    cannot set custom headers. The endpoint must accept the session cookie.
+
+    If the SSE endpoint uses a custom authentication check instead of DRF's default,
+    update it to use both authentication methods.
+
+    Step 5: Write tests
+    - Test session auth: create a Django session, make API requests with session cookie
+    - Test expand: GET /v1/tasks/:id?expand=links returns links in response
+    - Test expand: GET /v1/tasks/:id?expand=links,reviews,events returns all three
+    - Test expand: GET /v1/tasks/:id without expand does NOT include nested data
+    - Test multi-status: GET /v1/tasks/?status=doing,blocked returns both statuses
+    - Test SSE with session auth: authenticated session can connect to SSE stream
+
+  constraints:
+    - SessionAuthentication MUST be added alongside TokenAuthentication, not replacing it
+    - CSRF enforcement is expected for session auth — do not disable CSRF
+    - Expand fields that are not requested should return None or be excluded
+    - The expand parameter only applies to the detail (retrieve) action, not list
+    - Do not add new pip dependencies
+  references:
+    - src/vtaskforge/settings/base.py
+    - src/tasks/views.py
+    - src/tasks/serializers.py
+    - src/events/stream.py
+    - tests/tasks/test_api.py
+    - docs/design/api-surface-DESIGN.md
+
+acceptance_criteria:
+  - "SessionAuthentication is in DEFAULT_AUTHENTICATION_CLASSES alongside TokenAuthentication"
+  - "GET /v1/tasks/:id?expand=links returns nested links data"
+  - "GET /v1/tasks/:id?expand=links,reviews,events returns all three nested"
+  - "GET /v1/tasks/:id without expand does not include nested link/review/event data"
+  - "GET /v1/tasks/?status=doing,blocked returns tasks with either status"
+  - "SSE endpoint accepts session cookie authentication"
+  - "CSRF is enforced for session-authenticated unsafe methods"
+  - "pytest tests/ passes (full suite)"
+
+test_command: "pytest tests/"

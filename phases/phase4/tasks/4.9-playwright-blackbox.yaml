@@ -1,0 +1,206 @@
+id: "4.9"
+name: "Playwright black-box suite"
+depends_on: ["4.8"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Comprehensive end-to-end test suite using Playwright that exercises the full
+  web UI lifecycle: workplan list, Kanban board, task detail modal, lifecycle
+  actions, and SSE live updates. This is the web equivalent of the CLI
+  black-box test suite (task 3.7).
+
+  Tests run against a real dev stack (API + web dev server) with real data.
+
+files:
+  create:
+    - web/tests/e2e/lifecycle.spec.ts
+    - web/tests/e2e/error-states.spec.ts
+    - web/tests/e2e/sse-updates.spec.ts
+    - web/tests/e2e/helpers.ts
+  modify:
+    - web/playwright.config.ts
+  affected: []
+
+contracts:
+  establishes:
+    - name: "web-e2e-suite"
+      description: "Playwright test suite verifies full web UI lifecycle against running dev stack"
+  depends_on:
+    - name: "kanban-board"
+    - name: "task-detail-modal"
+    - name: "sse-live-updates"
+    - name: "web-production-build"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/playwright.config.ts — Playwright config from task 4.2
+    - web/tests/ — any existing e2e tests from tasks 4.3-4.6
+    - docs/design/api-surface-DESIGN.md — API endpoints for seeding data
+    - docs/design/vtaskforge-DESIGN.md — state machine transitions
+
+    Step 1: Test helpers
+    Create web/tests/e2e/helpers.ts:
+    ```typescript
+    import { APIRequestContext } from '@playwright/test';
+
+    const API_BASE = 'http://localhost:8000';
+
+    export async function createWorkplan(request: APIRequestContext, name: string) {
+      const res = await request.post(`${API_BASE}/v1/workplans/`, {
+        data: { name, description: `Test workplan: ${name}` },
+        headers: { Authorization: `Token ${process.env.VTF_TOKEN}` },
+      });
+      return res.json();
+    }
+
+    export async function createPhase(request: APIRequestContext, workplanId: string, name: string) {
+      const res = await request.post(`${API_BASE}/v1/workplans/${workplanId}/phases/`, {
+        data: { name },
+        headers: { Authorization: `Token ${process.env.VTF_TOKEN}` },
+      });
+      return res.json();
+    }
+
+    export async function createTask(request: APIRequestContext, phaseId: string, title: string) {
+      const res = await request.post(`${API_BASE}/v1/phases/${phaseId}/tasks/`, {
+        data: { title, description: `Test task: ${title}` },
+        headers: { Authorization: `Token ${process.env.VTF_TOKEN}` },
+      });
+      return res.json();
+    }
+
+    export async function submitTask(request: APIRequestContext, taskId: string) {
+      return request.post(`${API_BASE}/v1/tasks/${taskId}/submit/`, {
+        headers: { Authorization: `Token ${process.env.VTF_TOKEN}` },
+      });
+    }
+
+    export async function claimTask(request: APIRequestContext, taskId: string, agentId: string) {
+      return request.post(`${API_BASE}/v1/tasks/${taskId}/claim/`, {
+        data: { agent_id: agentId },
+        headers: { Authorization: `Token ${process.env.VTF_TOKEN}` },
+      });
+    }
+
+    export async function completeTask(request: APIRequestContext, taskId: string) {
+      return request.post(`${API_BASE}/v1/tasks/${taskId}/complete/`, {
+        headers: { Authorization: `Token ${process.env.VTF_TOKEN}` },
+      });
+    }
+
+    // Add more helpers as needed for the full lifecycle
+    ```
+
+    Step 2: Update Playwright config
+    Add e2e test directory, increase timeout for SSE tests:
+    ```typescript
+    export default defineConfig({
+      testDir: './tests/e2e',
+      timeout: 30000,
+      baseURL: 'http://localhost:3000',
+      use: {
+        headless: true,
+        trace: 'on-first-retry',
+      },
+      // Don't auto-start web server for e2e — require running stack
+    });
+    ```
+
+    Step 3: Full lifecycle test
+    web/tests/e2e/lifecycle.spec.ts:
+
+    Scenario 1: Browse workplan list
+    - Navigate to /
+    - Verify workplan list page loads
+    - Verify at least one workplan is visible (seeded via API in beforeAll)
+    - Click a workplan
+
+    Scenario 2: Kanban board renders correctly
+    - Navigate to /workplans/:id
+    - Verify columns are visible (Draft, Review, Ready, In Progress, Attention, Done)
+    - Verify tasks appear in correct columns based on their status
+    - Verify task cards show title and status badge
+
+    Scenario 3: Task detail modal
+    - Click a task card on the board
+    - Verify modal opens
+    - Verify task title, description are shown
+    - Verify action buttons match task status
+    - Close modal with Escape
+
+    Scenario 4: Submit a task (draft -> todo or pending_start_review)
+    - Click a draft task card
+    - Click "Submit" button
+    - Verify task moves out of Draft column
+    - Verify it appears in Ready or Review column (depending on review settings)
+
+    Scenario 5: Claim a task (todo -> doing)
+    - Find a todo task in the Ready column
+    - Click the task card
+    - Click "Claim" button, enter agent ID
+    - Verify task moves to In Progress column
+
+    Scenario 6: Complete a task (doing -> done or pending_completion_review)
+    - Find a doing task in the In Progress column
+    - Click the task card
+    - Click "Complete" button
+    - Verify task moves to Done or Review column
+
+    Scenario 7: Review gate (approve -> done)
+    - If task went to pending_completion_review, find it in Review column
+    - Click the task card
+    - Click "Approve" button
+    - Verify task moves to Done column
+
+    Scenario 8: Full lifecycle chain
+    - Seed: create workplan, phase, and task via API
+    - Submit task (draft -> todo, review disabled)
+    - Claim task (todo -> doing)
+    - Complete task (doing -> done, review disabled)
+    - Verify task ends up in Done column
+
+    Step 4: Error states test
+    web/tests/e2e/error-states.spec.ts:
+    - Navigate to /workplans/nonexistent-id — verify error handling
+    - Navigate to / with API down — verify error state on workplan list
+
+    Step 5: SSE live updates test
+    web/tests/e2e/sse-updates.spec.ts:
+    - Navigate to /workplans/:id (board view)
+    - Wait for board to load and SSE to connect (Live indicator visible)
+    - Create a new task via API (not via UI)
+    - Verify the task appears on the board WITHOUT page refresh (within 5s timeout)
+    - Change a task's status via API
+    - Verify the task moves to the correct column WITHOUT page refresh
+
+    This is the critical SSE test — it proves that the live updates work
+    end-to-end through the real SSE stream.
+
+  constraints:
+    - Tests must run against a real dev stack (API + web server), NOT mocks
+    - Test data should be seeded via API calls in beforeAll/beforeEach
+    - Use Playwright's request fixture for API calls (seeding, assertions)
+    - Tests must be independent — each test seeds its own data
+    - SSE tests must use timeouts, not sleep — Playwright's expect with timeout
+    - Auth token should be configurable via environment variable (VTF_TOKEN)
+    - Do not use Playwright to test backend-only behavior — use API calls directly
+  references:
+    - web/playwright.config.ts
+    - web/tests/ — existing Playwright tests
+    - docs/design/api-surface-DESIGN.md — all endpoints
+    - docs/design/vtaskforge-DESIGN.md — state machine, Kanban layout
+
+acceptance_criteria:
+  - "Playwright lifecycle test covers: browse list, view board, open modal, submit, claim, complete, approve"
+  - "Task moves between columns as lifecycle actions are performed"
+  - "SSE test creates a task via API and verifies it appears on the board without refresh"
+  - "SSE test changes a task status via API and verifies the board updates"
+  - "Error state tests verify graceful handling of missing workplan and API errors"
+  - "All Playwright tests pass against running dev stack"
+  - "cd web && npx playwright test passes"
+
+test_command:
+  e2e: "cd web && npx playwright test"

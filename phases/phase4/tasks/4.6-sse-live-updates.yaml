@@ -1,0 +1,212 @@
+id: "4.6"
+name: "SSE live updates"
+depends_on: ["4.4"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Connect the Kanban board to the SSE event stream so it updates in real-time
+  as tasks change status, get claimed, or complete. When an event arrives,
+  the board updates without a page refresh.
+
+  Uses the browser's native EventSource API to connect to
+  GET /v1/events/stream?workplan=:id (built in Phase 3, task 3.5).
+
+files:
+  create:
+    - web/src/hooks/useSSE.ts
+    - web/src/hooks/useSSE.test.ts
+    - web/src/components/LiveIndicator.tsx
+    - web/src/components/LiveIndicator.test.tsx
+  modify:
+    - web/src/pages/KanbanBoard.tsx
+  affected:
+    - web/src/api/tasks.ts
+
+contracts:
+  establishes:
+    - name: "sse-live-updates"
+      description: "Kanban board subscribes to SSE stream and updates in real-time without page refresh"
+    - name: "live-indicator"
+      description: "Visual indicator shows Live (green) when connected, Reconnecting (yellow) when disconnected"
+  depends_on:
+    - name: "kanban-board"
+    - name: "sse-stream"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/pages/KanbanBoard.tsx — Kanban board from task 4.4
+    - web/src/api/tasks.ts — task query hooks
+    - src/events/stream.py — SSE endpoint implementation
+    - docs/design/api-surface-DESIGN.md — SSE event format and types
+
+    Step 1: useSSE hook
+    Create web/src/hooks/useSSE.ts:
+    ```typescript
+    import { useEffect, useRef, useState, useCallback } from 'react';
+
+    type SSEStatus = 'connected' | 'reconnecting' | 'disconnected';
+
+    interface UseSSEOptions {
+      url: string;
+      onEvent: (event: MessageEvent) => void;
+      enabled?: boolean;
+    }
+
+    export function useSSE({ url, onEvent, enabled = true }: UseSSEOptions) {
+      const [status, setStatus] = useState<SSEStatus>('disconnected');
+      const eventSourceRef = useRef<EventSource | null>(null);
+      const lastEventIdRef = useRef<string | null>(null);
+
+      useEffect(() => {
+        if (!enabled) return;
+
+        const connect = () => {
+          let sseUrl = url;
+          // EventSource can't set custom headers, so auth uses session cookie
+          // Add lastEventId for reconnection replay
+          if (lastEventIdRef.current) {
+            const separator = url.includes('?') ? '&' : '?';
+            sseUrl = `${url}${separator}lastEventId=${lastEventIdRef.current}`;
+          }
+
+          const es = new EventSource(sseUrl, { withCredentials: true });
+          eventSourceRef.current = es;
+
+          es.onopen = () => setStatus('connected');
+
+          es.onerror = () => {
+            setStatus('reconnecting');
+            // EventSource auto-reconnects — browser handles backoff
+          };
+
+          // Listen to specific event types
+          const eventTypes = [
+            'task.status_changed',
+            'task.claimed',
+            'task.unclaimed',
+            'task.completed',
+            'task.created',
+            'task.updated',
+            'task.failed',
+            'task.blocked',
+            'task.unblocked',
+          ];
+
+          eventTypes.forEach(type => {
+            es.addEventListener(type, (event: MessageEvent) => {
+              lastEventIdRef.current = event.lastEventId;
+              onEvent(event);
+            });
+          });
+        };
+
+        connect();
+
+        return () => {
+          eventSourceRef.current?.close();
+          setStatus('disconnected');
+        };
+      }, [url, enabled]);
+      // Note: onEvent intentionally excluded from deps — use useCallback in consumer
+
+      return { status };
+    }
+    ```
+
+    IMPORTANT: EventSource cannot set custom headers (Authorization).
+    The SSE endpoint must accept session auth (cookie-based), which was
+    added in task 4.1. EventSource sends cookies automatically when
+    withCredentials: true.
+
+    Alternative for token auth: use fetch + ReadableStream for SSE, but
+    EventSource is simpler and handles reconnection automatically.
+    For v1, rely on session auth.
+
+    Note on Last-Event-ID: EventSource sends this header automatically on
+    reconnection. The server uses it to replay missed events. The hook
+    tracks lastEventId for manual reconnection scenarios.
+
+    Step 2: LiveIndicator component
+    web/src/components/LiveIndicator.tsx:
+    - Receives: status ('connected' | 'reconnecting' | 'disconnected')
+    - Renders: small badge in the board header
+      - connected: green dot + "Live"
+      - reconnecting: yellow dot + "Reconnecting..."
+      - disconnected: grey dot + "Offline"
+
+    Step 3: Wire SSE into KanbanBoard
+    Update web/src/pages/KanbanBoard.tsx:
+    ```typescript
+    import { useSSE } from '../hooks/useSSE';
+    import { LiveIndicator } from '../components/LiveIndicator';
+    import { useQueryClient } from '@tanstack/react-query';
+
+    // Inside KanbanBoard component:
+    const queryClient = useQueryClient();
+
+    const handleSSEEvent = useCallback((event: MessageEvent) => {
+      const data = JSON.parse(event.data);
+      // Invalidate the task list query so react-query refetches
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'workplan', workplanId] });
+      // Also invalidate specific task if modal is open
+      if (data.task_id) {
+        queryClient.invalidateQueries({ queryKey: ['task', data.task_id] });
+      }
+    }, [queryClient, workplanId]);
+
+    const { status: sseStatus } = useSSE({
+      url: `/v1/events/stream/?workplan=${workplanId}`,
+      onEvent: handleSSEEvent,
+      enabled: !!workplanId,
+    });
+    ```
+
+    V1 approach: invalidate queries and let react-query refetch. This is
+    simple and correct. An optimization (updating cache directly from event
+    data) can be added later if the refetch causes visible lag.
+
+    Step 4: Render LiveIndicator in board header
+    Add LiveIndicator next to the workplan title in the board header.
+
+    Step 5: Unit tests
+    web/src/hooks/useSSE.test.ts:
+    - Mock EventSource (jsdom doesn't have it natively — use a mock class)
+    - Test: status changes to 'connected' on open
+    - Test: status changes to 'reconnecting' on error
+    - Test: onEvent called when event is received
+    - Test: EventSource is closed on unmount
+    - Test: EventSource is created with withCredentials: true
+
+    web/src/components/LiveIndicator.test.tsx:
+    - Test: shows "Live" text when status is connected
+    - Test: shows "Reconnecting" text when status is reconnecting
+    - Test: shows "Offline" text when status is disconnected
+
+  constraints:
+    - Use browser native EventSource, NOT a polyfill or library
+    - SSE connection uses session auth (cookies) — do not try to pass tokens via URL params
+    - V1 update strategy is query invalidation (refetch), NOT manual cache manipulation
+    - EventSource event listeners must listen for specific event types, not the generic 'message' event
+    - The hook must clean up (close EventSource) on unmount
+    - Do not poll — the SSE stream provides push updates
+    - Mock EventSource in tests (create a minimal mock class)
+  references:
+    - web/src/pages/KanbanBoard.tsx
+    - src/events/stream.py
+    - docs/design/api-surface-DESIGN.md — SSE event types and format
+
+acceptance_criteria:
+  - "Kanban board connects to SSE endpoint on mount"
+  - "Live indicator shows 'Live' (green) when SSE is connected"
+  - "Live indicator shows 'Reconnecting' when SSE connection drops"
+  - "When a task status changes via API, the board updates without page refresh"
+  - "EventSource is closed when navigating away from the board"
+  - "EventSource uses withCredentials: true for session auth"
+  - "cd web && npx vitest run src/hooks/useSSE.test.ts passes"
+  - "cd web && npx vitest run src/components/LiveIndicator.test.tsx passes"
+
+test_command:
+  unit: "cd web && npx vitest run src/hooks/useSSE.test.ts src/components/LiveIndicator.test.tsx"

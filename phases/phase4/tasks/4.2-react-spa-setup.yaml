@@ -1,0 +1,243 @@
+id: "4.2"
+name: "React SPA setup"
+depends_on: ["4.1"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Bootstrap the web UI as a React SPA in a web/ directory at the repo root
+  (separate from Django src/, like cli/ is separate). Set up the build tooling,
+  testing infrastructure, API client, and app shell with routing.
+
+  This task establishes the frontend pattern — all subsequent frontend tasks
+  build on the conventions set here.
+
+files:
+  create:
+    - web/package.json
+    - web/tsconfig.json
+    - web/vite.config.ts
+    - web/vitest.config.ts
+    - web/playwright.config.ts
+    - web/index.html
+    - web/src/main.tsx
+    - web/src/App.tsx
+    - web/src/api/client.ts
+    - web/src/pages/WorkplanList.tsx
+    - web/src/pages/BoardView.tsx
+    - web/src/test/setup.ts
+  modify: []
+  affected: []
+
+contracts:
+  establishes:
+    - name: "web-spa-structure"
+      description: "web/ directory with Vite + React + TypeScript, Vitest for unit tests, Playwright for e2e"
+    - name: "api-client"
+      description: "web/src/api/client.ts wraps fetch, handles auth (token from localStorage or session cookie), base URL config"
+    - name: "app-routing"
+      description: "/ -> workplan list, /workplans/:id -> board view"
+
+implementation:
+  approach: |
+    Step 1: Initialize the project
+    Create web/ directory at the repo root. Initialize with:
+    - Vite + React + TypeScript template
+    - Dependencies: react, react-dom, react-router-dom, @tanstack/react-query
+    - Dev dependencies: typescript, @types/react, @types/react-dom, vitest,
+      @testing-library/react, @testing-library/jest-dom, jsdom,
+      @playwright/test, msw (Mock Service Worker for API mocking in tests)
+
+    web/package.json should include scripts:
+    ```json
+    {
+      "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "preview": "vite preview",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:e2e": "playwright test"
+      }
+    }
+    ```
+
+    Step 2: Vite config with API proxy
+    web/vite.config.ts:
+    ```typescript
+    import { defineConfig } from 'vite';
+    import react from '@vitejs/plugin-react';
+
+    export default defineConfig({
+      plugins: [react()],
+      server: {
+        port: 3000,
+        proxy: {
+          '/v1': {
+            target: 'http://localhost:8000',
+            changeOrigin: true,
+          },
+        },
+      },
+    });
+    ```
+
+    Step 3: Vitest config
+    web/vitest.config.ts:
+    ```typescript
+    import { defineConfig } from 'vitest/config';
+    import react from '@vitejs/plugin-react';
+
+    export default defineConfig({
+      plugins: [react()],
+      test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: './src/test/setup.ts',
+      },
+    });
+    ```
+
+    Step 4: Playwright config
+    web/playwright.config.ts:
+    ```typescript
+    import { defineConfig } from '@playwright/test';
+
+    export default defineConfig({
+      testDir: './tests',
+      baseURL: 'http://localhost:3000',
+      use: {
+        headless: true,
+      },
+      webServer: {
+        command: 'npm run dev',
+        port: 3000,
+        reuseExistingServer: true,
+      },
+    });
+    ```
+
+    Step 5: API client
+    web/src/api/client.ts — thin wrapper around fetch:
+    ```typescript
+    const BASE_URL = '';  // relative — Vite proxy handles /v1
+
+    function getAuthHeaders(): Record<string, string> {
+      const token = localStorage.getItem('vtf_token');
+      if (token) {
+        return { 'Authorization': `Token ${token}` };
+      }
+      return {};  // session auth via cookie — browser sends automatically
+    }
+
+    export async function apiGet<T>(path: string): Promise<T> {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        credentials: 'include',  // send cookies for session auth
+        headers: {
+          ...getAuthHeaders(),
+          'Accept': 'application/json',
+        },
+      });
+      if (!res.ok) throw new ApiError(res.status, await res.json());
+      return res.json();
+    }
+
+    export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) throw new ApiError(res.status, await res.json());
+      return res.json();
+    }
+
+    export class ApiError extends Error {
+      status: number;
+      data: unknown;
+      constructor(status: number, data: unknown) {
+        super(`API error ${status}`);
+        this.status = status;
+        this.data = data;
+      }
+    }
+    ```
+
+    Also add CSRF token handling for session auth. Django sets a csrftoken cookie;
+    the client reads it and sends it in the X-CSRFToken header for POST/PATCH/DELETE.
+
+    Step 6: App shell with routing
+    web/src/App.tsx:
+    ```typescript
+    import { BrowserRouter, Routes, Route } from 'react-router-dom';
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+    import { WorkplanList } from './pages/WorkplanList';
+    import { BoardView } from './pages/BoardView';
+
+    const queryClient = new QueryClient();
+
+    export function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<WorkplanList />} />
+              <Route path="/workplans/:id" element={<BoardView />} />
+            </Routes>
+          </BrowserRouter>
+        </QueryClientProvider>
+      );
+    }
+    ```
+
+    WorkplanList and BoardView should be placeholder components that render
+    a heading and indicate they are stubs. Subsequent tasks fill them in.
+
+    Step 7: Test setup
+    web/src/test/setup.ts:
+    ```typescript
+    import '@testing-library/jest-dom';
+    ```
+
+    Step 8: Write basic tests
+    - Unit test: App renders without crashing
+    - Unit test: routing to / renders WorkplanList
+    - Unit test: routing to /workplans/abc renders BoardView
+    - Unit test: API client builds correct headers with token
+    - Unit test: API client sends credentials: include
+
+  constraints:
+    - web/ directory MUST be at the repo root, not inside src/
+    - Use Vite, NOT Create React App or Next.js
+    - Use @tanstack/react-query for server state, NOT Redux
+    - Use react-router-dom v6+ for routing
+    - API client must handle both token auth (localStorage) AND session auth (cookies)
+    - CSRF token must be read from cookie and sent in X-CSRFToken header for POST/PATCH/DELETE
+    - Vitest for unit/integration tests, Playwright for e2e — NOT Jest
+    - TypeScript strict mode enabled
+    - Do not install UI component libraries (Material UI, Ant Design, etc.) — use plain HTML/CSS
+  references:
+    - cli/ — pattern for a separate tool directory at repo root
+    - src/vtaskforge/settings/base.py — CORS config
+    - docs/design/api-surface-DESIGN.md — API endpoints the client will call
+
+acceptance_criteria:
+  - "web/ directory exists at repo root with package.json"
+  - "npm install in web/ succeeds"
+  - "npm run dev starts Vite dev server on port 3000"
+  - "Vite dev server proxies /v1/* to http://localhost:8000"
+  - "web/src/api/client.ts exports apiGet, apiPost, ApiError"
+  - "API client sends Token header when token is in localStorage"
+  - "API client sends credentials: include for session auth"
+  - "/ route renders WorkplanList component"
+  - "/workplans/:id route renders BoardView component"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

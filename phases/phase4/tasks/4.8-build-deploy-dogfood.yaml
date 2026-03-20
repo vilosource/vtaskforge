@@ -1,0 +1,165 @@
+id: "4.8"
+name: "Build and deploy to dogfood"
+depends_on: ["4.7"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Package the web UI for production and integrate it into the existing Docker
+  deployment. The SPA is built as static files and served alongside the Django
+  API — either via Django's WhiteNoise static file serving or as part of a
+  multi-stage Docker build.
+
+  Verify the web UI works against the dogfood instance
+  (docker-compose.dogfood.yml).
+
+files:
+  create: []
+  modify:
+    - Dockerfile.prod
+    - docker-compose.dogfood.yml
+    - src/vtaskforge/settings/base.py
+  affected:
+    - docker-compose.yml
+    - web/vite.config.ts
+
+contracts:
+  establishes:
+    - name: "web-production-build"
+      description: "web/ builds to static files, served by Django/WhiteNoise in production Docker image"
+  depends_on:
+    - name: "web-spa-structure"
+
+implementation:
+  approach: |
+    Read these files first:
+    - Dockerfile.prod — existing production Docker image
+    - docker-compose.dogfood.yml — dogfood deployment config
+    - docker-compose.yml — dev deployment config
+    - src/vtaskforge/settings/base.py — static files config
+    - web/vite.config.ts — Vite build config
+    - web/package.json — build script
+
+    Two approaches (choose based on existing Dockerfile.prod structure):
+
+    Approach A: Multi-stage Docker build (preferred)
+    ```dockerfile
+    # Stage 1: Build web UI
+    FROM node:20-alpine AS web-builder
+    WORKDIR /app/web
+    COPY web/package.json web/package-lock.json ./
+    RUN npm ci
+    COPY web/ .
+    RUN npm run build
+    # Output: /app/web/dist/
+
+    # Stage 2: Python app (existing)
+    FROM python:3.12-slim AS app
+    # ... existing Python setup ...
+
+    # Copy built web assets into Django's static directory
+    COPY --from=web-builder /app/web/dist/ /app/static/web/
+    ```
+
+    Approach B: WhiteNoise serving
+    If the existing Dockerfile already uses WhiteNoise for Django static files:
+    1. Configure Vite to build to src/static/web/ (or a collected static dir)
+    2. Add whitenoise to INSTALLED_APPS if not already present
+    3. Configure STATIC_ROOT and collectstatic to include web build output
+    4. Add a Django catch-all URL that serves index.html for SPA routing
+
+    Step 1: Vite production build config
+    Update web/vite.config.ts to set the build output directory and base path:
+    ```typescript
+    export default defineConfig({
+      // ... existing dev config
+      build: {
+        outDir: 'dist',
+        // If serving under a subpath, set base: '/app/'
+        // For root serving, leave default: '/'
+      },
+    });
+    ```
+
+    Step 2: Django catch-all for SPA routing
+    The SPA uses client-side routing (react-router-dom). When the user navigates
+    to /workplans/abc123 and refreshes, Django needs to serve index.html
+    (not return 404). Add a catch-all view:
+
+    ```python
+    # In src/vtaskforge/urls.py (at the END, after all API URLs)
+    from django.views.generic import TemplateView
+    # or serve static file directly
+
+    urlpatterns = [
+        path('v1/', include('...')),
+        # ... all API URLs ...
+        # SPA catch-all — must be last
+        re_path(r'^(?!v1/).*$', serve_spa_index),
+    ]
+    ```
+
+    The catch-all must NOT match /v1/* (API routes) or /admin/*.
+
+    Step 3: Update Dockerfile.prod
+    Add the Node.js build stage before the Python stage.
+    Copy built assets into the final image.
+
+    Step 4: Update docker-compose.dogfood.yml
+    If the dogfood compose file references the prod Dockerfile, no changes
+    may be needed. Verify:
+    - The web UI is accessible at the dogfood URL (port 8001 or configured port)
+    - API requests from the SPA reach the Django API
+    - SSE connections work through the proxy (if using nginx/traefik)
+
+    Step 5: Verify end-to-end
+    - Build the Docker image
+    - Start the dogfood stack
+    - Navigate to the web UI URL in a browser
+    - Verify: workplan list loads, click into board, task detail modal works
+    - Verify: SSE connection is established (Live indicator)
+
+    Step 6: Dev workflow
+    For development, the SPA runs on Vite dev server (port 3000) with proxy
+    to Django (port 8000). No changes needed to the dev workflow.
+
+    Optionally update docker-compose.yml to add a web dev service:
+    ```yaml
+    web:
+      build:
+        context: ./web
+        dockerfile: Dockerfile.dev  # or just use node image
+      ports:
+        - "3000:3000"
+      volumes:
+        - ./web:/app
+      command: npm run dev
+    ```
+
+    This is optional — developers can run `cd web && npm run dev` locally.
+
+  constraints:
+    - The SPA catch-all MUST NOT intercept /v1/* API routes or /admin/*
+    - The production build must work with the existing Dockerfile.prod structure
+    - Do not change the dev workflow (Vite dev server + Django dev server)
+    - Static files must be cache-busted (Vite does this by default with hashed filenames)
+    - Do not add nginx or another reverse proxy — use Django/WhiteNoise for static serving
+  references:
+    - Dockerfile.prod
+    - docker-compose.dogfood.yml
+    - docker-compose.yml
+    - src/vtaskforge/settings/base.py
+    - web/vite.config.ts
+
+acceptance_criteria:
+  - "Dockerfile.prod includes a Node.js build stage for the web UI"
+  - "Built SPA static files are included in the production Docker image"
+  - "Django serves index.html for SPA routes (catch-all)"
+  - "API routes (/v1/*) are NOT intercepted by the SPA catch-all"
+  - "docker compose -f docker-compose.dogfood.yml up builds and starts successfully"
+  - "Web UI is accessible in a browser against the dogfood instance"
+  - "Workplan list page loads with real data"
+  - "Kanban board page loads with real task data"
+
+test_command: "docker compose -f docker-compose.dogfood.yml build"
