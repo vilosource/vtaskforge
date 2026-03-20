@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 
 from core.views import HealthCheckView
 
@@ -22,6 +22,7 @@ def catch_all_404(request, path=''):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('v1/health', HealthCheckView.as_view(), name='health-check'),
+    path('v1/', include('workplans.urls')),
 ]
 
 handler404 = custom_404
