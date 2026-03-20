@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { WorkplanList } from './pages/WorkplanList';
 import { WorkplanDetail } from './pages/WorkplanDetail';
 import { BoardView } from './pages/BoardView';
+import { TaskPage } from './pages/TaskPage';
 import Login from './pages/Login';
 
 const queryClient = new QueryClient();
@@ -80,6 +81,14 @@ export function App() {
               element={
                 <RequireAuth>
                   <WorkplanDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/tasks/:id"
+              element={
+                <RequireAuth>
+                  <TaskPage />
                 </RequireAuth>
               }
             />

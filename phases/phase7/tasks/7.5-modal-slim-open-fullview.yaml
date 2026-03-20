@@ -1,0 +1,99 @@
+id: "7.5"
+name: "Modal — slim down and add 'Open full view' link"
+depends_on: ["7.4"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Slim down the existing TaskDetail modal to be a quick-glance tool. The full
+  page view now handles deep review, so the modal should show only what you
+  need for a quick status check from the Kanban board.
+
+  Add an "Open full view" link that navigates to /tasks/:id.
+
+files:
+  create: []
+  modify:
+    - web/src/components/TaskDetail.tsx
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/components/TaskDetail.tsx — current modal (verbose)
+    - web/src/pages/TaskPage.tsx — full page view (task 7.4)
+
+    Step 1: Slim the modal content
+    The modal should show:
+    - Title + status badge
+    - "Open full view" link (prominent)
+    - Description (first 3 lines or 200 chars, truncated)
+    - Acceptance criteria (if present)
+    - Assignment (claimed_by, assigned_to)
+    - Action buttons
+
+    Remove from modal (now in full page view):
+    - Spec section (collapsible YAML)
+    - Metadata badges (agent_model, isolation, judge, test_command)
+    - Full links section (replace with dependency count if any)
+    - Full reviews section
+    - Event timeline
+    - Notes section
+
+    Step 2: Add "Open full view" link
+    In the header, next to the close button:
+    ```typescript
+    import { Link } from 'react-router-dom';
+
+    <Link
+      to={`/tasks/${task.id}`}
+      style={{
+        fontSize: 13,
+        color: '#1976d2',
+        textDecoration: 'none',
+        marginRight: 12,
+      }}
+      onClick={onClose}
+    >
+      Open full view \u2192
+    </Link>
+    ```
+
+    Step 3: Description truncation
+    ```typescript
+    const truncatedDescription = task.description.length > 200
+      ? task.description.slice(0, 200) + '...'
+      : task.description;
+    ```
+
+    Step 4: Dependency summary
+    Instead of the full links list, show a one-liner:
+    "Depends on 3 tasks (2 done, 1 doing)"
+    Clickable — navigates to full page view.
+
+    Step 5: Tests
+    - Test: modal shows "Open full view" link
+    - Test: description is truncated
+    - Test: spec section is not rendered
+    - Test: event timeline is not rendered
+
+  constraints:
+    - Modal must remain functional for Kanban quick-glance
+    - Open full view link must close the modal when clicked
+    - Use React Router Link, not anchor tag
+    - Keep action buttons in the modal (claim, complete, etc.)
+  references:
+    - web/src/components/TaskDetail.tsx
+    - web/src/pages/TaskPage.tsx
+
+acceptance_criteria:
+  - "Modal shows title, status, truncated description, assignment, actions"
+  - "Modal shows 'Open full view' link that navigates to /tasks/:id"
+  - "Modal no longer shows spec, event timeline, or notes"
+  - "Modal shows dependency summary count instead of full links list"
+  - "Clicking 'Open full view' closes the modal"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

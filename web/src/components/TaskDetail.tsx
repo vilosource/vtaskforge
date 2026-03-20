@@ -1,8 +1,7 @@
 import { useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useTaskDetail } from '../api/tasks';
-import { EventTimeline } from './EventTimeline';
 import { ActionButtons } from './ActionButtons';
-import { AddNoteForm } from './AddNoteForm';
 
 interface TaskDetailProps {
   taskId: string | null;
@@ -27,6 +26,13 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
 
   if (!taskId) return null;
 
+  const dependsOnLinks = (task?.links ?? []).filter(l => l.link_type === 'depends_on');
+  const truncatedDescription = task?.description
+    ? task.description.length > 200
+      ? task.description.slice(0, 200) + '...'
+      : task.description
+    : '';
+
   return (
     <div
       className="task-detail-overlay"
@@ -43,13 +49,29 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
           <div className="task-detail-title-row">
             {task && <h2 className="task-detail-title">{task.title}</h2>}
             {isLoading && <h2 className="task-detail-title">Loading...</h2>}
-            <button
-              className="task-detail-close"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {task && (
+                <Link
+                  to={`/tasks/${task.id}`}
+                  style={{
+                    fontSize: 13,
+                    color: '#1976d2',
+                    textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onClick={onClose}
+                >
+                  Open full view →
+                </Link>
+              )}
+              <button
+                className="task-detail-close"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
           </div>
           {task && (
             <span className="badge task-detail-status">{task.status}</span>
@@ -68,11 +90,11 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
 
         {task && (
           <div className="task-detail-body">
-            {/* Description */}
-            {task.description && (
+            {/* Description (truncated) */}
+            {truncatedDescription && (
               <section className="task-detail-section">
                 <h3>Description</h3>
-                <p className="task-detail-description">{task.description}</p>
+                <p className="task-detail-description">{truncatedDescription}</p>
               </section>
             )}
 
@@ -88,83 +110,31 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
               </section>
             )}
 
+            {/* Dependencies summary */}
+            {dependsOnLinks.length > 0 && (
+              <section className="task-detail-section">
+                <h3>Dependencies</h3>
+                <ul className="task-detail-links">
+                  {dependsOnLinks.map((link) => (
+                    <li key={link.id} className="task-detail-link-item">
+                      <span className="badge">depends_on</span>
+                      {' '}
+                      <span>{link.target_title ?? link.target_id}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {/* Assignment */}
             <section className="task-detail-section">
               <h3>Assignment</h3>
               <dl className="task-detail-assignment">
                 <dt>Claimed by</dt>
-                <dd>{task.claimed_by ?? '—'}</dd>
+                <dd>{task.claimed_by ?? '\u2014'}</dd>
                 <dt>Assigned to</dt>
-                <dd>{task.assigned_to ?? '—'}</dd>
-                {task.requires.length > 0 && (
-                  <>
-                    <dt>Requires</dt>
-                    <dd>{task.requires.join(', ')}</dd>
-                  </>
-                )}
+                <dd>{task.assigned_to ?? '\u2014'}</dd>
               </dl>
-            </section>
-
-            {/* Links */}
-            {task.links && task.links.length > 0 && (
-              <section className="task-detail-section">
-                <h3>Links</h3>
-                <ul className="task-detail-links">
-                  {task.links.map((link) => (
-                    <li key={link.id} className="task-detail-link-item">
-                      <span className="badge">{link.link_type}</span>
-                      {' '}
-                      <span>{link.target_id}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {/* Reviews */}
-            {task.reviews && task.reviews.length > 0 && (
-              <section className="task-detail-section">
-                <h3>Reviews</h3>
-                <ul className="task-detail-reviews">
-                  {task.reviews.map((review) => (
-                    <li key={review.id} className="task-detail-review-item">
-                      <span className="badge">{review.decision}</span>
-                      {' '}
-                      <span>by {review.reviewer_id}</span>
-                      {review.reason && <span> — {review.reason}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {/* Event timeline */}
-            <section className="task-detail-section">
-              <h3>Event Timeline</h3>
-              <EventTimeline events={task.events ?? []} />
-            </section>
-
-            {/* Notes */}
-            <section className="task-detail-section">
-              <h3>Notes</h3>
-              {task.notes && task.notes.length > 0 ? (
-                <ul className="task-detail-notes">
-                  {task.notes.map((note, i) => {
-                    const noteObj = note as unknown as { id?: string; text?: string; actor_id?: string; created_at?: string };
-                    return (
-                      <li key={noteObj.id ?? i} className="task-detail-note-item">
-                        {noteObj.actor_id && (
-                          <span className="note-actor">{noteObj.actor_id}: </span>
-                        )}
-                        <span>{noteObj.text ?? String(note)}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="task-detail-no-notes">No notes yet.</p>
-              )}
-              <AddNoteForm taskId={task.id} />
             </section>
 
             {/* Actions */}

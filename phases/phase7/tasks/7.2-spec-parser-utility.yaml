@@ -1,0 +1,106 @@
+id: "7.2"
+name: "Spec parser utility"
+depends_on: []
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Create a TypeScript utility that parses the raw YAML spec string (stored in
+  task.spec) into a structured object for rendering. The spec contains nested
+  YAML with fields like implementation.approach, implementation.constraints,
+  implementation.references, files.create/modify/affected, and contracts.
+
+  This utility bridges the raw storage format and the UI components.
+
+files:
+  create:
+    - web/src/utils/parseSpec.ts
+    - web/src/utils/parseSpec.test.ts
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - phases/phase6/tasks/6.5-web-ui-task-detail-spec.yaml — example of a full spec
+    - phases/phase5/tasks/5.5-dag-pipeline-view.yaml — example with contracts
+
+    Step 1: Define the ParsedSpec interface
+    ```typescript
+    export interface ParsedSpec {
+      approach: string;           // implementation.approach — markdown text
+      constraints: string[];      // implementation.constraints — list of rules
+      references: string[];       // implementation.references — list of file paths
+      files: {
+        create: string[];
+        modify: string[];
+        affected: string[];
+      };
+      contracts: Array<{
+        name: string;
+        description: string;
+      }>;
+      testCommand: Record<string, string>;  // test_command from top-level
+      raw: string;                // original YAML for fallback display
+    }
+    ```
+
+    Step 2: Implement parseSpec function
+    ```typescript
+    import yaml from 'js-yaml';  // or use a lightweight YAML parser
+
+    export function parseSpec(rawYaml: string): ParsedSpec | null {
+      if (!rawYaml) return null;
+      try {
+        const parsed = yaml.load(rawYaml) as Record<string, unknown>;
+        const impl = (parsed?.implementation ?? {}) as Record<string, unknown>;
+        const files = (parsed?.files ?? {}) as Record<string, unknown>;
+        const contracts = (parsed?.contracts?.establishes ?? []) as Array<Record<string, string>>;
+
+        return {
+          approach: String(impl?.approach ?? ''),
+          constraints: Array.isArray(impl?.constraints) ? impl.constraints.map(String) : [],
+          references: Array.isArray(impl?.references) ? impl.references.map(String) : [],
+          files: {
+            create: Array.isArray(files?.create) ? files.create.map(String) : [],
+            modify: Array.isArray(files?.modify) ? files.modify.map(String) : [],
+            affected: Array.isArray(files?.affected) ? files.affected.map(String) : [],
+          },
+          contracts: contracts.map(c => ({ name: c.name ?? '', description: c.description ?? '' })),
+          testCommand: (parsed?.test_command ?? {}) as Record<string, string>,
+          raw: rawYaml,
+        };
+      } catch {
+        return null;
+      }
+    }
+    ```
+
+    Note: Check if js-yaml is already a dependency (it may be pulled in by
+    another package). If not, add it: `npm install js-yaml && npm install -D @types/js-yaml`
+
+    Step 3: Write tests
+    - Test: parses a valid spec YAML into structured object
+    - Test: returns null for empty string
+    - Test: returns null for invalid YAML
+    - Test: handles spec with missing optional fields (no contracts, no constraints)
+    - Test: extracts files.create/modify/affected correctly
+
+  constraints:
+    - Must handle all spec formats seen in phases 1-6
+    - Must not throw on malformed YAML — return null
+    - Keep the utility pure (no React, no side effects)
+  references:
+    - phases/phase6/tasks/6.1-task-model-spec-fields.yaml
+    - phases/phase5/tasks/5.5-dag-pipeline-view.yaml
+    - phases/phase4/tasks/4.4-kanban-board-view.yaml
+
+acceptance_criteria:
+  - "parseSpec extracts approach, constraints, references, files, contracts"
+  - "parseSpec returns null for empty or invalid input"
+  - "All fields are optional — missing sections return empty arrays/strings"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

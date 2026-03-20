@@ -1,0 +1,31 @@
+tasks:
+  - id: "7.1"
+    name: "Add react-markdown and js-yaml dependencies"
+    depends_on: []
+
+  - id: "7.2"
+    name: "Spec parser utility"
+    depends_on: []
+
+  - id: "7.3"
+    name: "Dependency chain component"
+    depends_on: []
+
+  - id: "7.4"
+    name: "Full page task view — layout and routing"
+    depends_on: ["7.1", "7.2", "7.3"]
+
+  - id: "7.5"
+    name: "Modal — slim down and add 'Open full view' link"
+    depends_on: ["7.4"]
+
+  - id: "7.6"
+    name: "Deployment and dogfood verification"
+    depends_on: ["7.5"]
+
+# Dependency graph:
+#   7.1 (deps)          ──┐
+#   7.2 (spec parser)   ──┼→ 7.4 (full page) → 7.5 (modal update) → 7.6 (deploy)
+#   7.3 (dep chain)     ──┘
+#
+# 7.1, 7.2, 7.3 are independent, can run in parallel

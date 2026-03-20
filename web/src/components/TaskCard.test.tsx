@@ -8,8 +8,8 @@ const baseTask: Task = {
   id: 'task-1',
   title: 'Implement login form',
   status: 'todo',
-  phase_id: 'phase-1',
-  workplan_id: 'wp-1',
+  phase: 'phase-1',
+  workplan: 'wp-1',
   claimed_by: null,
   claimed_at: null,
   assigned_to: null,
@@ -17,6 +17,11 @@ const baseTask: Task = {
   description: 'Build the login form',
   acceptance_criteria: [],
   notes: [],
+  spec: '',
+  agent_model: '',
+  test_command: {},
+  judge: false,
+  isolation: 'sequential',
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };
@@ -80,7 +85,7 @@ describe('TaskCard', () => {
     expect(screen.getByText('pending_start_review')).toBeInTheDocument();
   });
 
-  it('renders phase_id', () => {
+  it('renders phase', () => {
     render(<TaskCard task={baseTask} />);
     expect(screen.getByText('phase-1')).toBeInTheDocument();
   });

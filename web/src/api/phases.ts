@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiGetPaginated } from './client';
+import { apiGet, apiGetPaginated } from './client';
 
 export interface Phase {
   id: string;
@@ -23,6 +23,14 @@ export function usePhases(workplanId: string) {
     queryKey: ['phases', workplanId],
     queryFn: () => apiGetPaginated<Phase>(`/v1/workplans/${workplanId}/phases/`),
     enabled: !!workplanId,
+  });
+}
+
+export function usePhase(phaseId: string | undefined) {
+  return useQuery({
+    queryKey: ['phase', phaseId],
+    queryFn: () => apiGet<Phase>(`/v1/phases/${phaseId}/`),
+    enabled: !!phaseId,
   });
 }
 

@@ -23,15 +23,15 @@ function makeTask(overrides: Partial<{
   id: string;
   title: string;
   status: string;
-  phase_id: string;
+  phase: string;
   claimed_by: string | null;
 }>) {
   return {
     id: overrides.id ?? 'task-1',
     title: overrides.title ?? 'Task One',
     status: overrides.status ?? 'todo',
-    phase_id: overrides.phase_id ?? 'phase-1',
-    workplan_id: 'test-wp',
+    phase: overrides.phase ?? 'phase-1',
+    workplan: 'test-wp',
     claimed_by: overrides.claimed_by ?? null,
     claimed_at: null,
     assigned_to: null,
@@ -39,6 +39,11 @@ function makeTask(overrides: Partial<{
     description: '',
     acceptance_criteria: [],
     notes: [],
+    spec: '',
+    agent_model: '',
+    test_command: {},
+    judge: false,
+    isolation: 'sequential',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   };

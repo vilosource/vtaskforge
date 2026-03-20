@@ -1,0 +1,53 @@
+id: "7.6"
+name: "Deployment and dogfood verification"
+depends_on: ["7.5"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Rebuild the dogfood Docker image with Phase 7 changes and verify the full
+  page task view works end-to-end. This is a verification task — no code
+  changes, only build + deploy + manual verification.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Rebuild and restart dogfood
+    ```bash
+    docker compose -f docker-compose.dogfood.yml build dogfood-api
+    docker compose -f docker-compose.dogfood.yml up -d dogfood-api
+    ```
+
+    Step 2: Verify in browser at http://localhost:8001
+    - Open vtaskforge workplan, click Phase 6 or 7
+    - Click a task card — modal should appear (slimmed down)
+    - Click "Open full view" — navigates to /tasks/:id
+    - Verify two-column layout
+    - Verify spec sections show parsed content (approach with code blocks, files, constraints)
+    - Verify dependency chain shows upstream/downstream with status colors
+    - Verify clicking a dependency node navigates to that task
+    - Verify breadcrumb links work
+    - Verify notes show robot/person icons
+    - Verify event timeline is collapsed by default
+    - Test direct URL navigation (paste /tasks/:id in address bar)
+
+  constraints:
+    - Only affects the dogfood instance (port 8001)
+    - Do not modify any code
+  references: []
+
+acceptance_criteria:
+  - "Dogfood image builds successfully"
+  - "Full page task view renders at /tasks/:id"
+  - "Spec content displays as structured sections with markdown rendering"
+  - "Dependency chain shows clickable nodes with status colors"
+  - "Modal is slimmed down with 'Open full view' link"
+  - "Direct URL navigation works"
+  - "Notes distinguish human vs agent with icons"
+
+test_command: {}

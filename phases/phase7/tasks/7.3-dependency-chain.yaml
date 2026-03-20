@@ -1,0 +1,126 @@
+id: "7.3"
+name: "Dependency chain component"
+depends_on: []
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Create a DependencyChain component that visualizes where a task sits in its
+  dependency chain. Shows upstream dependencies and downstream blockers as a
+  horizontal mini-graph with status indicators.
+
+  Example for task 6.4 (depends on 6.3, which depends on 6.2, which depends on 6.1):
+
+    6.1 (done) → 6.2 (done) → 6.3 (doing) → [6.4 this task] → 6.6 (draft)
+                                                               → 6.7 (draft)
+
+  Each node is clickable and navigates to /tasks/:id.
+
+files:
+  create:
+    - web/src/components/DependencyChain.tsx
+    - web/src/components/DependencyChain.test.tsx
+  modify: []
+  affected:
+    - web/src/api/tasks.ts
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/api/tasks.ts — TaskLink interface, task API hooks
+    - web/src/components/TaskDetail.tsx — how links are currently displayed
+
+    Step 1: Understand the data
+    A task's links (expand=links) contain:
+    - depends_on links: this task depends on target_id (upstream)
+    - To find blockers (downstream): need to query links where this task
+      is the target — check if the API supports ?target=<id> on GET /v1/links
+
+    For v1, we can work with what the task detail already provides:
+    - task.links gives us depends_on (upstream)
+    - To find downstream, fetch GET /v1/links/?target=<task-id>&type=depends_on
+
+    Add a hook: useTaskBlockers(taskId) that fetches downstream links.
+
+    Step 2: Build the chain data
+    ```typescript
+    interface ChainNode {
+      id: string;
+      title: string;
+      status: string;
+      isCurrent: boolean;
+    }
+
+    interface DependencyChainProps {
+      taskId: string;
+      taskTitle: string;
+      taskStatus: string;
+      upstreamLinks: TaskLink[];   // depends_on links from task detail
+      downstreamLinks: TaskLink[]; // links where this task is target
+    }
+    ```
+
+    For each upstream link, we need the task's status. Options:
+    a) Fetch each dependency task individually (N+1)
+    b) Use the phase's task list (already available in context)
+    c) Add status to link metadata server-side
+
+    For v1, option (a) is simplest — fetch minimal task info for each dependency.
+    The chain is typically 2-5 nodes, so N+1 is acceptable.
+
+    Add a hook: useTaskSummary(taskId) that returns id, title, status only.
+
+    Step 3: Render the chain
+    Horizontal layout using flexbox:
+    - Each node is a small pill/chip showing: title (truncated) + status color
+    - Arrows (→) between nodes
+    - Current task highlighted with a border or bold
+    - Clicking a node navigates to /tasks/:id (use React Router Link)
+
+    Status colors (reuse from Kanban):
+    - done: green
+    - doing: blue
+    - todo: light blue
+    - draft: grey
+    - blocked/needs_attention: red
+    - current task: outlined/highlighted
+
+    Handle branching: if the current task has multiple downstream tasks,
+    show them stacked vertically after the arrow.
+
+    Step 4: Handle edge cases
+    - Task with no dependencies and no blockers: show just the current node
+    - Deep chains: show at most 3 upstream + current + 3 downstream, with
+      "..." indicators if truncated
+    - Circular dependencies: should not happen (DAG) but guard against infinite loops
+
+    Step 5: Tests
+    - Test: renders single node when no dependencies
+    - Test: renders upstream chain with correct order
+    - Test: renders downstream blockers
+    - Test: current task is visually highlighted
+    - Test: nodes are clickable links to /tasks/:id
+    - Test: status colors are applied correctly
+
+  constraints:
+    - Horizontal layout, scrollable if too wide
+    - Maximum 3 upstream + current + 3 downstream visible (truncate with ellipsis)
+    - Each node must be a clickable link to /tasks/:id
+    - Do not fetch the entire workplan's tasks — only fetch what's needed
+    - Desktop only — no mobile optimization needed
+  references:
+    - web/src/api/tasks.ts
+    - web/src/components/TaskDetail.tsx
+
+acceptance_criteria:
+  - "DependencyChain shows upstream dependencies with status colors"
+  - "DependencyChain shows downstream blockers with status colors"
+  - "Current task is visually highlighted in the chain"
+  - "Each node is clickable and navigates to /tasks/:id"
+  - "Handles tasks with no dependencies gracefully"
+  - "Handles branching (multiple downstream tasks)"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

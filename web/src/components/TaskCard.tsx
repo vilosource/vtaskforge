@@ -42,8 +42,8 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         {task.claimed_by && (
           <span className="task-card-agent">{task.claimed_by}</span>
         )}
-        {task.phase_id && (
-          <span className="task-card-phase">{task.phase_id}</span>
+        {task.phase && (
+          <span className="task-card-phase">{task.phase}</span>
         )}
       </div>
     </div>

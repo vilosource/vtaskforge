@@ -1,0 +1,229 @@
+id: "7.4"
+name: "Full page task view — layout and routing"
+depends_on: ["7.1", "7.2", "7.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create a full-page task detail view at /tasks/:id with a two-column layout.
+  Left column is the "read this to understand the task" flow with parsed spec
+  content rendered via react-markdown. Right column is operational metadata
+  with the dependency chain, assignment info, and action buttons.
+
+  This is the primary way to deeply review a task. The Kanban modal becomes
+  a quick-glance tool with a link to this page.
+
+files:
+  create:
+    - web/src/pages/TaskPage.tsx
+    - web/src/pages/TaskPage.test.tsx
+    - web/src/components/SpecSection.tsx
+  modify:
+    - web/src/App.tsx
+  affected:
+    - web/src/api/tasks.ts
+    - web/src/api/phases.ts
+    - web/src/utils/parseSpec.ts
+    - web/src/components/DependencyChain.tsx
+
+contracts:
+  establishes:
+    - name: "task-full-page-view"
+      description: "Two-column full page view for deep task review with parsed spec rendering"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/pages/WorkplanDetail.tsx — page layout pattern
+    - web/src/components/TaskDetail.tsx — current modal content to port
+    - web/src/utils/parseSpec.ts — spec parser (task 7.2)
+    - web/src/components/DependencyChain.tsx — dependency visualization (task 7.3)
+    - web/src/App.tsx — current routing
+
+    ## Page Layout
+
+    ```
+    ┌─────────────────────────────────────────────────────────┐
+    │ Breadcrumb: Workplans > [name] > [phase] > [task]       │
+    ├────────────────────────────────┬────────────────────────┤
+    │  LEFT (~65%)                   │  RIGHT (~35%, sticky)  │
+    │                                │                        │
+    │  Title (h1) + Status badge     │  Status (large badge)  │
+    │                                │  Model: sonnet         │
+    │  Description (markdown)        │  Isolation: sequential │
+    │                                │  Judge: No             │
+    │  Acceptance Criteria           │                        │
+    │    ☐ criterion 1               │  ── Assignment ──      │
+    │    ☐ criterion 2               │  Claimed by: —         │
+    │                                │  Assigned to: —        │
+    │  ── Implementation ──          │  Requires: executor    │
+    │  Approach (markdown with       │                        │
+    │  code blocks)                  │  ── Context ──         │
+    │                                │  Phase: Phase 6 (link) │
+    │  ── Files ──                   │  Workplan: vtf (link)  │
+    │  Create: [green] file1.py      │  Created: 2026-03-20   │
+    │  Modify: [blue]  file2.py      │  Updated: 2026-03-20   │
+    │  Affected: [grey] file3.py     │                        │
+    │                                │  ── Actions ──         │
+    │  ── Constraints ──             │  [Submit] [Claim] etc  │
+    │  • constraint 1                │                        │
+    │  • constraint 2                │                        │
+    │                                │                        │
+    │  ── References ──              │                        │
+    │  src/tasks/models.py           │                        │
+    │  src/core/mixins.py            │                        │
+    │                                │                        │
+    │  ── Test Commands ──           │                        │
+    │  unit: pytest tests/tasks/     │                        │
+    │                                │                        │
+    │  ▸ Raw Spec (collapsible)      │                        │
+    ├────────────────────────────────┴────────────────────────┤
+    │  FULL WIDTH                                              │
+    │                                                          │
+    │  ── Dependency Chain ──                                  │
+    │  [6.1 done] → [6.2 done] → [6.3 doing] → [THIS] → ... │
+    │                                                          │
+    │  ── Event Timeline ── (collapsible, collapsed default)   │
+    │                                                          │
+    │  ── Notes ──                                             │
+    │  🤖 agent-7: Completed implementation, 3 files changed   │
+    │  👤 jason: Looks good, one question about the migration   │
+    │  [Add note form]                                         │
+    └──────────────────────────────────────────────────────────┘
+    ```
+
+    ## Step 1: Create SpecSection component
+    web/src/components/SpecSection.tsx
+
+    Takes a ParsedSpec object (from parseSpec utility) and renders:
+
+    - **Implementation Approach**: rendered via ReactMarkdown with remarkGfm
+      - Code blocks get monospace background styling
+    - **Files**: three groups with colored indicators
+      - Create: green dot + monospace path
+      - Modify: blue dot + monospace path
+      - Affected: grey dot + monospace path
+      - Skip empty groups
+    - **Constraints**: bulleted list, each constraint as text
+    - **References**: monospace file paths as a list
+    - **Contracts**: name + description pairs (if any exist)
+    - **Test Commands**: key-value pairs in monospace
+    - **Raw Spec**: collapsible section at bottom, collapsed by default
+
+    Each section has a heading (h4 level) and is only rendered if it has content.
+
+    ## Step 2: Create TaskPage
+    web/src/pages/TaskPage.tsx
+
+    Route param: useParams() to get task id
+
+    Data fetching:
+    - useTaskDetail(id) — main task data with expand=links,reviews,events
+    - useWorkplan(task.workplan) — for breadcrumb name
+    - Need usePhase(task.phase) — add to web/src/api/phases.ts if missing
+    - parseSpec(task.spec) — parse the YAML
+
+    Layout: CSS grid with two columns on desktop.
+    ```css
+    .task-page {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .task-page-full-width {
+      grid-column: 1 / -1;
+    }
+    ```
+
+    Right column: position: sticky, top: 20px, align-self: start.
+
+    ## Step 3: Notes display
+    Distinguish human vs agent notes using actor_id:
+    - If actor_id contains "agent" or matches known agent patterns: show robot icon
+    - Otherwise: show person icon
+    - Show timestamp relative (e.g., "2 hours ago") or formatted
+
+    Simple approach:
+    ```typescript
+    const isAgent = (actorId: string) =>
+      actorId.includes('agent') || actorId.includes('supervisor') || actorId.includes('executor');
+
+    // In render:
+    <span>{isAgent(note.actor_id) ? '\u{1F916}' : '\u{1F464}'}</span>
+    ```
+
+    ## Step 4: Event timeline — collapsible
+    Wrap EventTimeline in a collapsible section, collapsed by default.
+    It gets long and is usually not the first thing you want to see.
+
+    ## Step 5: Breadcrumb
+    ```
+    Workplans > vtaskforge > Phase 6 — Task Spec Storage > Task model — add spec fields
+    ```
+    Each segment is a Link:
+    - Workplans → /workplans
+    - vtaskforge → /workplans/:wpId
+    - Phase 6 → /workplans/:wpId/phases/:phaseId
+    - Task title (current, not linked)
+
+    ## Step 6: Add route to App.tsx
+    ```typescript
+    <Route path="/tasks/:id" element={<TaskPage />} />
+    ```
+    Place before the SPA catch-all route.
+
+    ## Step 7: Tests
+    - Test: renders breadcrumb with workplan and phase names
+    - Test: renders title and status badge
+    - Test: renders description via markdown
+    - Test: renders acceptance criteria as list
+    - Test: SpecSection renders parsed approach, files, constraints
+    - Test: SpecSection hides empty sections
+    - Test: right column shows metadata and assignment
+    - Test: notes show robot icon for agent actors
+    - Test: event timeline is collapsed by default
+    - Test: dependency chain component is present
+    - Test: page handles task with empty spec
+
+  constraints:
+    - Use react-markdown with remark-gfm for description and approach
+    - Desktop only — no responsive breakpoints needed
+    - "Right column should be sticky (position: sticky, top: 20px)"
+    - Page must work on direct navigation (not just from Kanban)
+    - Do not remove or break the existing modal
+    - Event timeline collapsed by default
+    - Empty sections should not render (no "Files: none" noise)
+  references:
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/components/TaskDetail.tsx
+    - web/src/utils/parseSpec.ts
+    - web/src/components/DependencyChain.tsx
+    - web/src/App.tsx
+    - web/src/api/tasks.ts
+    - web/src/api/phases.ts
+
+acceptance_criteria:
+  - "Route /tasks/:id renders the full page task view"
+  - "Two-column layout with main content left, metadata right"
+  - "Description rendered as markdown with proper formatting"
+  - "Implementation approach renders markdown with code blocks"
+  - "Files section shows create/modify/affected with colored indicators"
+  - "Constraints render as a bulleted list"
+  - "References render as monospace file paths"
+  - "Breadcrumb shows workplan > phase > task with working links"
+  - "Right column shows status, model, isolation, judge, assignment"
+  - "Right column has context card with phase/workplan links and timestamps"
+  - "Action buttons in right column"
+  - "Dependency chain shown in full-width section"
+  - "Event timeline collapsible, collapsed by default"
+  - "Notes show robot icon for agent actors, person icon for humans"
+  - "Empty spec sections are hidden, not shown as empty"
+  - "Page works on direct navigation"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

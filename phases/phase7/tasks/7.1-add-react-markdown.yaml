@@ -1,0 +1,48 @@
+id: "7.1"
+name: "Add react-markdown and js-yaml dependencies"
+depends_on: []
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Add react-markdown, remark-gfm, and js-yaml as dependencies to the web
+  frontend. react-markdown renders spec content as formatted markdown with
+  code blocks. js-yaml parses the raw YAML spec string into structured data.
+
+files:
+  create: []
+  modify:
+    - web/package.json
+    - web/package-lock.json
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Install dependencies
+    ```bash
+    cd web && npm install react-markdown remark-gfm js-yaml
+    npm install -D @types/js-yaml
+    ```
+
+    Step 2: Verify the build still works
+    ```bash
+    cd web && npm run build
+    ```
+
+  constraints:
+    - Use react-markdown (widely used, lightweight)
+    - Add remark-gfm for GitHub Flavored Markdown (tables, task lists)
+    - Use js-yaml for YAML parsing in the browser
+    - Do not add syntax highlighting library yet
+  references:
+    - web/package.json
+
+acceptance_criteria:
+  - "react-markdown, remark-gfm, js-yaml in package.json dependencies"
+  - "@types/js-yaml in devDependencies"
+  - "cd web && npm run build succeeds"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"
