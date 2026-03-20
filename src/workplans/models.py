@@ -29,3 +29,37 @@ class Workplan(NanoIDMixin, TimestampMixin):
 
     def __str__(self):
         return self.name
+
+
+PHASE_STATUS_CHOICES = [
+    ("pending", "Pending"),
+    ("active", "Active"),
+    ("completed", "Completed"),
+]
+
+
+class Phase(NanoIDMixin, TimestampMixin):
+    STATUS_CHOICES = PHASE_STATUS_CHOICES
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    workplan = models.ForeignKey(
+        Workplan,
+        on_delete=models.CASCADE,
+        related_name="phases",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=PHASE_STATUS_CHOICES,
+        default="pending",
+    )
+    order = models.IntegerField(default=0)
+    default_needs_review_before_start = models.BooleanField(null=True, blank=True, default=None)
+    default_needs_review_on_completion = models.BooleanField(null=True, blank=True, default=None)
+    created_by = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["order", "created_at"]
+
+    def __str__(self):
+        return self.name
