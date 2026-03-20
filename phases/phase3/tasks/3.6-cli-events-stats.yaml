@@ -132,7 +132,7 @@ implementation:
   constraints:
     - Follow the existing CLI command patterns in task.py and workplan.py
     - Use the same client.get() pattern for API calls
-    - Handle paginated responses (response may be {results: [...]} or [...])
+    - Handle paginated responses (response may be a dict with "results" key or a plain list)
     - Display should be human-readable, not raw JSON
     - Error handling must match existing pattern (VTFAPIError catch)
   references:

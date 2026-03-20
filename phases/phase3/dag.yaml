@@ -1,41 +1,34 @@
 tasks:
-  "3.1":
+  - id: "3.1"
     name: "Fix unclaim state machine gap"
     depends_on: []
 
-  "3.2":
+  - id: "3.2"
     name: "Fix claim tag lookup from DB"
     depends_on: []
 
-  "3.3":
+  - id: "3.3"
     name: "Workplan and phase stats (real counts)"
     depends_on: []
 
-  "3.4":
+  - id: "3.4"
     name: "Cursor pagination on list endpoints"
     depends_on: ["3.1", "3.2", "3.3"]
 
-  "3.5":
+  - id: "3.5"
     name: "SSE event stream"
     depends_on: ["3.1", "3.2", "3.3"]
 
-  "3.6":
+  - id: "3.6"
     name: "CLI — events and stats commands"
     depends_on: ["3.3", "3.5"]
 
-  "3.7":
+  - id: "3.7"
     name: "Black-box test suite"
     depends_on: ["3.6"]
 
-# Parallel groups (tasks that can execute simultaneously):
-#   Group A: [3.1, 3.2, 3.3]  — three independent fixes, no file overlap
-#   Group B: [3.4, 3.5]       — independent features, no file overlap
-#                                (3.4 touches settings + all tests, 3.5 touches events/)
-#
-# Execution order:
+# Parallel groups:
 #   Step 1: 3.1 || 3.2 || 3.3
 #   Step 2: 3.4 || 3.5
 #   Step 3: 3.6
 #   Step 4: 3.7
-#
-# Total sequential steps: 4 (vs 7 if fully sequential)
