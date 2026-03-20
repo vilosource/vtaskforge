@@ -7,7 +7,7 @@ import pytest
 from events.models import TaskEvent
 from tasks.exceptions import InvalidTransition
 from tasks.state_machine import perform_transition
-from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import AgentFactory, PhaseFactory, TaskFactory, WorkplanFactory
 
 
 def make_task(status="draft", **kwargs):
@@ -27,6 +27,16 @@ def phase(db, workplan):
 @pytest.fixture
 def task(db, phase, workplan):
     return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
+
+
+@pytest.fixture
+def agent1(db):
+    return AgentFactory(name="Agent 1", tags=[])
+
+
+@pytest.fixture
+def agent42(db):
+    return AgentFactory(name="Agent 42", tags=[])
 
 
 # ---------------------------------------------------------------------------
@@ -89,40 +99,40 @@ class TestStateMachineAutoLogging:
 
 @pytest.mark.django_db
 class TestClaimAutoLogging:
-    def test_claim_creates_claimed_event(self, api_client, task):
+    def test_claim_creates_claimed_event(self, api_client, task, agent1):
         task.status = "todo"
         task.save(update_fields=["status", "updated_at"])
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-1"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json")
         assert response.status_code == 200
         claimed_events = TaskEvent.objects.filter(task=task, event_type="claimed")
         assert claimed_events.count() == 1
 
-    def test_claim_event_has_agent_id(self, api_client, task):
+    def test_claim_event_has_agent_id(self, api_client, task, agent42):
         task.status = "todo"
         task.save(update_fields=["status", "updated_at"])
-        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-42"}, format="json")
+        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent42.id}, format="json")
         event = TaskEvent.objects.get(task=task, event_type="claimed")
-        assert event.data["agent_id"] == "agent-42"
+        assert event.data["agent_id"] == agent42.id
 
-    def test_claim_event_triggered_by_agent_id(self, api_client, task):
+    def test_claim_event_triggered_by_agent_id(self, api_client, task, agent42):
         task.status = "todo"
         task.save(update_fields=["status", "updated_at"])
-        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-42"}, format="json")
+        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent42.id}, format="json")
         event = TaskEvent.objects.get(task=task, event_type="claimed")
-        assert event.triggered_by == "agent-42"
+        assert event.triggered_by == agent42.id
 
-    def test_claim_also_creates_status_changed_event(self, api_client, task):
+    def test_claim_also_creates_status_changed_event(self, api_client, task, agent1):
         task.status = "todo"
         task.save(update_fields=["status", "updated_at"])
-        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-1"}, format="json")
+        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json")
         # Both status_changed (from state machine) and claimed events should exist
         assert TaskEvent.objects.filter(task=task, event_type="status_changed").count() == 1
         assert TaskEvent.objects.filter(task=task, event_type="claimed").count() == 1
 
-    def test_failed_claim_no_event(self, api_client, task):
+    def test_failed_claim_no_event(self, api_client, task, agent1):
         """Claiming a task that's not in 'todo' should fail and create no claimed event."""
         # task is in draft status
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-1"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json")
         assert response.status_code == 409
         assert TaskEvent.objects.filter(task=task, event_type="claimed").count() == 0
 

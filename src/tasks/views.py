@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
+from agents.models import Agent
 from workplans.models import Phase
 
 from .exceptions import InvalidTransition
@@ -94,12 +95,21 @@ class TaskViewSet(ModelViewSet):
     def claim(self, request, pk=None):
         """todo -> doing. Atomic claim with tag matching, assignment, and dependency checks."""
         agent_id = request.data.get("agent_id")
-        agent_tags = request.data.get("tags", [])
         if not agent_id:
             return Response(
                 {"error": {"code": "VALIDATION_ERROR", "message": "agent_id required"}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Look up agent from DB to get registered tags; body tags override DB tags
+        try:
+            agent = Agent.objects.get(pk=agent_id)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Agent not found"}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        agent_tags = request.data.get("tags") if request.data.get("tags") is not None else agent.tags
 
         with transaction.atomic():
             try:
@@ -200,6 +210,14 @@ class TaskViewSet(ModelViewSet):
         tags_param = request.query_params.get("tags", "")
         tags = [t for t in tags_param.split(",") if t] if tags_param else []
         agent_id = request.query_params.get("agent_id", "")
+
+        # If agent_id given and no tags param, look up agent tags from DB
+        if agent_id and not tags:
+            try:
+                agent = Agent.objects.get(pk=agent_id)
+                tags = agent.tags or []
+            except Agent.DoesNotExist:
+                tags = []
 
         tasks = Task.objects.filter(status="todo")
 

@@ -6,7 +6,7 @@ Tests both valid transitions and the 422 INVALID_TRANSITION error format.
 import pytest
 from rest_framework import status
 
-from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import AgentFactory, PhaseFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -21,6 +21,11 @@ def workplan(db):
 @pytest.fixture
 def phase(db, workplan):
     return PhaseFactory(name="Test Phase", workplan=workplan)
+
+
+@pytest.fixture
+def agent_abc(db):
+    return AgentFactory(name="Agent ABC", tags=[])
 
 
 def make_task(phase, workplan, task_status="draft", **kwargs):
@@ -93,37 +98,37 @@ class TestSubmit:
 
 @pytest.mark.django_db
 class TestClaim:
-    def test_claim_todo_returns_200(self, api_client, phase, workplan):
+    def test_claim_todo_returns_200(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "todo")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_claim_transitions_to_doing(self, api_client, phase, workplan):
+    def test_claim_transitions_to_doing(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "todo")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.data["status"] == "doing"
 
-    def test_claim_sets_claimed_by(self, api_client, phase, workplan):
+    def test_claim_sets_claimed_by(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "todo")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
-        assert response.data["claimed_by"] == "agent-abc"
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
+        assert response.data["claimed_by"] == agent_abc.id
 
-    def test_claim_sets_claimed_at(self, api_client, phase, workplan):
+    def test_claim_sets_claimed_at(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "todo")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.data["claimed_at"] is not None
 
-    def test_claim_sets_claim_expires_at(self, api_client, phase, workplan):
+    def test_claim_sets_claim_expires_at(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "todo")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.data["claim_expires_at"] is not None
 
-    def test_claim_persists_to_db(self, api_client, phase, workplan):
+    def test_claim_persists_to_db(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "todo")
-        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         task.refresh_from_db()
         assert task.status == "doing"
-        assert task.claimed_by == "agent-abc"
+        assert task.claimed_by == agent_abc.id
         assert task.claimed_at is not None
         assert task.claim_expires_at is not None
 
@@ -132,21 +137,21 @@ class TestClaim:
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_claim_from_draft_returns_409(self, api_client, phase, workplan):
+    def test_claim_from_draft_returns_409(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "draft")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.status_code == status.HTTP_409_CONFLICT
         assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
-    def test_claim_from_doing_returns_409(self, api_client, phase, workplan):
+    def test_claim_from_doing_returns_409(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "doing")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.status_code == status.HTTP_409_CONFLICT
         assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
-    def test_claim_from_done_returns_409(self, api_client, phase, workplan):
+    def test_claim_from_done_returns_409(self, api_client, phase, workplan, agent_abc):
         task = make_task(phase, workplan, "done")
-        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
+        response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         assert response.status_code == status.HTTP_409_CONFLICT
         assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
