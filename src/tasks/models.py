@@ -54,3 +54,16 @@ class Task(NanoIDMixin, TimestampMixin):
 
     def __str__(self):
         return self.title
+
+
+class Note(NanoIDMixin):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="notes")
+    text = models.TextField()
+    actor_id = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return self.text[:50]

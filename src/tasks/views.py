@@ -1,17 +1,17 @@
 from datetime import timedelta
 
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from workplans.models import Phase
 
 from .exceptions import InvalidTransition
-from .models import Task
-from .serializers import TaskSerializer
+from .models import Note, Task
+from .serializers import NoteSerializer, TaskSerializer
 from .state_machine import perform_transition
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
@@ -259,6 +259,35 @@ class TaskViewSet(ModelViewSet):
         task.save(update_fields=["assigned_to", "updated_at"])
         serializer = self.get_serializer(task)
         return Response(serializer.data)
+
+
+class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
+    serializer_class = NoteSerializer
+
+    def get_task(self):
+        task_id = self.kwargs["task_id"]
+        try:
+            return Task.objects.get(pk=task_id)
+        except Task.DoesNotExist:
+            return None
+
+    def get_queryset(self):
+        task_id = self.kwargs["task_id"]
+        return Note.objects.filter(task_id=task_id)
+
+    def list(self, request, *args, **kwargs):
+        if self.get_task() is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        return super().list(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        task = self.get_task()
+        serializer.save(task=task)
+
+    def create(self, request, *args, **kwargs):
+        if self.get_task() is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        return super().create(request, *args, **kwargs)
 
 
 class PhaseTasksView(APIView):

@@ -1,6 +1,13 @@
 from rest_framework import serializers
 
-from .models import Task
+from .models import Note, Task
+
+
+class NoteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Note
+        fields = ["id", "task", "text", "actor_id", "created_at"]
+        read_only_fields = ["id", "task", "created_at"]
 
 
 class TaskSerializer(serializers.ModelSerializer):
