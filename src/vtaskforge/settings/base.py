@@ -3,6 +3,7 @@ Base Django settings for vtaskforge.
 Shared across all environments.
 """
 import os
+from datetime import timedelta
 
 import dj_database_url
 
@@ -115,3 +116,10 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
+
+CELERY_BEAT_SCHEDULE = {
+    'expire-stale-claims': {
+        'task': 'tasks.celery_tasks.expire_stale_claims',
+        'schedule': timedelta(seconds=60),
+    },
+}

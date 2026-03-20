@@ -6,6 +6,7 @@ EVENT_TYPE_CHOICES = [
     ("status_changed", "Status Changed"),
     ("claimed", "Claimed"),
     ("unclaimed", "Unclaimed"),
+    ("claim_expired", "Claim Expired"),
     ("review_submitted", "Review Submitted"),
     ("link_added", "Link Added"),
     ("link_removed", "Link Removed"),
