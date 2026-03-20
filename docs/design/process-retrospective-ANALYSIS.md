@@ -286,6 +286,18 @@ Everything else we added — judges, contracts, patterns, behavioral specs, tier
 
 Supervisor automation. The supervisor role was manual throughout all phases. Building it as a script or hook that polls vtf for work, dispatches agents, runs gates, and updates status would close the loop — making vtf a fully automated execution system, not just a tracking board with manual orchestration.
 
+### Design Drift: Tasks Can Be Individually Correct But Collectively Wrong
+
+The import command was implemented correctly per its spec — import a phase directory. But the spec was written without considering the full workplan model from the design doc. Each phase import creates a new workplan instead of adding a phase to an existing workplan.
+
+The design doc says: Workplan → Phases → Tasks (one project has many phases). The implementation says: each import creates a new workplan (each phase looks like a separate project).
+
+This is a different class of failure from blast radius (code changes breaking consumers). This is **design intent drift** — individual task specs that are internally correct but don't compose into the system the design doc describes.
+
+**Root cause:** Specs were written one phase at a time. Nobody asked "does this task's behavior make sense in the context of the full system design?" The executor implemented exactly what was specified. The specification was the problem.
+
+**Process fix:** When writing specs for features that span multiple phases or compose into a larger workflow, review the spec against the design doc's system-level model — not just the immediate task's requirements. Ask: "if I run this 5 times, does the result match the design?"
+
 ### The meta-lesson
 
 We spent more time designing the process than was warranted by the problems we encountered. The 100% first-attempt success rate across all phases means either:
