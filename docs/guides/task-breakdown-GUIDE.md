@@ -105,7 +105,7 @@ The `Files` and `Context` fields map directly to vtaskforge's link system (`file
 
 ## Example: Phase 0 Task Breakdown
 
-See [implementation-PLAN.md](implementation-PLAN.md) for the full breakdown of Phase 0 into 11 tasks with a dependency DAG. This was the first application of this process.
+See [phases/phase0/PHASE.md](../../phases/phase0/PHASE.md) for the full breakdown of Phase 0 into 11 tasks with a dependency DAG. This was the first application of this process.
 
 Summary:
 - **11 tasks** decomposed from the phase goal

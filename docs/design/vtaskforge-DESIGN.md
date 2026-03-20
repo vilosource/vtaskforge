@@ -449,14 +449,14 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 ## Related Documents
 
 - [actor-model-DESIGN.md](actor-model-DESIGN.md) — Actor types, system boundary, development team model, interaction flows
-- [agent-pool-manager-PROPOSAL.md](agent-pool-manager-PROPOSAL.md) — Proposal to evolve vf-agents into the agent pool manager
-- [scrum-master-agent-PROPOSAL.md](scrum-master-agent-PROPOSAL.md) — Autonomous process agent for flow facilitation and triage
+- [../proposals/agent-pool-manager-PROPOSAL.md](../proposals/agent-pool-manager-PROPOSAL.md) — Proposal to evolve vf-agents into the agent pool manager
+- [../proposals/scrum-master-agent-PROPOSAL.md](../proposals/scrum-master-agent-PROPOSAL.md) — Autonomous process agent for flow facilitation and triage
 - [design-gaps-ANALYSIS.md](design-gaps-ANALYSIS.md) — Identified gaps in the design requiring resolution
-- [gitlab-pipeline-analogy-REFERENCE.md](gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
+- [../references/gitlab-pipeline-analogy-REFERENCE.md](../references/gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
 - [api-surface-DESIGN.md](api-surface-DESIGN.md) — Full REST API surface, SSE events, error model, agent liveness
-- [implementation-PLAN.md](implementation-PLAN.md) — Phased implementation plan starting with project setup
-- [task-breakdown-GUIDE.md](task-breakdown-GUIDE.md) — How to decompose phases into tasks with dependency DAGs
-- [phase0-findings-ANALYSIS.md](phase0-findings-ANALYSIS.md) — Dry run findings: agent capability vs spec detail, isolation, spec errors
+- [../../WORKPLAN.md](../../WORKPLAN.md) — Phased workplan with links to phase directories
+- [../guides/task-breakdown-GUIDE.md](../guides/task-breakdown-GUIDE.md) — How to decompose phases into tasks with dependency DAGs
+- [../../phases/phase0/findings-ANALYSIS.md](../../phases/phase0/findings-ANALYSIS.md) — Dry run findings: agent capability vs spec detail, isolation, spec errors
 - [behavioral-verification-DESIGN.md](behavioral-verification-DESIGN.md) — Three-layer verification: behavioral specs, judge agent evaluation, human review (based on VFF)
 
 ## Not Yet Decided
