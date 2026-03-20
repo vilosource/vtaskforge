@@ -17,12 +17,12 @@ class BulkImportView(APIView):
         payload = request.data
 
         # Validate top-level required fields
-        if "workplan" not in payload:
+        if "workplan_id" not in payload and "workplan" not in payload:
             return Response(
-                {"error": {"code": "VALIDATION_ERROR", "message": "workplan is required"}},
+                {"error": {"code": "VALIDATION_ERROR", "message": "workplan or workplan_id is required"}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not isinstance(payload["workplan"], dict) or "name" not in payload["workplan"]:
+        if "workplan" in payload and (not isinstance(payload["workplan"], dict) or "name" not in payload["workplan"]):
             return Response(
                 {"error": {"code": "VALIDATION_ERROR", "message": "workplan.name is required"}},
                 status=status.HTTP_400_BAD_REQUEST,
