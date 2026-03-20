@@ -1,0 +1,232 @@
+id: "5.5"
+name: "DAG pipeline view"
+depends_on: ["5.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add a visual DAG pipeline view to the WorkplanDetail page showing phases
+  as a horizontal pipeline. This is a simplified version — no task-level DAG,
+  just phases displayed sequentially with arrows between them.
+
+  Each phase box shows: name, status (color-coded), task count, and a
+  progress bar. Phases are connected by arrows showing sequential flow.
+
+  Add a toggle on the WorkplanDetail page: "List view" / "Pipeline view".
+
+files:
+  create:
+    - web/src/components/PhasePipeline.tsx
+    - web/src/components/PhasePipeline.test.tsx
+  modify:
+    - web/src/pages/WorkplanDetail.tsx
+  affected: []
+
+contracts:
+  establishes:
+    - name: "phase-pipeline-view"
+      description: "Horizontal pipeline view showing phases as connected boxes with status colors and progress"
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/pages/WorkplanDetail.tsx — current phase list with PhaseCard
+    - web/src/api/phases.ts — Phase and PhaseStats interfaces, usePhases, usePhaseStats hooks
+    - web/src/styles/ — existing CSS patterns
+
+    Step 1: Create PhasePipeline component
+    web/src/components/PhasePipeline.tsx:
+
+    ```typescript
+    import { usePhaseStats } from '../api/phases';
+    import type { Phase } from '../api/phases';
+
+    interface PhasePipelineProps {
+      phases: Phase[];
+      workplanId: string;
+    }
+
+    function PipelineNode({ phase, workplanId }: { phase: Phase; workplanId: string }) {
+      const { data: stats } = usePhaseStats(phase.id);
+      const total = stats?.total_tasks ?? 0;
+      const done = stats?.by_status?.done ?? 0;
+      const pct = stats?.completed_percentage ?? 0;
+
+      const colors = {
+        completed: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },
+        active: { bg: '#e3f2fd', border: '#1976d2', text: '#1565c0' },
+        pending: { bg: '#f5f5f5', border: '#9e9e9e', text: '#616161' },
+      };
+      const color = colors[phase.status] || colors.pending;
+
+      return (
+        <Link to={`/workplans/${workplanId}/phases/${phase.id}`} style={{ textDecoration: 'none' }}>
+          <div style={{
+            minWidth: 160,
+            padding: '12px 16px',
+            background: color.bg,
+            border: `2px solid ${color.border}`,
+            borderRadius: 8,
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'box-shadow 0.2s',
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: color.text }}>{phase.name}</div>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+              {done}/{total} tasks
+            </div>
+            <div style={{
+              marginTop: 6,
+              height: 4,
+              background: '#e0e0e0',
+              borderRadius: 2,
+            }}>
+              <div style={{
+                width: `${pct}%`,
+                height: '100%',
+                background: color.border,
+                borderRadius: 2,
+                transition: 'width 0.3s',
+              }} />
+            </div>
+            <div style={{
+              marginTop: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              color: color.text,
+            }}>
+              {phase.status}
+            </div>
+          </div>
+        </Link>
+      );
+    }
+
+    function Arrow() {
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 4px',
+          color: '#bdbdbd',
+          fontSize: 20,
+        }}>
+          →
+        </div>
+      );
+    }
+
+    export function PhasePipeline({ phases, workplanId }: PhasePipelineProps) {
+      if (phases.length === 0) {
+        return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>No phases yet.</div>;
+      }
+
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          overflowX: 'auto',
+          padding: '16px 0',
+          gap: 0,
+        }}>
+          {phases.map((phase, i) => (
+            <Fragment key={phase.id}>
+              <PipelineNode phase={phase} workplanId={workplanId} />
+              {i < phases.length - 1 && <Arrow />}
+            </Fragment>
+          ))}
+        </div>
+      );
+    }
+    ```
+
+    Step 2: Add view toggle to WorkplanDetail.tsx
+    Add state for view mode and render toggle buttons:
+
+    ```typescript
+    const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
+    ```
+
+    Add toggle buttons in the header area:
+    ```typescript
+    <div style={{ display: 'flex', gap: 4, background: '#f0f0f0', borderRadius: 6, padding: 2 }}>
+      <button
+        onClick={() => setViewMode('list')}
+        style={{
+          padding: '4px 12px',
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'pointer',
+          background: viewMode === 'list' ? 'white' : 'transparent',
+          fontWeight: viewMode === 'list' ? 600 : 400,
+          boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+        }}
+      >
+        List
+      </button>
+      <button
+        onClick={() => setViewMode('pipeline')}
+        style={{
+          padding: '4px 12px',
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'pointer',
+          background: viewMode === 'pipeline' ? 'white' : 'transparent',
+          fontWeight: viewMode === 'pipeline' ? 600 : 400,
+          boxShadow: viewMode === 'pipeline' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+        }}
+      >
+        Pipeline
+      </button>
+    </div>
+    ```
+
+    Conditionally render PhaseCard list or PhasePipeline:
+    ```typescript
+    {viewMode === 'list' ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {phases.map(phase => <PhaseCard key={phase.id} phase={phase} workplanId={id!} />)}
+      </div>
+    ) : (
+      <PhasePipeline phases={phases} workplanId={id!} />
+    )}
+    ```
+
+    Step 3: Unit tests
+    web/src/components/PhasePipeline.test.tsx:
+    - Test: renders phase names
+    - Test: renders arrows between phases (not after last)
+    - Test: applies correct color for each status (pending, active, completed)
+    - Test: renders empty state when no phases
+    - Test: shows task counts from stats
+    - Mock usePhaseStats hook
+
+  constraints:
+    - Use CSS flexbox only — no external graph libraries
+    - Phases are displayed left-to-right in order
+    - Arrows are simple → characters between boxes (no SVG needed for v1)
+    - Color coding: green=completed, blue=active, grey=pending
+    - Pipeline container must scroll horizontally if phases overflow
+    - Each phase box is clickable and links to its Kanban board
+    - Default view mode is "list" (existing behavior)
+    - Import Fragment from React for the map with arrows
+  references:
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/api/phases.ts
+    - web/src/components/TaskCard.tsx — color pattern reference
+
+acceptance_criteria:
+  - "WorkplanDetail page has a List/Pipeline toggle"
+  - "List view shows existing PhaseCard layout (no regression)"
+  - "Pipeline view shows phases as horizontal boxes connected by arrows"
+  - "Phase boxes are color-coded: green=completed, blue=active, grey=pending"
+  - "Phase boxes show: name, task count (done/total), progress bar, status label"
+  - "Clicking a phase box navigates to its Kanban board"
+  - "Pipeline scrolls horizontally when phases overflow the container"
+  - "Empty state shows 'No phases yet' in both views"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

@@ -35,3 +35,4 @@ Key decisions:
 | Phase 2 — Auth, Claim Expiry, Bulk Import, CLI | [phases/phase2/](phases/phase2/) | Complete | Authentication, claim expiry, bulk import, CLI (`vtf`), test factories |
 | Phase 3 — Polish, Fixes, Operational Features | [phases/phase3/](phases/phase3/) | Planning | Fix unclaim/claim bugs, real stats, cursor pagination, SSE stream, CLI commands. Pipeline validation (dogfooding). |
 | Phase 4 — Web UI (React SPA) | [phases/phase4/](phases/phase4/) | Planning | Kanban board, task detail modal, SSE live updates, production build |
+| Phase 5 — Web UI Polish & Pipeline View | [phases/phase5/](phases/phase5/) | Planning | Fix bugs, workplan progress, phase management, DAG pipeline view |

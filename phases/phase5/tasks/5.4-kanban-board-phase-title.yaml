@@ -1,0 +1,132 @@
+id: "5.4"
+name: "Kanban board title shows phase name"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  The Kanban board header currently shows the workplan name, not the phase
+  name. When viewing a phase's Kanban board at /workplans/:id/phases/:phaseId,
+  the title should show the phase name as the main heading, with the workplan
+  name as a subtitle.
+
+  The BoardView component at web/src/pages/BoardView.tsx already has the
+  phaseId from the URL params. It needs to fetch the phase details and pass
+  the phase name to the KanbanBoard component.
+
+files:
+  create: []
+  modify:
+    - web/src/pages/BoardView.tsx
+    - web/src/api/phases.ts
+  affected:
+    - web/src/pages/KanbanBoard.tsx
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/pages/BoardView.tsx — renders KanbanBoard with workplanId and phaseId
+    - web/src/pages/KanbanBoard.tsx — KanbanBoardProps includes title prop
+    - web/src/api/phases.ts — Phase interface and hooks
+    - web/src/api/tasks.ts — useWorkplan hook
+
+    Step 1: Add usePhase hook in web/src/api/phases.ts
+    ```typescript
+    export function usePhase(phaseId: string) {
+      return useQuery({
+        queryKey: ['phase', phaseId],
+        queryFn: () => apiGet<Phase>(`/v1/phases/${phaseId}/`),
+        enabled: !!phaseId,
+      });
+    }
+    ```
+
+    Note: Need to import apiGet from ./client.ts (may already be imported
+    via apiGetPaginated — check existing imports).
+
+    Step 2: Update BoardView.tsx
+    Fetch phase details and workplan details, pass phase name as title:
+
+    ```typescript
+    import { usePhase } from '../api/phases';
+    import { useWorkplan } from '../api/tasks';
+
+    export function BoardView() {
+      const { id, phaseId } = useParams<{ id: string; phaseId: string }>();
+      const { data: phase } = usePhase(phaseId!);
+      const { data: workplan } = useWorkplan(id!);
+
+      if (!id || !phaseId) {
+        return <div className="error">Invalid workplan or phase ID.</div>;
+      }
+
+      return (
+        <div>
+          <div style={{ padding: '8px 16px' }}>
+            <Link to={`/workplans/${id}`} style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>
+              &larr; {workplan?.name || 'Back to phases'}
+            </Link>
+          </div>
+          <KanbanBoard
+            workplanId={id}
+            phaseId={phaseId}
+            title={phase?.name}
+          />
+        </div>
+      );
+    }
+    ```
+
+    The KanbanBoard component already accepts a `title` prop and renders it
+    as `<h1>{title || workplanData?.name || workplanId}</h1>`. By passing
+    `phase?.name` as title, the phase name will display as the main heading.
+
+    Step 3: Add workplan name subtitle in KanbanBoard
+    The workplan name should appear as a subtitle below the phase name.
+    KanbanBoard already fetches workplanData. Add a subtitle line:
+
+    In KanbanBoard.tsx, update the header section:
+    ```typescript
+    <div className="kanban-board-title">
+      <div>
+        <h1>{title || workplanData?.name || workplanId}</h1>
+        {title && workplanData?.name && (
+          <div style={{ color: '#666', fontSize: 14, marginTop: 2 }}>
+            {workplanData.name}
+          </div>
+        )}
+      </div>
+      <LiveIndicator status={sseStatus} />
+    </div>
+    ```
+
+    This way, when a title prop is provided (phase name), the workplan name
+    shows as a subtitle. When no title prop is given, it falls back to
+    workplan name only.
+
+    Step 4: Update breadcrumb
+    The "Back to phases" breadcrumb already exists in BoardView.tsx. Update
+    it to show the workplan name: "&larr; {workplan?.name || 'Back to phases'}"
+
+  constraints:
+    - Phase name must be the primary heading when viewing a phase board
+    - Workplan name shows as subtitle below phase name
+    - Breadcrumb should show workplan name when available
+    - Do not break the KanbanBoard when used without a phaseId (workplan-level view)
+    - Use the existing title prop on KanbanBoard — no new props needed
+  references:
+    - web/src/pages/BoardView.tsx
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/api/phases.ts
+    - web/src/api/tasks.ts
+
+acceptance_criteria:
+  - "Phase Kanban board shows phase name as the main heading"
+  - "Workplan name appears as a subtitle below the phase name"
+  - "Breadcrumb shows workplan name (e.g. '← My Workplan' instead of '← Back to phases')"
+  - "KanbanBoard without a title prop still shows workplan name as heading (no regression)"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

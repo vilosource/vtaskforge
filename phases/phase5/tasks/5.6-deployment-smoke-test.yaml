@@ -1,0 +1,87 @@
+id: "5.6"
+name: "Deployment smoke test + black-box"
+depends_on: ["5.5"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Rebuild the dogfood Docker image with all Phase 5 changes and run the
+  deployment smoke test and black-box lifecycle tester to verify everything
+  works end-to-end.
+
+  This is a verification task — no code changes, only build + test.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Rebuild dogfood
+    ```bash
+    docker compose -f docker-compose.dogfood.yml build
+    docker compose -f docker-compose.dogfood.yml up -d
+    ```
+
+    Wait for services to be healthy:
+    ```bash
+    docker compose -f docker-compose.dogfood.yml exec api python manage.py migrate
+    ```
+
+    Step 2: Run deployment smoke test
+    ```bash
+    cd web && npx playwright test tests/deployment-smoke.spec.ts
+    ```
+
+    This verifies:
+    - Login page renders
+    - Login works with credentials
+    - Assets serve with correct MIME types
+    - API responds through Django
+    - Kanban board loads without console errors
+    - SSE accepts browser connections
+
+    Step 3: Run black-box lifecycle tester
+    Run the curl-based full-lifecycle scenario that exercises:
+    - Create workplan → create phase → create task
+    - Submit → claim → complete full lifecycle
+    - Stats endpoints return correct counts
+    - SSE events fire for state changes
+
+    Check the test script location:
+    ```bash
+    ls tests/blackbox/ || ls scripts/blackbox/ || find . -name "*blackbox*" -o -name "*black-box*"
+    ```
+
+    Step 4: Run full test suite
+    ```bash
+    docker compose exec api pytest tests/
+    cd web && npx vitest run
+    ```
+
+    Step 5: Verify Phase 5 specific features
+    Manual verification via curl or Playwright:
+    - Event timeline shows valid dates (not "Invalid Date")
+    - Workplan list shows phase count and progress columns
+    - Phase cards have Activate/Complete buttons
+    - Kanban board shows phase name as title
+    - Pipeline view toggle works on WorkplanDetail page
+
+  constraints:
+    - Do not modify any source code — this is verification only
+    - If any test fails, document the failure but do not fix it
+    - Report all test results with pass/fail counts
+  references:
+    - web/tests/deployment-smoke.spec.ts
+    - docker-compose.dogfood.yml
+
+acceptance_criteria:
+  - "Dogfood Docker image builds successfully with Phase 5 changes"
+  - "Deployment smoke tests pass"
+  - "Black-box lifecycle tester passes"
+  - "Full test suite passes (pytest + vitest)"
+  - "Phase 5 features verified working in dogfood environment"
+
+test_command: "cd web && npx playwright test tests/deployment-smoke.spec.ts"

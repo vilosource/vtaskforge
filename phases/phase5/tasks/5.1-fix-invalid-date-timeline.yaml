@@ -1,0 +1,99 @@
+id: "5.1"
+name: "Fix Invalid Date in event timeline"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  The EventTimeline component shows "Invalid Date" for event timestamps.
+  The formatTimestamp function uses `new Date(ts).toLocaleString()` which
+  returns "Invalid Date" when the timestamp string cannot be parsed.
+
+  The root cause is that the `created_at` field on TaskEvent is an ISO 8601
+  string (e.g. "2026-03-20T14:30:00Z") which should parse fine in modern
+  browsers. The bug is likely that the `created_at` field is not being
+  passed correctly, or the data shape from the API differs from the
+  TypeScript interface.
+
+  Investigate the actual API response shape, compare it to the TaskEvent
+  interface, and fix the mismatch.
+
+files:
+  create: []
+  modify:
+    - web/src/components/EventTimeline.tsx
+  affected:
+    - web/src/api/tasks.ts
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/components/EventTimeline.tsx — the component with the bug
+    - web/src/api/tasks.ts — TaskEvent interface definition
+    - web/src/components/TaskDetail.tsx — where EventTimeline is rendered (to see what data is passed)
+
+    Step 1: Identify the bug
+    Check the TaskEvent interface in web/src/api/tasks.ts:
+    ```typescript
+    export interface TaskEvent {
+      id: string;
+      event_type: string;
+      data: Record<string, unknown>;
+      created_at: string;
+    }
+    ```
+
+    The component uses `event.created_at` in both formatTimestamp and sorting.
+    Check if the API actually returns `created_at` or a different field name
+    (e.g., `timestamp` or `created`).
+
+    Run: `curl -s http://localhost:8000/v1/tasks/<task-id>/events/ -H "Authorization: Token ..." | python3 -m json.tool`
+    to see the actual API response shape.
+
+    Alternatively, check the Django serializer for TaskEvent to see the actual
+    field names in the response.
+
+    Step 2: Fix the mismatch
+    If the API returns a different field name, update either:
+    - The TaskEvent interface to match the API response, OR
+    - The EventTimeline component to use the correct field
+
+    If the field name is correct but the format is unexpected (e.g., Unix
+    timestamp instead of ISO string), update formatTimestamp to handle it:
+    ```typescript
+    function formatTimestamp(ts: string | number): string {
+      try {
+        const date = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
+        if (isNaN(date.getTime())) return String(ts);
+        return date.toLocaleString();
+      } catch {
+        return String(ts);
+      }
+    }
+    ```
+
+    Step 3: Verify the fix
+    - Run the existing Vitest tests
+    - If no test exists for EventTimeline, add one that verifies timestamps
+      render correctly with ISO 8601 input
+
+  constraints:
+    - Do not change the visual layout of the timeline
+    - The fix must handle both ISO 8601 strings and any other format the API returns
+    - formatTimestamp must never show "Invalid Date" — fall back to raw string
+  references:
+    - web/src/components/EventTimeline.tsx
+    - web/src/api/tasks.ts
+    - web/src/components/TaskDetail.tsx
+    - src/tasks/serializers.py
+
+acceptance_criteria:
+  - "Event timestamps display as formatted dates, not 'Invalid Date'"
+  - "formatTimestamp handles ISO 8601 strings correctly"
+  - "formatTimestamp falls back to raw string for unparseable input"
+  - "Sorting by timestamp still works correctly"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

@@ -1,0 +1,131 @@
+id: "5.2"
+name: "Workplan list — show phase count + progress"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  The workplan list page currently shows only name, status, and tags.
+  Add columns for phase count, total tasks, and completed percentage
+  to give users an at-a-glance view of workplan progress.
+
+  The backend already has GET /v1/workplans/{id}/stats/ which returns
+  total_tasks, by_status, completed_percentage, completed_tasks, etc.
+  Fetch stats for each workplan and display them inline.
+
+files:
+  create: []
+  modify:
+    - web/src/pages/WorkplanList.tsx
+    - web/src/api/workplans.ts
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/pages/WorkplanList.tsx — current workplan list component
+    - web/src/api/workplans.ts — workplan API hooks
+    - web/src/api/phases.ts — usePhaseStats pattern for reference
+    - src/workplans/views.py — WorkplanViewSet.stats action (response shape)
+
+    Step 1: Add workplan stats hook
+    In web/src/api/workplans.ts, add:
+    ```typescript
+    export interface WorkplanStats {
+      workplan_id: string;
+      total_tasks: number;
+      by_status: Record<string, number>;
+      completed_percentage: number;
+      completed_tasks: number;
+      pending_tasks: number;
+      in_progress_tasks: number;
+    }
+
+    export function useWorkplanStats(workplanId: string) {
+      return useQuery({
+        queryKey: ['workplan-stats', workplanId],
+        queryFn: () => apiGet<WorkplanStats>(`/v1/workplans/${workplanId}/stats/`),
+        enabled: !!workplanId,
+      });
+    }
+    ```
+
+    Step 2: Also add a phases count. Either:
+    - Use the existing usePhases hook to get phase count, OR
+    - Add a total_phases field to the stats response (backend change)
+
+    Simpler approach: fetch phases for each workplan using the existing
+    usePhases hook from web/src/api/phases.ts. The phase list is already
+    paginated so use apiGetPaginated to get the count.
+
+    Step 3: Update WorkplanList.tsx
+    Add a WorkplanRow sub-component that fetches stats per workplan:
+    ```typescript
+    function WorkplanRow({ wp }: { wp: Workplan }) {
+      const { data: stats } = useWorkplanStats(wp.id);
+      const { data: phases } = usePhases(wp.id);
+
+      return (
+        <tr key={wp.id}>
+          <td><Link to={`/workplans/${wp.id}`}>{wp.name}</Link></td>
+          <td><span className={`badge ${STATUS_COLORS[wp.status] ?? ''}`}>{wp.status}</span></td>
+          <td>{phases?.length ?? '—'}</td>
+          <td>{stats?.total_tasks ?? '—'}</td>
+          <td>
+            {stats ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 60, height: 6, background: '#e0e0e0', borderRadius: 3 }}>
+                  <div style={{
+                    width: `${stats.completed_percentage}%`,
+                    height: '100%',
+                    background: '#4caf50',
+                    borderRadius: 3,
+                  }} />
+                </div>
+                <span>{stats.completed_percentage}%</span>
+              </div>
+            ) : '—'}
+          </td>
+          <td>{wp.tags.join(', ')}</td>
+        </tr>
+      );
+    }
+    ```
+
+    Update the table header:
+    ```html
+    <tr>
+      <th>Name</th>
+      <th>Status</th>
+      <th>Phases</th>
+      <th>Tasks</th>
+      <th>Progress</th>
+      <th>Tags</th>
+    </tr>
+    ```
+
+    Replace inline map with WorkplanRow component.
+
+  constraints:
+    - Use react-query hooks for fetching stats — no useEffect + useState
+    - Show "—" while stats are loading (not a spinner per row)
+    - Progress bar should be a simple CSS div, matching the style in WorkplanDetail PhaseCard
+    - Do not break existing workplan list behavior (name links, status badges)
+  references:
+    - web/src/pages/WorkplanList.tsx
+    - web/src/api/workplans.ts
+    - web/src/api/phases.ts
+    - web/src/pages/WorkplanDetail.tsx — PhaseCard progress bar pattern
+    - src/workplans/views.py — stats endpoint response shape
+
+acceptance_criteria:
+  - "Workplan list shows columns: Name, Status, Phases, Tasks, Progress, Tags"
+  - "Phase count shows the number of phases per workplan"
+  - "Tasks column shows total task count from stats endpoint"
+  - "Progress column shows completed percentage with a mini progress bar"
+  - "Stats display '—' while loading, not a spinner"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

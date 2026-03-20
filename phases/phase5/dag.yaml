@@ -1,0 +1,29 @@
+tasks:
+  - id: "5.1"
+    name: "Fix Invalid Date in event timeline"
+    depends_on: []
+
+  - id: "5.2"
+    name: "Workplan list — show phase count + progress"
+    depends_on: []
+
+  - id: "5.3"
+    name: "Phase status management"
+    depends_on: []
+
+  - id: "5.4"
+    name: "Kanban board title shows phase name"
+    depends_on: []
+
+  - id: "5.5"
+    name: "DAG pipeline view"
+    depends_on: ["5.3"]
+
+  - id: "5.6"
+    name: "Deployment smoke test + black-box"
+    depends_on: ["5.5"]
+
+# Parallel groups:
+#   Step 1: 5.1 || 5.2 || 5.3 || 5.4  (4 independent small fixes)
+#   Step 2: 5.5  (DAG pipeline view, depends on 5.3 for phase status buttons)
+#   Step 3: 5.6  (verification of all Phase 5 changes)

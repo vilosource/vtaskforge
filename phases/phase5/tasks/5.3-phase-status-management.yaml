@@ -1,0 +1,136 @@
+id: "5.3"
+name: "Phase status management"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Add Activate and Complete buttons to each phase card on the WorkplanDetail
+  page. The backend already supports POST /v1/phases/{id}/activate/ and
+  POST /v1/phases/{id}/complete/. This task wires up the UI buttons.
+
+  Phase status flow: pending -> active -> completed.
+  - Pending phases show an "Activate" button
+  - Active phases show a "Complete" button
+  - Completed phases show no action button (just the status badge)
+
+files:
+  create: []
+  modify:
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/api/phases.ts
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/pages/WorkplanDetail.tsx — PhaseCard component
+    - web/src/api/phases.ts — Phase interface and hooks
+    - web/src/api/client.ts — apiPost function
+    - src/workplans/views.py — PhaseViewSet.activate and .complete actions
+
+    Step 1: Add mutation hooks to web/src/api/phases.ts
+    ```typescript
+    import { useMutation, useQueryClient } from '@tanstack/react-query';
+    import { apiPost } from './client';
+
+    export function useActivatePhase() {
+      const queryClient = useQueryClient();
+      return useMutation({
+        mutationFn: (phaseId: string) =>
+          apiPost<Phase>(`/v1/phases/${phaseId}/activate/`),
+        onSuccess: (_data, _phaseId) => {
+          queryClient.invalidateQueries({ queryKey: ['phases'] });
+        },
+      });
+    }
+
+    export function useCompletePhase() {
+      const queryClient = useQueryClient();
+      return useMutation({
+        mutationFn: (phaseId: string) =>
+          apiPost<Phase>(`/v1/phases/${phaseId}/complete/`),
+        onSuccess: (_data, _phaseId) => {
+          queryClient.invalidateQueries({ queryKey: ['phases'] });
+        },
+      });
+    }
+    ```
+
+    Step 2: Update PhaseCard in WorkplanDetail.tsx
+    Add action buttons to the PhaseCard component based on phase.status:
+
+    ```typescript
+    function PhaseCard({ phase, workplanId }: { phase: Phase; workplanId: string }) {
+      const { data: stats } = usePhaseStats(phase.id);
+      const activateMutation = useActivatePhase();
+      const completeMutation = useCompletePhase();
+      // ... existing code ...
+
+      const handleActivate = (e: React.MouseEvent) => {
+        e.preventDefault();  // prevent Link navigation
+        e.stopPropagation();
+        activateMutation.mutate(phase.id);
+      };
+
+      const handleComplete = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        completeMutation.mutate(phase.id);
+      };
+
+      return (
+        <Link ...>
+          {/* existing content */}
+          <div>
+            {phase.status === 'pending' && (
+              <button onClick={handleActivate} disabled={activateMutation.isPending}>
+                {activateMutation.isPending ? 'Activating...' : 'Activate'}
+              </button>
+            )}
+            {phase.status === 'active' && (
+              <button onClick={handleComplete} disabled={completeMutation.isPending}>
+                {completeMutation.isPending ? 'Completing...' : 'Complete'}
+              </button>
+            )}
+          </div>
+        </Link>
+      );
+    }
+    ```
+
+    Step 3: Style the buttons
+    - Activate button: blue/primary color, matches active status color
+    - Complete button: green, matches completed status color
+    - Disabled state during mutation (isPending)
+    - Buttons should not cause the entire card to navigate (preventDefault + stopPropagation)
+
+    Step 4: Error handling
+    Show an error message if activate/complete fails (e.g., toast or inline error).
+    The API returns 400 with a detail message for invalid transitions.
+
+  constraints:
+    - Buttons must not trigger Link navigation (use preventDefault + stopPropagation)
+    - Buttons must show loading state during mutation (isPending)
+    - Only show Activate for pending phases, Complete for active phases
+    - Invalidate the phases query on success to refresh the list
+    - Handle API errors gracefully (400 for invalid transitions)
+  references:
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/api/phases.ts
+    - web/src/api/client.ts
+    - src/workplans/views.py — PhaseViewSet activate/complete actions
+
+acceptance_criteria:
+  - "Pending phases show an 'Activate' button"
+  - "Active phases show a 'Complete' button"
+  - "Completed phases show no action button"
+  - "Clicking Activate calls POST /v1/phases/{id}/activate/ and refreshes the phase list"
+  - "Clicking Complete calls POST /v1/phases/{id}/complete/ and refreshes the phase list"
+  - "Buttons show loading state during API call"
+  - "Buttons do not trigger card navigation"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"
