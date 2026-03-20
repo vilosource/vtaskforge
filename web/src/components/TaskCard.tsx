@@ -24,6 +24,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     <div
       className="task-card"
       data-task-id={task.id}
+      data-status={task.status}
       onClick={() => onClick?.(task)}
       role="button"
       tabIndex={0}

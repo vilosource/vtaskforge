@@ -1,0 +1,475 @@
+/* ============================================================
+   components.css — Badges, buttons, forms, LiveIndicator,
+                    EventTimeline, workplan list
+   ============================================================ */
+
+/* ============================================================
+   Status badges
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+/* Task status variants */
+.badge-draft {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.badge-review {
+  background: #fefce8;
+  color: #854d0e;
+  border-color: #fde047;
+}
+
+.badge-ready {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.badge-in-progress {
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-color: #93c5fd;
+}
+
+.badge-attention {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.badge-done {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.badge-deferred {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.badge-cancelled {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+/* Workplan-level status badges */
+.badge-active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.badge-archived {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.badge-completed {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: var(--min-touch);
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.1s ease, opacity 0.1s ease, box-shadow 0.1s ease;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-doing);
+  outline-offset: 2px;
+}
+
+/* Primary */
+.btn-primary {
+  background: var(--color-doing);
+  color: #ffffff;
+  border-color: var(--color-doing);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+/* Secondary */
+.btn-secondary {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn-secondary:not(:disabled):hover {
+  background: var(--color-bg-hover);
+  border-color: #d1d5db;
+}
+
+/* Success */
+.btn-success {
+  background: var(--color-done);
+  color: #ffffff;
+  border-color: var(--color-done);
+}
+
+.btn-success:not(:disabled):hover {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+/* Danger */
+.btn-danger {
+  background: var(--color-attention);
+  color: #ffffff;
+  border-color: var(--color-attention);
+}
+
+.btn-danger:not(:disabled):hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+/* Warning */
+.btn-warning {
+  background: var(--color-review);
+  color: #713f12;
+  border-color: var(--color-review);
+}
+
+.btn-warning:not(:disabled):hover {
+  background: #ca8a04;
+  border-color: #ca8a04;
+}
+
+/* ============================================================
+   Action buttons
+   ============================================================ */
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.action-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.action-input-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.action-input {
+  flex: 1;
+  min-width: 160px;
+  height: var(--min-touch);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  transition: border-color 0.1s ease, box-shadow 0.1s ease;
+}
+
+.action-input:focus {
+  outline: none;
+  border-color: var(--color-doing);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* ============================================================
+   Add Note form
+   ============================================================ */
+
+.add-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.add-note-actor {
+  height: var(--min-touch);
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  transition: border-color 0.1s ease, box-shadow 0.1s ease;
+}
+
+.add-note-actor:focus {
+  outline: none;
+  border-color: var(--color-doing);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.add-note-input {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  resize: vertical;
+  transition: border-color 0.1s ease, box-shadow 0.1s ease;
+  line-height: 1.5;
+}
+
+.add-note-input:focus {
+  outline: none;
+  border-color: var(--color-doing);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.add-note-error {
+  font-size: 0.8125rem;
+  color: var(--color-error-text);
+  padding: 0.375rem 0.5rem;
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius);
+}
+
+/* ============================================================
+   LiveIndicator
+   ============================================================ */
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+}
+
+.live-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Connected — green dot, pulsing */
+.live-indicator--connected {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.live-indicator--connected .live-indicator-dot {
+  background: var(--color-done);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Reconnecting — yellow dot */
+.live-indicator--reconnecting {
+  color: #713f12;
+  background: #fefce8;
+  border-color: #fde047;
+}
+
+.live-indicator--reconnecting .live-indicator-dot {
+  background: var(--color-review);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+/* Disconnected — grey dot */
+.live-indicator--disconnected {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+}
+
+.live-indicator--disconnected .live-indicator-dot {
+  background: var(--color-draft);
+}
+
+/* ============================================================
+   Event timeline
+   ============================================================ */
+
+.event-timeline {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+/* Vertical guide line */
+.event-timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--color-border);
+  z-index: 0;
+}
+
+.event-timeline-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.375rem 0 0.375rem 1.25rem;
+  font-size: 0.8125rem;
+  position: relative;
+}
+
+/* Dot on the timeline */
+.event-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.55rem;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-border);
+  border: 1.5px solid var(--color-bg);
+  z-index: 1;
+}
+
+.event-timeline-time {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  font-size: 0.75rem;
+  min-width: 11ch;
+}
+
+.event-timeline-type {
+  color: var(--color-text);
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.event-timeline-status-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.event-timeline-empty {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+/* ============================================================
+   Workplan list page
+   ============================================================ */
+
+.workplan-list {
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.workplan-list h1 {
+  margin-bottom: 1.25rem;
+}
+
+.workplan-list table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+.workplan-list thead {
+  background: var(--color-bg-secondary);
+}
+
+.workplan-list th {
+  padding: 0.625rem 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.workplan-list td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+.workplan-list tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.workplan-list tbody tr:hover {
+  background: var(--color-bg-hover);
+}
+
+.workplan-list tbody tr td:first-child a {
+  font-weight: 500;
+}
