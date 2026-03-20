@@ -48,6 +48,11 @@ class Task(NanoIDMixin, TimestampMixin):
     claim_timeout = models.DurationField(null=True, blank=True, default=None)
     claim_expires_at = models.DateTimeField(null=True, blank=True, default=None)
     created_by = models.CharField(max_length=255, blank=True, default="")
+    spec = models.TextField(blank=True, default="")
+    agent_model = models.CharField(max_length=30, blank=True, default="")
+    test_command = models.JSONField(default=dict, blank=True)
+    judge = models.BooleanField(default=False)
+    isolation = models.CharField(max_length=20, blank=True, default="sequential")
 
     class Meta:
         ordering = ["created_at"]

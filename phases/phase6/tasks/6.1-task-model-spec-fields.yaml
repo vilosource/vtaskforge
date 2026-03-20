@@ -1,0 +1,77 @@
+id: "6.1"
+name: "Task model — add spec fields + migration"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Add five new fields to the Task model to store the full implementation
+  contract and operational metadata that the supervisor and agents need.
+
+  Currently these values live only in the YAML spec files on the filesystem.
+  After this change, they will be first-class database fields.
+
+  New fields:
+  - spec (TextField, blank) — the full YAML implementation contract as text
+  - agent_model (CharField, max 30, blank) — routing hint: sonnet, opus, haiku
+  - test_command (JSONField, default dict, blank) — verification commands, e.g. {"unit": "pytest tests/"}
+  - judge (BooleanField, default False) — whether judge review is required
+  - isolation (CharField, max 20, default "sequential") — sequential or parallel
+
+files:
+  create:
+    - src/tasks/migrations/XXXX_add_spec_fields.py
+  modify:
+    - src/tasks/models.py
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/tasks/models.py — current Task model
+    - src/tasks/migrations/ — existing migration numbering
+
+    Step 1: Add fields to Task model in src/tasks/models.py
+    Add after the `created_by` field:
+
+    ```python
+    spec = models.TextField(blank=True, default="")
+    agent_model = models.CharField(max_length=30, blank=True, default="")
+    test_command = models.JSONField(default=dict, blank=True)
+    judge = models.BooleanField(default=False)
+    isolation = models.CharField(max_length=20, blank=True, default="sequential")
+    ```
+
+    Step 2: Generate migration
+    ```bash
+    docker compose exec api python src/manage.py makemigrations tasks
+    ```
+
+    Step 3: Apply migration
+    ```bash
+    docker compose exec api python src/manage.py migrate
+    ```
+
+    Step 4: Verify
+    ```bash
+    docker compose exec api python -c "from tasks.models import Task; print([f.name for f in Task._meta.get_fields()])"
+    ```
+
+  constraints:
+    - All new fields must have defaults so existing data is unaffected
+    - Do not change any existing fields
+    - spec is TextField (not JSONField) because it stores raw YAML text
+    - "test_command is JSONField because it has structure (e.g. unit, integration keys)"
+  references:
+    - src/tasks/models.py
+    - src/core/mixins.py
+
+acceptance_criteria:
+  - "Task model has spec, agent_model, test_command, judge, isolation fields"
+  - "Migration applies cleanly to existing database with data"
+  - "Existing tasks retain all their current field values"
+  - "docker compose exec api pytest tests/tasks/ passes"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/"

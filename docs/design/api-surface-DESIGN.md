@@ -268,6 +268,7 @@ Request body:
           "title": "Implement JWT validation",
           "description": "...",
           "acceptance_criteria": ["..."],
+          "spec": "full YAML/JSON implementation contract (references, files, constraints, test commands)",
           "requires": ["executor"]
         }
       ]

@@ -1,0 +1,70 @@
+id: "6.6"
+name: "Re-import Phase 5 with specs"
+depends_on: ["6.4"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Re-import Phase 5 tasks into the dogfood instance so they have the full
+  spec content stored in the database. This is a data task, not a code change.
+
+  The existing Phase 5 tasks in dogfood were imported before the spec field
+  existed, so their spec/agent_model/test_command/judge/isolation fields are
+  all empty defaults.
+
+  Delete the existing Phase 5 phase from the vtaskforge workplan in dogfood,
+  then re-import using the updated CLI.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Identify the existing Phase 5 phase ID in dogfood
+    ```bash
+    vtf config set api_url http://localhost:8001
+    vtf workplan list
+    # Find the vtaskforge workplan ID
+    # Then list its phases to find Phase 5
+    ```
+
+    Step 2: Delete existing Phase 5 tasks and phase
+    Use the API directly since the CLI may not have a delete command:
+    ```bash
+    curl -X DELETE http://localhost:8001/v1/phases/<phase-5-id>/ \
+      -H "Authorization: Token <token>"
+    ```
+    Or use Django admin at http://localhost:8001/admin/
+
+    Step 3: Re-import Phase 5 with specs
+    ```bash
+    vtf config set api_url http://localhost:8001
+    vtf import phases/phase5/ --workplan <vtaskforge-workplan-id>
+    ```
+
+    Step 4: Verify specs are stored
+    ```bash
+    vtf task list --phase <new-phase-5-id>
+    # Pick a task and check its spec field via API:
+    curl http://localhost:8001/v1/tasks/<task-id>/ -H "Authorization: Token <token>" | python3 -m json.tool
+    ```
+    Confirm the spec field contains the full YAML content.
+
+  constraints:
+    - Only affects the dogfood instance (port 8001), not dev (port 8000)
+    - Do not delete other phases or workplans
+    - Task IDs will change (new nanoids) — this is expected
+  references:
+    - phases/phase5/tasks/
+    - phases/phase5/dag.yaml
+
+acceptance_criteria:
+  - "Phase 5 tasks in dogfood have non-empty spec fields"
+  - "Phase 5 tasks have correct agent_model, test_command, judge, isolation values"
+  - "Other phases and workplans in dogfood are unaffected"
+  - "Task count matches the original Phase 5 (6 tasks)"
+
+test_command: {}

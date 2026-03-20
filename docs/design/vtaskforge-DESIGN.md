@@ -115,6 +115,7 @@ Task:
   # Agent context (core fields on the task itself)
   description: "kb load and scorer.ts don't filter by zone..."
   acceptance_criteria: ["archived entries excluded from kb load", "tests pass"]
+  spec: <full implementation contract as YAML/JSON text>  # see "Task Spec" decision below
   notes: []
 
   # Review flags (null = inherit from phase → workplan)
@@ -446,6 +447,140 @@ New status: **`needs_attention`** — the executing agent gave up and needs help
 
 Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 
+### 7. ~~Task Spec as Stored Content~~ (Resolved)
+
+**Decided: The full task spec is stored in the task record, not on the filesystem.**
+
+The task `spec` field holds the complete implementation contract — references, file lists, constraints, test commands, implementation approach — as structured text (YAML or JSON). This is what an agent needs to execute the task cold.
+
+**Rationale:** Phase spec YAML files in the git repo are an *authoring/intake format*. Once imported via `vtf import` or the bulk API, vtf is the source of truth. A remote agent that claims a task via the API must be able to get the full spec without cloning a repo or accessing a filesystem.
+
+**Impact:**
+- Bulk import stores `spec` content alongside `title`, `description`, `acceptance_criteria`
+- `GET /v1/tasks/:id` returns the `spec` field
+- Web UI task detail modal can render the spec in a collapsible panel
+- Supervisor agent reads the spec from the API instead of the filesystem
+
+### 8. ~~System Boundaries — vtf Scope~~ (Resolved)
+
+**Decided: vtf is a task coordination engine. Project-level concerns are out of scope.**
+
+vtf owns: workplans, phases, tasks, agents, events, links. It does not own projects, documents, or cross-workplan grouping. These are concerns for a separate project management application that consumes vtf's API.
+
+| System | Owns | Consumes |
+|--------|------|----------|
+| **vtf** | Workplans, phases, tasks, agents, events, links | Postgres, agents |
+| **Project layer** (future) | Projects, documents, cross-workplan context | vtf API, git, Jira, wiki |
+| **vf-agents** | Agent pool, sessions, telemetry | vtf API |
+
+**Design documents, architecture decisions, guides** — these are project-level artifacts. They can be referenced from vtf via the link system (type `doc`, target is a URL) but are not stored in vtf. The task `spec` field (decided above) is the exception: it is the implementation contract and belongs to the task.
+
+**Future: Project entity.** A grouping above Workplan for multi-workplan initiatives is anticipated but not built in vtf. A separate application can provide this by consuming vtf's API. vtf's API should remain generic enough to support this without needing awareness of the project concept.
+
+### 9. Distributed Agent Execution (Design Topic)
+
+**Status: Design — future work. Current implementation assumes all agents run inside the same Claude Code instance, sharing a single filesystem and git checkout. Distributed execution will be enabled when vf-agents (pool manager) is available.**
+
+#### Current Model (v1)
+
+All agents run locally as Claude Code subagents. The supervisor spawns executors in the same process, sharing the working tree. Task specs are stored in the vtf database and read via the API (see decision #7). No git branching, containers, or remote coordination needed.
+
+New task-level fields (`spec`, `agent_model`, `test_command`, `judge`, `isolation`) are implemented now because the supervisor already uses these values for dispatch and verification decisions — storing them in the DB replaces filesystem reads.
+
+Workplan-level fields (`repo_url`, `base_branch`) are deferred until distributed execution is needed.
+
+#### Target Execution Model (Future)
+
+```
+vtf API (coordination)
+  ↕
+vf-agents / Pool Manager (provisioning)
+  → spins up agent container or remote session
+  → agent claims task from vtf API
+  → agent gets spec, repo_url, base_branch from vtf
+  → agent clones repo, creates task branch, implements, pushes
+  → agent marks task complete with commit SHA / MR link
+  ↕
+CI/CD (verification, merge, deploy)
+```
+
+#### What vtf needs to provide
+
+For an agent to execute a task cold — without filesystem access, shared state, or human guidance — vtf must serve everything through the API.
+
+**Workplan-level fields (future — deferred until distributed execution):**
+
+| Field | Purpose |
+|-------|---------|
+| `repo_url` | Git repository URL for this workplan's codebase |
+| `base_branch` | Branch to work from (default: `main`) |
+
+**Task-level fields (v1 — implement now):**
+
+| Field | Purpose | Queryable? |
+|-------|---------|-----------|
+| `spec` | Full implementation contract (YAML/JSON text) | No — blob |
+| `agent_model` | Routing hint for pool manager (e.g., `sonnet`, `opus`) | Yes — pool manager filters on this |
+| `test_command` | Verification command(s) for Gate 1a | No — used by executor |
+| `judge` | Whether judge review is required after completion | Yes — supervisor uses this |
+| `isolation` | `sequential` or `parallel` — whether task can run concurrently | Yes — supervisor uses this |
+
+**Task result fields (via existing link system — no schema change):**
+
+| Link type | Created by | Purpose |
+|-----------|-----------|---------|
+| `commit` | Agent | Git commit SHA of the implementation |
+| `mr` | Agent | Merge request URL |
+| `branch` | Agent (new link type) | Task branch name (e.g., `task/5.1-fix-invalid-date`) |
+
+#### Git Workflow for Distributed Agents
+
+Each agent works in isolation on its own branch:
+
+1. **Claim task** → `POST /v1/tasks/:id/claim`
+2. **Read spec** → `GET /v1/tasks/:id` (includes `spec`, workplan `repo_url`, `base_branch`)
+3. **Clone & branch** → `git clone <repo_url>`, `git checkout -b task/<id>-<slug> <base_branch>`
+4. **Implement** → follow `spec.implementation.approach`
+5. **Test** → run `spec.test_command` locally
+6. **Push & MR** → `git push`, create MR
+7. **Complete** → `POST /v1/tasks/:id/complete` with commit/MR links
+
+#### Parallel Execution and File Conflicts
+
+The `isolation` field on tasks controls whether a task can run concurrently with others:
+
+- `sequential` — must wait for prior tasks to complete and merge before starting. The agent branches from a base that includes prior task results.
+- `parallel` — can run concurrently with other `parallel` tasks. Must touch non-overlapping files.
+
+The `files.create`, `files.modify`, and `files.affected` fields in the spec define the task's file scope. The supervisor (or pool manager) can use these to detect potential conflicts before dispatching parallel tasks.
+
+**Merge ordering for parallel tasks:** When multiple parallel tasks complete, they are merged in dependency order. If task A and B are parallel (no dependency), merge order is arbitrary. If task C depends on A, C's branch must be rebased onto the merge result of A before merging.
+
+#### Responsibility Boundaries
+
+| Concern | vtf | vf-agents (pool manager) | CI/CD |
+|---------|-----|--------------------------|-------|
+| Task spec, status, coordination | X | | |
+| Repo URL, base branch metadata | X | | |
+| Agent provisioning, containers | | X | |
+| Git credentials, clone, branching | | X | |
+| Test execution in agent environment | | X | |
+| Branch name, commit SHA, MR URL | X (stores result) | X (creates them) | |
+| MR merge, deployment | | | X |
+| Integration testing (combined result) | | | X |
+
+vtf does not manage git operations, containers, or credentials. It stores enough metadata that the pool manager and agents can act autonomously. The pool manager does not make task coordination decisions — it provisions and monitors agents. CI/CD handles the final integration, merge, and deployment steps.
+
+#### Sequential Task Chaining
+
+When tasks are sequential (5.1 → 5.2 → 5.3), each task's branch must include the results of its predecessors. Two approaches:
+
+**A. Stacking branches:** Task 5.2 branches from task 5.1's branch (before merge to base). Simple but creates long branch chains.
+
+**B. Merge-then-branch:** Task 5.1 merges to base branch first. Task 5.2 branches from updated base. Cleaner but requires waiting for merge.
+
+Approach B is preferred — it keeps branches short-lived and avoids rebase cascades. The pool manager waits for the prior task's MR to merge before dispatching the next sequential task. vtf signals this via task dependencies and status transitions.
+
 ## Related Documents
 
 - [actor-model-DESIGN.md](actor-model-DESIGN.md) — Actor types, system boundary, development team model, interaction flows
@@ -461,9 +596,12 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 
 ## Not Yet Decided
 
-- API surface / RPC methods
-- Event types
-- Postgres schema
+- ~~API surface / RPC methods~~ → see [api-surface-DESIGN.md](api-surface-DESIGN.md)
+- ~~Event types~~ → see [api-surface-DESIGN.md](api-surface-DESIGN.md)
+- ~~Web UI framework~~ → React SPA (implemented Phase 4)
+- Postgres schema (formal migration plan)
 - Agent registration and identity
 - Authentication / authorization for remote agents
-- Web UI framework (React, Vue, Svelte, etc.)
+- Git credential management for distributed agents (pool manager concern)
+- MR merge strategy and CI/CD integration
+- Integration testing across merged parallel task results

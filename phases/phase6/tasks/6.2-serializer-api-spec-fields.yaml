@@ -1,0 +1,62 @@
+id: "6.2"
+name: "Serializer/API — expose spec fields"
+depends_on: ["6.1"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Expose the five new Task fields (spec, agent_model, test_command, judge,
+  isolation) in the API serializers so they are returned by GET /v1/tasks/:id
+  and accepted by PATCH /v1/tasks/:id.
+
+  The spec field should always be included in the detail serializer (not
+  behind ?expand=) because it is core task content, not a related object.
+
+files:
+  create: []
+  modify:
+    - src/tasks/serializers.py
+  affected:
+    - src/tasks/views.py
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/tasks/serializers.py — TaskSerializer and TaskDetailSerializer
+    - src/tasks/views.py — TaskViewSet, to understand which serializer is used where
+
+    Step 1: Add fields to TaskSerializer
+    In the Meta.fields list, add: 'spec', 'agent_model', 'test_command', 'judge', 'isolation'
+
+    Step 2: Verify TaskDetailSerializer inherits them
+    TaskDetailSerializer extends TaskSerializer, so the fields should cascade.
+    Confirm this by reading the class definition.
+
+    Step 3: Write tests
+    Add tests to verify:
+    - GET /v1/tasks/:id returns the new fields
+    - PATCH /v1/tasks/:id accepts the new fields
+    - List endpoint includes the new fields (or a subset — spec may be large)
+
+    Consider: for the list endpoint (GET /v1/tasks), you may want to exclude
+    the spec field to keep responses small. If so, create a TaskListSerializer
+    that omits spec, and use it in the list action.
+
+  constraints:
+    - spec field is read-write (can be set via PATCH)
+    - All five fields must appear in GET /v1/tasks/:id response
+    - Do not break existing API consumers — all existing fields must remain
+  references:
+    - src/tasks/serializers.py
+    - src/tasks/views.py
+    - tests/tasks/test_serializers.py
+
+acceptance_criteria:
+  - "GET /v1/tasks/:id returns spec, agent_model, test_command, judge, isolation"
+  - "PATCH /v1/tasks/:id can update spec, agent_model, test_command, judge, isolation"
+  - "Existing API responses are unchanged (no field removals or renames)"
+  - "docker compose exec api pytest tests/tasks/ passes"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/"

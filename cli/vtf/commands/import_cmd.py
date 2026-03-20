@@ -46,9 +46,11 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
     task_specs = []
     if tasks_dir.exists():
         for yaml_file in sorted(tasks_dir.glob("*.yaml")):
+            raw_yaml = yaml_file.read_text()
             with open(yaml_file) as f:
                 spec = yaml.safe_load(f)
                 if spec:
+                    spec["_raw_yaml"] = raw_yaml
                     task_specs.append(spec)
 
     # Determine the phase ref from directory name
@@ -66,6 +68,11 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
             "title": spec["name"],
             "description": spec.get("description", ""),
             "acceptance_criteria": spec.get("acceptance_criteria", []),
+            "spec": spec.get("_raw_yaml", ""),
+            "agent_model": spec.get("agent_model", ""),
+            "test_command": spec.get("test_command", {}),
+            "judge": spec.get("judge", False),
+            "isolation": spec.get("isolation", "sequential"),
         }
         phase_tasks.append(task_entry)
 

@@ -1,0 +1,83 @@
+id: "6.4"
+name: "CLI import — pass raw YAML as spec"
+depends_on: ["6.3"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Update the CLI `vtf import` command to read the full YAML content of each
+  task spec file and pass it as the `spec` field in the import payload. Also
+  extract `agent_model`, `test_command`, `judge`, and `isolation` from the
+  YAML into their own fields.
+
+  Currently, the import command reads each task YAML but only extracts
+  title (from `name`), description, and acceptance_criteria. The rest of
+  the spec is discarded.
+
+files:
+  create: []
+  modify:
+    - cli/vtf/commands/import_cmd.py
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - cli/vtf/commands/import_cmd.py — current import logic
+    - phases/phase5/tasks/5.1-fix-invalid-date-timeline.yaml — example task spec to understand the YAML structure
+
+    Step 1: Store raw YAML as spec
+    After reading each task YAML file, store the original file content as a string.
+    The current code does yaml.safe_load() which parses into a dict — we also need
+    the raw text.
+
+    ```python
+    for yaml_file in sorted(tasks_dir.glob("*.yaml")):
+        raw_yaml = yaml_file.read_text()
+        with open(yaml_file) as f:
+            spec = yaml.safe_load(f)
+            if spec:
+                spec["_raw_yaml"] = raw_yaml
+                task_specs.append(spec)
+    ```
+
+    Step 2: Pass spec and extracted fields in the task entry
+    Update the task_entry dict construction:
+
+    ```python
+    task_entry = {
+        "ref": ref,
+        "title": spec["name"],
+        "description": spec.get("description", ""),
+        "acceptance_criteria": spec.get("acceptance_criteria", []),
+        "spec": spec.get("_raw_yaml", ""),
+        "agent_model": spec.get("agent_model", ""),
+        "test_command": spec.get("test_command", {}),
+        "judge": spec.get("judge", False),
+        "isolation": spec.get("isolation", "sequential"),
+    }
+    ```
+
+    Step 3: Verify with dry-run
+    ```bash
+    vtf import phases/phase6/ --dry-run
+    ```
+    Confirm the payload includes spec content.
+
+  constraints:
+    - Raw YAML is stored as-is (no re-serialization)
+    - Existing import behavior must not change for YAML files that lack the new fields
+    - The _raw_yaml key is internal only, never sent to the API
+  references:
+    - cli/vtf/commands/import_cmd.py
+    - phases/phase5/tasks/5.1-fix-invalid-date-timeline.yaml
+
+acceptance_criteria:
+  - "vtf import --dry-run shows spec content in the payload for each task"
+  - "vtf import stores the full raw YAML in the spec field of each created task"
+  - "agent_model, test_command, judge, isolation are extracted and stored as separate fields"
+  - "Import of a phase directory without the new YAML fields still works"
+
+test_command:
+  unit: "cd cli && pytest tests/ -v"

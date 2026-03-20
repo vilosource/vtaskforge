@@ -1,0 +1,73 @@
+id: "6.3"
+name: "Bulk import — accept and store spec fields"
+depends_on: ["6.2"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Update the bulk import endpoint (POST /v1/bulk/import) and the
+  perform_bulk_import function to accept and store the five new task fields:
+  spec, agent_model, test_command, judge, isolation.
+
+  These fields are optional in the import payload — existing import payloads
+  without them must continue to work.
+
+files:
+  create: []
+  modify:
+    - src/core/bulk_import.py
+  affected:
+    - src/core/views.py
+    - tests/core/test_bulk_import.py
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/core/bulk_import.py — perform_bulk_import function
+    - src/core/views.py — BulkImportView (validate payload structure)
+    - tests/core/test_bulk_import.py — existing test patterns
+
+    Step 1: Update perform_bulk_import in src/core/bulk_import.py
+    In the Task.objects.create() call inside the task loop, add:
+
+    ```python
+    task = Task.objects.create(
+        phase=phase,
+        workplan=workplan,
+        title=task_data["title"],
+        description=task_data.get("description", ""),
+        acceptance_criteria=task_data.get("acceptance_criteria", []),
+        requires=task_data.get("requires", []),
+        spec=task_data.get("spec", ""),
+        agent_model=task_data.get("agent_model", ""),
+        test_command=task_data.get("test_command", {}),
+        judge=task_data.get("judge", False),
+        isolation=task_data.get("isolation", "sequential"),
+    )
+    ```
+
+    Step 2: Add tests
+    Add a test that imports a payload with spec fields and verifies they are
+    stored correctly on the created Task objects.
+
+    Add a test that imports a payload WITHOUT spec fields and verifies it
+    still works (backwards compatibility).
+
+  constraints:
+    - All new fields are optional in the import payload
+    - Existing import payloads without these fields must continue to work
+    - Do not change the import response format
+  references:
+    - src/core/bulk_import.py
+    - src/core/views.py
+    - tests/core/test_bulk_import.py
+
+acceptance_criteria:
+  - "Import payload with spec, agent_model, test_command, judge, isolation creates tasks with those values"
+  - "Import payload without new fields creates tasks with defaults"
+  - "Existing bulk import tests still pass"
+  - "docker compose exec api pytest tests/core/ passes"
+
+test_command:
+  unit: "docker compose exec api pytest tests/core/"

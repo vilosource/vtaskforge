@@ -1,0 +1,108 @@
+id: "6.5"
+name: "Web UI — task detail spec viewer"
+depends_on: ["6.2"]
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Enhance the TaskDetail modal in the web UI to display the new task fields:
+  spec (as a collapsible YAML code block), agent_model, test_command, judge,
+  and isolation (as metadata badges/chips).
+
+  This gives humans a way to inspect exactly what an agent will receive when
+  it claims this task.
+
+files:
+  create: []
+  modify:
+    - web/src/components/TaskDetail.tsx
+    - web/src/api/tasks.ts
+  affected: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - web/src/components/TaskDetail.tsx — current task detail modal layout
+    - web/src/api/tasks.ts — Task and TaskDetail TypeScript interfaces
+
+    Step 1: Update TypeScript interfaces in web/src/api/tasks.ts
+    Add to the Task interface:
+    ```typescript
+    spec?: string;
+    agent_model?: string;
+    test_command?: Record<string, string>;
+    judge?: boolean;
+    isolation?: string;
+    ```
+
+    Step 2: Add metadata badges to TaskDetail.tsx
+    Below the existing status badge area, add a row of small chips/badges:
+    - Agent model (e.g., "sonnet") — only if set
+    - Isolation mode (e.g., "sequential") — only if set
+    - Judge required (e.g., "Judge: Yes") — only if true
+    - Test command — show command name, e.g. "unit: pytest tests/"
+
+    Style as small, muted badges similar to status badges.
+
+    Step 3: Add collapsible spec section
+    Below the description and acceptance criteria, add a "Spec" section:
+    - Collapsed by default (click header to expand)
+    - Renders spec content in a <pre> block with monospace font
+    - Only shown if spec is non-empty
+    - Header shows "Spec" with a collapse/expand indicator (▸/▾)
+
+    ```typescript
+    const [specExpanded, setSpecExpanded] = useState(false);
+
+    {task.spec && (
+      <div style={{ marginTop: 16 }}>
+        <div
+          onClick={() => setSpecExpanded(!specExpanded)}
+          style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#555' }}
+        >
+          {specExpanded ? '▾' : '▸'} Spec
+        </div>
+        {specExpanded && (
+          <pre style={{
+            background: '#f5f5f5',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 12,
+            lineHeight: 1.5,
+            overflow: 'auto',
+            maxHeight: 400,
+            marginTop: 8,
+          }}>
+            {task.spec}
+          </pre>
+        )}
+      </div>
+    )}
+    ```
+
+    Step 4: Add tests
+    - Test: metadata badges render when fields are set
+    - Test: metadata badges don't render when fields are empty/default
+    - Test: spec section renders collapsed, expands on click
+    - Test: spec section hidden when spec is empty
+
+  constraints:
+    - Spec section is collapsed by default (don't overwhelm the UI)
+    - Only show fields that have non-default values
+    - Do not change existing TaskDetail layout or behavior
+    - No external syntax highlighting library — plain <pre> is sufficient for v1
+  references:
+    - web/src/components/TaskDetail.tsx
+    - web/src/api/tasks.ts
+    - web/src/components/EventTimeline.tsx — style reference
+
+acceptance_criteria:
+  - "Task detail shows agent_model, isolation, judge badges when values are set"
+  - "Task detail shows collapsible Spec section when spec is non-empty"
+  - "Spec section is collapsed by default and expands on click"
+  - "Task detail is unchanged for tasks without the new fields"
+  - "cd web && npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run"

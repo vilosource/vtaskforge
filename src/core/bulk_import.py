@@ -74,6 +74,11 @@ def perform_bulk_import(payload):
                     description=task_data.get("description", ""),
                     acceptance_criteria=task_data.get("acceptance_criteria", []),
                     requires=task_data.get("requires", []),
+                    spec=task_data.get("spec", ""),
+                    agent_model=task_data.get("agent_model", ""),
+                    test_command=task_data.get("test_command", {}),
+                    judge=task_data.get("judge", False),
+                    isolation=task_data.get("isolation", "sequential"),
                 )
                 ref_map[task_ref] = task.id
                 ref_type_map[task_ref] = "task"

@@ -31,6 +31,11 @@ class TaskSerializer(serializers.ModelSerializer):
             "claim_timeout",
             "claim_expires_at",
             "created_by",
+            "spec",
+            "agent_model",
+            "test_command",
+            "judge",
+            "isolation",
             "created_at",
             "updated_at",
         ]

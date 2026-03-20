@@ -1,0 +1,82 @@
+id: "6.7"
+name: "Supervisor agent — read spec from API"
+depends_on: ["6.4"]
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Update the vtf-supervisor agent definition to read task specs from the
+  vtf API instead of the filesystem. Currently the supervisor reads YAML
+  files from the phases/ directory and pastes them into the executor prompt.
+  After this change, it reads the spec field from the task API response.
+
+  This is a prompt/configuration change to the agent definition file,
+  not a code change to the vtf application.
+
+files:
+  create: []
+  modify:
+    - ~/.claude/agents/vtf-supervisor.md
+  affected:
+    - ~/.claude/agents/vtf-executor.md
+
+implementation:
+  approach: |
+    Read these files first:
+    - ~/.claude/agents/vtf-supervisor.md — current supervisor agent definition
+    - ~/.claude/agents/vtf-executor.md — executor agent definition (to understand what it expects)
+
+    Step 1: Update the Executor Dispatch template in vtf-supervisor.md
+    Change from reading a YAML file to reading from the API:
+
+    Current approach:
+    ```
+    ## Task spec
+    [FULL YAML CONTENT read from filesystem]
+    ```
+
+    New approach:
+    ```
+    ## Task spec
+    Read the spec from: vtf task show <id> --json | jq -r '.spec'
+    Or via API: GET /v1/tasks/<id>/ — the spec field contains the full YAML.
+    ```
+
+    Step 2: Update the Phase Execution Loop
+    Change step 4 "Spec Reading" from:
+    ```
+    Read task YAML from phase directory
+    ```
+    To:
+    ```
+    Read task spec from API: vtf task show <id> --json
+    The .spec field contains the full implementation contract.
+    ```
+
+    Step 3: Update the executor dispatch prompt template
+    Instead of pasting [FULL YAML CONTENT], the supervisor should:
+    - Fetch the task via `vtf task show <id> --json`
+    - Extract the spec field
+    - Pass it to the executor agent
+
+    Step 4: Remove filesystem assumptions
+    Remove any references to reading YAML files from phase directories.
+    The supervisor should be able to operate purely from the vtf API.
+
+  constraints:
+    - Do not change the executor agent's expectations — it still receives the full spec as text
+    - The supervisor must still be able to read task metadata (agent_model, judge, isolation) for dispatch decisions
+    - vtf CLI must support `vtf task show <id> --json` (verify this works)
+  references:
+    - ~/.claude/agents/vtf-supervisor.md
+    - ~/.claude/agents/vtf-executor.md
+
+acceptance_criteria:
+  - "Supervisor agent reads task specs from vtf API, not filesystem"
+  - "Executor agent receives the same spec content as before"
+  - "Supervisor uses agent_model field from API to select executor model"
+  - "Supervisor uses judge field from API to decide whether to dispatch judge"
+  - "No references to filesystem phase directories remain in supervisor agent"
+
+test_command: {}
