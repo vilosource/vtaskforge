@@ -1,6 +1,6 @@
 # Phase 2 — Auth, Claim Expiry, Bulk Import, CLI
 
-Status: Planning
+Status: Complete (2026-03-20)
 
 ## Goal
 

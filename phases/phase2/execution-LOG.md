@@ -58,3 +58,37 @@ Tracks issues, observations, and metrics per task for the Phase 2 retrospective.
   - First triple parallel execution. Zero file conflicts despite all modifying cli.py.
   - Agent register command correctly creates unauthenticated client and saves returned token to config.
   - Process observation: parallel CLI command tasks are ideal candidates — each is an isolated command module with its own test file. The only shared file (cli.py) gets a single line added per command.
+
+## Task 2.9 — CLI import command
+
+- **Agent**: Sonnet
+- **Gate 1a (CLI tests)**: PASS — 112/112
+- **Gate 1b (Django tests)**: PASS — 608/608
+- **Spec deviations**: None
+- **Notes**: Reads PHASE.md, dag.yaml, tasks/*.yaml. Converts to bulk import JSON. --dry-run works.
+
+## Task 2.10 — Black-box test suite
+
+- **Results**: 36/38 passed across 4 scenarios
+- **Scenarios**:
+  - full-lifecycle: 16/16 PASS
+  - unhappy-paths: 7/7 PASS
+  - review-rejection: 10/11 (1 FAIL — tester error, not bug)
+  - agent-tag-matching: 3/4 (1 PARTIAL — design observation)
+- **Findings**:
+  - **False positive (review-rejection step 10)**: Tester called /submit/ instead of /resubmit/ on a changes_requested task. Manually verified /resubmit/ correctly honors review_return_to. Tester scenario needs fixing, not the API.
+  - **Design observation (tag matching)**: Claim endpoint checks tags from request body, not from agent's registered tags in DB. This is by design (spec shows tags in claim request body), but means tag registration is informational — no enforcement on claims. Valid concern for production but not a Phase 2 bug.
+
+---
+
+## Phase 2 Summary
+
+- **Total tasks**: 10
+- **Django tests**: 608
+- **CLI tests**: 112
+- **Total tests**: 720
+- **Parallel executions**: 2 (Step 3: 2.4||2.5, Step 4: 2.6||2.7||2.8)
+- **Merge conflicts**: 0
+- **Black-box scenarios**: 36/38 (1 tester error, 1 design observation)
+- **Agent model**: Sonnet for all tasks
+- **Retries needed**: 0
