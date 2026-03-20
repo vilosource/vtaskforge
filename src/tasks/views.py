@@ -11,6 +11,7 @@ from workplans.models import Phase
 
 from .exceptions import InvalidTransition
 from .models import Note, Task
+from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskSerializer
 from .state_machine import perform_transition
 
@@ -41,7 +42,7 @@ class TaskViewSet(ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
-        qs = Task.objects.all()
+        qs = Task.objects.select_related("phase", "workplan").all()
         params = self.request.query_params
 
         task_status = params.get("status")
@@ -77,10 +78,12 @@ class TaskViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
-        """draft -> todo (review flag logic added in 1.11, always go to todo for now)."""
+        """draft -> pending_start_review (if needs_review_before_start) or todo."""
         task = self.get_object()
+        before_start, _ = get_effective_review_flags(task)
+        target = "pending_start_review" if before_start else "todo"
         try:
-            perform_transition(task, "todo", triggered_by="submit")
+            perform_transition(task, target, triggered_by="submit")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -157,10 +160,12 @@ class TaskViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
-        """doing -> done (review flag logic added in 1.11, always go to done for now)."""
+        """doing -> pending_completion_review (if needs_review_on_completion) or done."""
         task = self.get_object()
+        _, on_completion = get_effective_review_flags(task)
+        target = "pending_completion_review" if on_completion else "done"
         try:
-            perform_transition(task, "done", triggered_by="complete")
+            perform_transition(task, target, triggered_by="complete")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
