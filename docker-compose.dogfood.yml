@@ -20,6 +20,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+      secrets:
+        - npmrc
     ports:
       - "8001:8000"
     depends_on:
@@ -55,6 +57,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+      secrets:
+        - npmrc
     command: celery -A vtaskforge worker -l info
     depends_on:
       dogfood-db:
@@ -71,6 +75,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
+      secrets:
+        - npmrc
     command: celery -A vtaskforge beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     depends_on:
       dogfood-db:
@@ -85,3 +91,7 @@ services:
 
 volumes:
   dogfood-pgdata:
+
+secrets:
+  npmrc:
+    file: ~/.npmrc

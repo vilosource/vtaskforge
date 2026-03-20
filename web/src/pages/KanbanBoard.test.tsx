@@ -117,7 +117,6 @@ describe('KanbanBoard', () => {
       expect(screen.getByText('Draft Task')).toBeInTheDocument();
     });
 
-    const draftCol = screen.getByTestId ? null : document.querySelector('[data-column="draft"]');
     expect(document.querySelector('[data-column="draft"]')).toBeInTheDocument();
     expect(document.querySelector('[data-column="review"]')).toBeInTheDocument();
     expect(document.querySelector('[data-column="ready"]')).toBeInTheDocument();
@@ -152,7 +151,6 @@ describe('KanbanBoard', () => {
     const doneColumn = document.querySelector('[data-column="done"]');
     expect(doneColumn?.querySelector('[data-task-id="task-6"]')).toBeInTheDocument();
 
-    void draftCol;
   });
 
   it('hides deferred and cancelled tasks by default', async () => {

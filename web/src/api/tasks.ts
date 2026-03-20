@@ -51,7 +51,7 @@ export interface TaskLink {
   created_at: string;
 }
 
-export interface TaskDetail extends Task {
+export interface TaskDetail extends Omit<Task, 'notes'> {
   links: TaskLink[];
   reviews: TaskReview[];
   events: TaskEvent[];
