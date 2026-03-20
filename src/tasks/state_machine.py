@@ -1,0 +1,86 @@
+from tasks.exceptions import InvalidTransition
+
+TERMINAL_STATUSES = {"done", "cancelled"}
+
+NON_TERMINAL_STATUSES = {
+    "draft", "pending_start_review", "todo", "doing",
+    "pending_completion_review", "changes_requested",
+    "needs_attention", "blocked", "deferred"
+}
+
+VALID_TRANSITIONS = {
+    "draft": [
+        "pending_start_review",  # needs_review_before_start = true
+        "todo",                  # needs_review_before_start = false
+        "cancelled",
+        "deferred",
+    ],
+    "pending_start_review": [
+        "todo",                  # approved
+        "changes_requested",     # rejected
+        "cancelled",
+        "deferred",
+    ],
+    "todo": [
+        "doing",                 # claimed by agent
+        "blocked",
+        "cancelled",
+        "deferred",
+    ],
+    "doing": [
+        "pending_completion_review",  # needs_review_on_completion = true
+        "done",                       # needs_review_on_completion = false
+        "needs_attention",            # agent gave up
+        "blocked",
+        "cancelled",
+        "deferred",
+    ],
+    "pending_completion_review": [
+        "done",                  # approved
+        "changes_requested",     # rejected
+        "cancelled",
+        "deferred",
+    ],
+    "changes_requested": [
+        "pending_start_review",
+        "pending_completion_review",
+        "draft",                 # major rework
+        "cancelled",
+        "deferred",
+    ],
+    "needs_attention": [
+        "draft",
+        "todo",
+        "cancelled",
+        "deferred",
+    ],
+    "blocked": [
+        "todo",
+        "doing",
+        "cancelled",
+        "deferred",
+    ],
+    "deferred": [
+        "todo",
+        "cancelled",
+    ],
+    "cancelled": [],  # terminal
+    "done": [],       # terminal
+}
+
+
+def get_valid_transitions(current_status: str) -> list[str]:
+    return VALID_TRANSITIONS.get(current_status, [])
+
+
+def validate_transition(task, new_status: str) -> None:
+    valid = get_valid_transitions(task.status)
+    if new_status not in valid:
+        raise InvalidTransition(task.status, new_status, valid)
+
+
+def perform_transition(task, new_status: str, triggered_by: str = ""):
+    validate_transition(task, new_status)
+    task.status = new_status
+    task.save(update_fields=["status", "updated_at"])
+    return task
