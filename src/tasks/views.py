@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import mixins, status
 from rest_framework.decorators import action
@@ -91,38 +92,147 @@ class TaskViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def claim(self, request, pk=None):
-        """todo -> doing. Requires agent_id in body. Sets claim fields."""
-        task = self.get_object()
+        """todo -> doing. Atomic claim with tag matching, assignment, and dependency checks."""
         agent_id = request.data.get("agent_id")
+        agent_tags = request.data.get("tags", [])
         if not agent_id:
             return Response(
-                {"detail": "agent_id is required."},
+                {"error": {"code": "VALIDATION_ERROR", "message": "agent_id required"}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        try:
-            perform_transition(task, "doing", triggered_by=agent_id)
-        except InvalidTransition as exc:
-            return invalid_transition_response(exc)
 
-        now = timezone.now()
-        timeout = timedelta(minutes=DEFAULT_CLAIM_TIMEOUT_MINUTES)
-        task.claimed_by = agent_id
-        task.claimed_at = now
-        task.claim_expires_at = now + timeout
-        task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
+        with transaction.atomic():
+            try:
+                task = Task.objects.select_for_update().get(pk=pk)
+            except Task.DoesNotExist:
+                return Response(
+                    {"error": {"code": "NOT_FOUND", "message": "Task not found"}},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
-        try:
-            from events.models import TaskEvent
-            TaskEvent.objects.create(
-                task=task,
-                event_type="claimed",
-                data={"agent_id": agent_id},
-                triggered_by=agent_id,
+            # Status check
+            if task.status != "todo":
+                return Response(
+                    {
+                        "error": {
+                            "code": "ALREADY_CLAIMED",
+                            "message": "Task is not claimable",
+                            "details": {"current_status": task.status},
+                        }
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            # Assignment check
+            if task.assigned_to and task.assigned_to != agent_id:
+                return Response(
+                    {"error": {"code": "FORBIDDEN", "message": "Task assigned to another agent"}},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            # Tag matching — task.requires must be subset of agent_tags
+            if task.requires:
+                if not set(task.requires).issubset(set(agent_tags)):
+                    return Response(
+                        {
+                            "error": {
+                                "code": "VALIDATION_ERROR",
+                                "message": "Agent tags do not match task requirements",
+                                "details": {
+                                    "requires": task.requires,
+                                    "agent_tags": agent_tags,
+                                },
+                            }
+                        },
+                        status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    )
+
+            # Dependency check — all depends_on links must have target tasks in "done" status
+            from links.models import Link
+            depends_on_links = Link.objects.filter(
+                source_type="task", source_id=task.id, link_type="depends_on"
             )
-        except Exception:
-            pass
+            for link in depends_on_links:
+                try:
+                    dep_task = Task.objects.get(pk=link.target_id)
+                    if dep_task.status != "done":
+                        return Response(
+                            {
+                                "error": {
+                                    "code": "DEPENDENCY_UNMET",
+                                    "message": f"Dependency {link.target_id} not done",
+                                    "details": {
+                                        "dependency_id": link.target_id,
+                                        "dependency_status": dep_task.status,
+                                    },
+                                }
+                            },
+                            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        )
+                except Task.DoesNotExist:
+                    pass  # External dependency — skip
+
+            # All checks passed — perform claim
+            perform_transition(task, "doing", triggered_by=agent_id)
+            task.claimed_by = agent_id
+            task.claimed_at = timezone.now()
+            timeout = task.claim_timeout or timedelta(minutes=DEFAULT_CLAIM_TIMEOUT_MINUTES)
+            task.claim_expires_at = timezone.now() + timeout
+            task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
+
+            try:
+                from events.models import TaskEvent
+                TaskEvent.objects.create(
+                    task=task,
+                    event_type="claimed",
+                    data={"agent_id": agent_id},
+                    triggered_by=agent_id,
+                )
+            except Exception:
+                pass
 
         serializer = self.get_serializer(task)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def claimable(self, request):
+        """GET /v1/tasks/claimable?tags=executor,opus — tasks claimable by agent with given tags."""
+        tags_param = request.query_params.get("tags", "")
+        tags = [t for t in tags_param.split(",") if t] if tags_param else []
+        agent_id = request.query_params.get("agent_id", "")
+
+        tasks = Task.objects.filter(status="todo")
+
+        # Exclude tasks with unmet dependencies
+        from links.models import Link
+        task_ids_with_deps = Link.objects.filter(
+            source_type="task", link_type="depends_on"
+        ).values_list("source_id", flat=True)
+        unmet_task_ids = []
+        for tid in set(task_ids_with_deps):
+            deps = Link.objects.filter(source_type="task", source_id=tid, link_type="depends_on")
+            for dep in deps:
+                try:
+                    dep_task = Task.objects.get(pk=dep.target_id)
+                    if dep_task.status != "done":
+                        unmet_task_ids.append(tid)
+                        break
+                except Task.DoesNotExist:
+                    pass
+        tasks = tasks.exclude(id__in=unmet_task_ids)
+
+        # Filter by tags if provided — task.requires must be subset of provided tags
+        if tags:
+            filtered_ids = [t.id for t in tasks if not t.requires or set(t.requires).issubset(set(tags))]
+            tasks = tasks.filter(id__in=filtered_ids)
+
+        # Filter by assignment — exclude tasks assigned to other agents
+        if agent_id:
+            unassigned = tasks.filter(assigned_to__isnull=True) | tasks.filter(assigned_to="")
+            assigned_to_me = tasks.filter(assigned_to=agent_id)
+            tasks = Task.objects.filter(id__in=list(unassigned.values_list("id", flat=True)) + list(assigned_to_me.values_list("id", flat=True)))
+
+        serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])

@@ -139,20 +139,23 @@ class TestClaim:
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_claim_from_draft_returns_422(self, api_client, phase, workplan):
+    def test_claim_from_draft_returns_409(self, api_client, phase, workplan):
         task = make_task(phase, workplan, "draft")
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
-        assert_invalid_transition_error(response, "draft", "doing")
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
-    def test_claim_from_doing_returns_422(self, api_client, phase, workplan):
+    def test_claim_from_doing_returns_409(self, api_client, phase, workplan):
         task = make_task(phase, workplan, "doing")
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
-        assert_invalid_transition_error(response, "doing", "doing")
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
-    def test_claim_from_done_returns_422(self, api_client, phase, workplan):
+    def test_claim_from_done_returns_409(self, api_client, phase, workplan):
         task = make_task(phase, workplan, "done")
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-abc"}, format="json")
-        assert_invalid_transition_error(response, "done", "doing")
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
 
 # ---------------------------------------------------------------------------
