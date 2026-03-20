@@ -1,0 +1,91 @@
+id: "1.8"
+name: "Note model + endpoints"
+depends_on: ["1.6"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the Note model for append-only comments on tasks. Notes are distinct
+  from reviews — they are informal comments by any actor (human or agent),
+  while reviews are formal approve/reject decisions at review gates.
+
+  Notes live in the tasks app since they are task-specific. Endpoints are
+  nested under tasks: /v1/tasks/:id/notes.
+
+files:
+  create:
+    - tests/tasks/test_notes.py
+  modify:
+    - src/tasks/models.py
+    - src/tasks/serializers.py
+    - src/tasks/views.py
+    - src/tasks/urls.py
+
+implementation:
+  approach: |
+    Model: Add Note to src/tasks/models.py inheriting from NanoIDMixin
+    (NOT TimestampMixin — Note only has created_at, no updated_at since
+    notes are append-only). Fields:
+
+    - task: ForeignKey(Task, on_delete=CASCADE, related_name="notes")
+    - text: TextField()
+    - actor_id: CharField(max_length=255) — who wrote the note
+    - created_at: DateTimeField(auto_now_add=True)
+
+    Add __str__ returning truncated text.
+
+    Serializer: NoteSerializer as ModelSerializer in src/tasks/serializers.py.
+    - All fields exposed
+    - id, created_at are read-only
+    - task is read-only (set from URL path)
+
+    ViewSet: NoteViewSet in src/tasks/views.py
+    - This is a nested viewset under tasks
+    - Override get_queryset() to filter by task_id from URL kwargs
+    - Override perform_create() to set task from URL kwargs
+    - Only list and create actions (no retrieve, update, delete)
+    - Use mixins: CreateModelMixin, ListModelMixin, GenericViewSet
+
+    URLs: Add nested route in src/tasks/urls.py:
+    - path("tasks/<str:task_id>/notes/", NoteViewSet.as_view({"get": "list", "post": "create"}))
+    Or use the router + manual path.
+
+  constraints:
+    - Notes are append-only — no update or delete endpoints
+    - text field is required, cannot be blank
+    - actor_id is required
+    - Notes are ordered by created_at ascending (oldest first)
+    - Nested under task: POST /v1/tasks/{task_id}/notes
+    - Task must exist — return 404 if task_id not found
+    - Note does NOT inherit TimestampMixin (no updated_at field)
+
+  references:
+    - src/tasks/models.py (Task model from 1.4)
+    - src/tasks/serializers.py (TaskSerializer from 1.6)
+    - src/tasks/views.py (TaskViewSet from 1.6)
+    - src/tasks/urls.py (task routes from 1.6)
+    - docs/design/api-surface-DESIGN.md (Notes endpoints)
+
+acceptance_criteria:
+  - "python manage.py makemigrations tasks produces a new migration for Note"
+  - "python manage.py migrate runs without errors"
+  - "pytest tests/tasks/test_notes.py passes"
+  - "POST /v1/tasks/{task_id}/notes with {text, actor_id} returns 201"
+  - "GET /v1/tasks/{task_id}/notes returns 200 with list of notes"
+  - "PATCH on a note returns 405"
+  - "DELETE on a note returns 405"
+
+behavioral_spec:
+  id: bs-1.8
+  priority: high
+  behaviors:
+    - "POST /v1/tasks/{task_id}/notes with {text: 'Found edge case', actor_id: 'human-jason'} returns 201 with id, created_at"
+    - "GET /v1/tasks/{task_id}/notes returns 200 with list of notes for that task"
+    - "GET /v1/tasks/{task_id}/notes returns notes ordered by created_at ascending"
+    - "POST /v1/tasks/{task_id}/notes with missing text returns 400"
+    - "POST /v1/tasks/{task_id}/notes with missing actor_id returns 400"
+    - "POST /v1/tasks/{non_existent_id}/notes returns 404"
+    - "Notes from one task do not appear in another task's note list"
+    - "Deleting a task cascades and deletes its notes"
+
+test_command: "pytest tests/tasks/test_notes.py"

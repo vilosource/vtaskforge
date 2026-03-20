@@ -1,0 +1,198 @@
+id: "1.6"
+name: "Task CRUD + lifecycle endpoints"
+depends_on: ["1.5", "1.2"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create Task serializer, viewset with full CRUD, and lifecycle action
+  endpoints. Each lifecycle action routes through the state machine from
+  task 1.5. This wires up the Task entity to the REST API, making tasks
+  createable, queryable, and transitionable via HTTP.
+
+  Depends on 1.5 (state machine) for transition logic and 1.2 (Agent model)
+  because claim needs to reference agents.
+
+files:
+  create:
+    - src/tasks/serializers.py
+    - src/tasks/views.py
+    - src/tasks/urls.py
+    - tests/tasks/test_api.py
+    - tests/tasks/test_lifecycle.py
+  modify:
+    - src/vtaskforge/urls.py
+
+implementation:
+  approach: |
+    Serializer: src/tasks/serializers.py
+    - TaskSerializer: ModelSerializer with all fields
+      - id, created_at, updated_at, status are read-only
+      - phase and workplan are required on create
+      - acceptance_criteria, requires default to empty list
+
+    ViewSet: src/tasks/views.py — TaskViewSet(ModelViewSet)
+    - Standard CRUD: list, create, retrieve, partial_update (no PUT)
+    - list supports query params: ?status=, ?phase=, ?workplan=, ?assigned_to=
+    - Override get_queryset() for filtering
+
+    Lifecycle actions (each as @action on TaskViewSet):
+
+    @action(detail=True, methods=["post"])
+    def submit(self, request, pk=None):
+        """draft -> pending_start_review or todo (based on review flag)"""
+        task = self.get_object()
+        # For now, just transition to 'todo' (review flag cascading in 1.11)
+        new_status = "todo"
+        perform_transition(task, new_status, triggered_by=request.data.get("triggered_by", ""))
+        return Response(TaskSerializer(task).data)
+
+    @action(detail=True, methods=["post"])
+    def claim(self, request, pk=None):
+        """todo -> doing, sets claimed_by/claimed_at/claim_expires_at"""
+        task = self.get_object()
+        agent_id = request.data.get("agent_id")
+        if not agent_id:
+            return Response({"error": {"code": "VALIDATION_ERROR", "message": "agent_id required"}}, status=400)
+        perform_transition(task, "doing", triggered_by=agent_id)
+        task.claimed_by = agent_id
+        task.claimed_at = timezone.now()
+        if task.claim_timeout:
+            task.claim_expires_at = timezone.now() + task.claim_timeout
+        else:
+            task.claim_expires_at = timezone.now() + timedelta(minutes=30)
+        task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
+        return Response(TaskSerializer(task).data)
+
+    @action(detail=True, methods=["post"])
+    def unclaim(self, request, pk=None):
+        """doing -> todo, clears claim fields"""
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+        """doing -> done (or pending_completion_review, handled in 1.11)"""
+
+    @action(detail=True, methods=["post"])
+    def fail(self, request, pk=None):
+        """doing -> needs_attention"""
+
+    @action(detail=True, methods=["post"])
+    def resubmit(self, request, pk=None):
+        """changes_requested -> review_return_to value"""
+        task = self.get_object()
+        if not task.review_return_to:
+            return Response({"error": {"code": "VALIDATION_ERROR",
+                "message": "No review_return_to set"}}, status=400)
+        perform_transition(task, task.review_return_to, ...)
+
+    @action(detail=True, methods=["post"])
+    def block(self, request, pk=None):
+        """any blockable status -> blocked"""
+
+    @action(detail=True, methods=["post"])
+    def unblock(self, request, pk=None):
+        """blocked -> todo (default) or doing (if previously doing)"""
+
+    @action(detail=True, methods=["post"])
+    def defer(self, request, pk=None):
+        """any non-terminal -> deferred"""
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """any non-terminal -> cancelled"""
+
+    @action(detail=True, methods=["post"])
+    def heartbeat(self, request, pk=None):
+        """extends claim_expires_at on a doing task"""
+        task = self.get_object()
+        if task.status != "doing":
+            return Response({"error": ...}, status=400)
+        if task.claim_timeout:
+            task.claim_expires_at = timezone.now() + task.claim_timeout
+        else:
+            task.claim_expires_at = timezone.now() + timedelta(minutes=30)
+        task.save(update_fields=["claim_expires_at", "updated_at"])
+
+    @action(detail=True, methods=["post"])
+    def progress(self, request, pk=None):
+        """placeholder — accepts message, returns 200 (events in 1.10)"""
+
+    @action(detail=True, methods=["post"])
+    def assign(self, request, pk=None):
+        """set assigned_to on task"""
+
+    @action(detail=True, methods=["post"])
+    def unassign(self, request, pk=None):
+        """clear assigned_to"""
+
+    Error handling: Catch InvalidTransition from state machine, convert to
+    DRF Response with error code "INVALID_TRANSITION", HTTP 422.
+
+    URLs: DefaultRouter with prefix "tasks". Also add nested route for
+    POST /v1/phases/{phase_id}/tasks (create task in phase).
+
+  constraints:
+    - All lifecycle actions must use the state machine (perform_transition)
+    - InvalidTransition must be caught and returned as 422 with the standard
+      error format from api-surface-DESIGN.md
+    - claim must require agent_id in request body
+    - unclaim must clear claimed_by, claimed_at, claim_expires_at
+    - heartbeat must only work on tasks with status "doing"
+    - No PUT endpoint (405 for PUT requests)
+    - Nested task creation under phase: POST /v1/phases/{phase_id}/tasks
+      must auto-set phase and workplan (workplan from phase.workplan)
+
+  references:
+    - src/tasks/models.py (Task model from 1.4)
+    - src/tasks/state_machine.py (from 1.5)
+    - src/tasks/exceptions.py (from 1.5)
+    - src/workplans/serializers.py (serializer pattern from 1.1)
+    - src/workplans/views.py (viewset pattern from 1.1)
+    - src/agents/models.py (Agent model from 1.2)
+    - docs/design/api-surface-DESIGN.md (Task endpoints + error model)
+
+acceptance_criteria:
+  - "python manage.py check returns no issues"
+  - "pytest tests/tasks/test_api.py passes"
+  - "pytest tests/tasks/test_lifecycle.py passes"
+  - "POST /v1/phases/{phase_id}/tasks with {title} returns 201 with status=draft"
+  - "GET /v1/tasks/ returns 200 with list"
+  - "GET /v1/tasks/{id} returns 200 with task detail"
+  - "PATCH /v1/tasks/{id} with {title: 'new'} returns 200"
+  - "POST /v1/tasks/{id}/submit on draft task returns 200 with status=todo"
+  - "POST /v1/tasks/{id}/claim with {agent_id} on todo task returns 200 with status=doing"
+  - "POST /v1/tasks/{id}/complete on doing task returns 200 with status=done"
+  - "POST /v1/tasks/{id}/fail on doing task returns 200 with status=needs_attention"
+  - "POST /v1/tasks/{id}/cancel on any non-terminal returns 200 with status=cancelled"
+  - "Invalid transition returns 422 with INVALID_TRANSITION error code"
+
+behavioral_spec:
+  id: bs-1.6
+  priority: high
+  behaviors:
+    - "POST /v1/phases/{phase_id}/tasks with {title: 'Test task'} returns 201 with id, status=draft, workplan auto-set from phase"
+    - "GET /v1/tasks/ returns 200 with list of tasks"
+    - "GET /v1/tasks/?status=draft returns only draft tasks"
+    - "GET /v1/tasks/?workplan={id} returns only tasks in that workplan"
+    - "GET /v1/tasks/{id} returns 200 with all task fields"
+    - "PATCH /v1/tasks/{id} with {description: 'updated'} returns 200"
+    - "POST /v1/tasks/{id}/submit on draft returns 200 with status=todo"
+    - "POST /v1/tasks/{id}/submit on doing returns 422 INVALID_TRANSITION"
+    - "POST /v1/tasks/{id}/claim with {agent_id: 'agent-1'} sets claimed_by, claimed_at, claim_expires_at"
+    - "POST /v1/tasks/{id}/claim without agent_id returns 400 VALIDATION_ERROR"
+    - "POST /v1/tasks/{id}/unclaim on doing task returns 200 with status=todo, claimed_by=null"
+    - "POST /v1/tasks/{id}/complete on doing task returns 200 with status=done"
+    - "POST /v1/tasks/{id}/fail on doing task returns 200 with status=needs_attention"
+    - "POST /v1/tasks/{id}/resubmit on changes_requested with review_return_to set transitions to that status"
+    - "POST /v1/tasks/{id}/resubmit on changes_requested without review_return_to returns 400"
+    - "POST /v1/tasks/{id}/block on todo or doing returns 200 with status=blocked"
+    - "POST /v1/tasks/{id}/unblock on blocked returns 200 with status=todo"
+    - "POST /v1/tasks/{id}/defer on non-terminal returns 200 with status=deferred"
+    - "POST /v1/tasks/{id}/cancel on non-terminal returns 200 with status=cancelled"
+    - "POST /v1/tasks/{id}/cancel on done returns 422 INVALID_TRANSITION"
+    - "POST /v1/tasks/{id}/heartbeat on doing task extends claim_expires_at"
+    - "POST /v1/tasks/{id}/heartbeat on non-doing task returns 400"
+    - "POST /v1/tasks/{id}/assign with {agent_id: 'agent-1'} sets assigned_to"
+    - "POST /v1/tasks/{id}/unassign clears assigned_to"
+
+test_command: "pytest tests/tasks/test_api.py tests/tasks/test_lifecycle.py"

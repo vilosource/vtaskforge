@@ -1,0 +1,174 @@
+id: "1.5"
+name: "Task state machine"
+depends_on: ["1.4"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the task state machine — the core of vtaskforge. This module defines
+  all valid status transitions, validates transition requests, and performs
+  transitions atomically. The state machine is the single source of truth for
+  what status changes are allowed.
+
+  This is the most important task in Phase 1. Every lifecycle action
+  (claim, complete, fail, review, etc.) routes through this module.
+
+files:
+  create:
+    - src/tasks/state_machine.py
+    - src/tasks/exceptions.py
+    - tests/tasks/test_state_machine.py
+  modify: []
+
+implementation:
+  approach: |
+    Exceptions: Create src/tasks/exceptions.py with:
+    - class InvalidTransition(Exception):
+        def __init__(self, current_status, requested_status, valid_transitions):
+            self.current_status = current_status
+            self.requested_status = requested_status
+            self.valid_transitions = valid_transitions
+            super().__init__(
+                f"Cannot transition from '{current_status}' to '{requested_status}'. "
+                f"Valid transitions: {valid_transitions}"
+            )
+
+    State machine: Create src/tasks/state_machine.py with:
+
+    TERMINAL_STATUSES = {"done", "cancelled"}
+
+    NON_TERMINAL_STATUSES = {
+        "draft", "pending_start_review", "todo", "doing",
+        "pending_completion_review", "changes_requested",
+        "needs_attention", "blocked", "deferred"
+    }
+
+    VALID_TRANSITIONS = {
+        "draft": [
+            "pending_start_review",  # needs_review_before_start = true
+            "todo",                  # needs_review_before_start = false
+            "cancelled",             # cancel from any non-terminal
+            "deferred",              # defer from any non-terminal
+        ],
+        "pending_start_review": [
+            "todo",                  # approved
+            "changes_requested",     # rejected/changes_requested
+            "cancelled",
+            "deferred",
+        ],
+        "todo": [
+            "doing",                 # claimed by agent
+            "blocked",               # external dependency
+            "cancelled",
+            "deferred",
+        ],
+        "doing": [
+            "pending_completion_review",  # needs_review_on_completion = true
+            "done",                       # needs_review_on_completion = false
+            "needs_attention",            # agent gave up / failed
+            "blocked",                    # external dependency discovered
+            "cancelled",
+            "deferred",
+        ],
+        "pending_completion_review": [
+            "done",                  # approved
+            "changes_requested",     # rejected/changes_requested
+            "cancelled",
+            "deferred",
+        ],
+        "changes_requested": [
+            "pending_start_review",       # resubmit (review_return_to)
+            "pending_completion_review",  # resubmit (review_return_to)
+            "draft",                      # needs major rework
+            "cancelled",
+            "deferred",
+        ],
+        "needs_attention": [
+            "draft",                 # needs rewrite
+            "todo",                  # triaged, back to pool
+            "cancelled",            # not worth pursuing
+            "deferred",
+        ],
+        "blocked": [
+            "todo",                  # unblocked, back to pool
+            "doing",                 # unblocked, same agent continues
+            "cancelled",
+            "deferred",
+        ],
+        "deferred": [
+            "todo",                  # reactivated
+            "cancelled",
+        ],
+        "cancelled": [],             # terminal — no outgoing transitions
+        "done": [],                  # terminal — no outgoing transitions
+    }
+
+    Functions:
+
+    def get_valid_transitions(current_status: str) -> list[str]:
+        """Return list of valid next statuses for a given current status."""
+        return VALID_TRANSITIONS.get(current_status, [])
+
+    def validate_transition(task, new_status: str) -> None:
+        """Validate that a transition from task.status to new_status is allowed.
+        Raises InvalidTransition if not valid."""
+        valid = get_valid_transitions(task.status)
+        if new_status not in valid:
+            raise InvalidTransition(task.status, new_status, valid)
+
+    def perform_transition(task, new_status: str, triggered_by: str = "") -> task:
+        """Validate and perform a status transition. Saves the task.
+        Returns the updated task instance."""
+        validate_transition(task, new_status)
+        task.status = new_status
+        task.save(update_fields=["status", "updated_at"])
+        return task
+
+    Note: perform_transition does NOT create TaskEvents yet — that will be
+    added in task 1.10 when the event system is built.
+
+  constraints:
+    - The VALID_TRANSITIONS dict must include ALL statuses as keys
+    - Terminal statuses (done, cancelled) must have empty transition lists
+    - "cancelled" and "deferred" must be reachable from ALL non-terminal statuses
+    - InvalidTransition exception must carry current_status, requested_status,
+      and valid_transitions as attributes for error response construction
+    - perform_transition must save the task (not leave it unsaved)
+    - Do not import or depend on TaskEvent (not yet created)
+
+  references:
+    - src/tasks/models.py (Task model from 1.4)
+    - docs/design/vtaskforge-DESIGN.md (State Machine section)
+
+acceptance_criteria:
+  - "pytest tests/tasks/test_state_machine.py passes"
+  - "python manage.py check returns no issues"
+  - "All valid transitions from the design doc are present in VALID_TRANSITIONS"
+  - "All invalid transitions raise InvalidTransition"
+  - "Terminal statuses have no outgoing transitions"
+
+behavioral_spec:
+  id: bs-1.5
+  priority: high
+  behaviors:
+    - "validate_transition(task_in_draft, 'todo') does not raise"
+    - "validate_transition(task_in_draft, 'pending_start_review') does not raise"
+    - "validate_transition(task_in_draft, 'doing') raises InvalidTransition"
+    - "validate_transition(task_in_done, 'todo') raises InvalidTransition with empty valid_transitions"
+    - "validate_transition(task_in_cancelled, 'todo') raises InvalidTransition with empty valid_transitions"
+    - "validate_transition with any non-terminal status to 'cancelled' does not raise"
+    - "validate_transition with any non-terminal status to 'deferred' does not raise"
+    - "perform_transition(task_in_draft, 'todo') sets task.status to 'todo' and saves"
+    - "perform_transition(task_in_doing, 'done') sets task.status to 'done' and saves"
+    - "perform_transition(task_in_done, 'doing') raises InvalidTransition"
+    - "InvalidTransition exception has current_status, requested_status, valid_transitions attributes"
+    - "get_valid_transitions('doing') returns list containing 'done', 'pending_completion_review', 'needs_attention', 'blocked', 'cancelled', 'deferred'"
+    - "get_valid_transitions('done') returns empty list"
+    - "changes_requested can transition to pending_start_review (resubmit to start gate)"
+    - "changes_requested can transition to pending_completion_review (resubmit to completion gate)"
+    - "changes_requested can transition to draft (major rework)"
+    - "blocked can transition to todo (unblocked to pool) or doing (unblocked same agent)"
+    - "needs_attention can transition to draft, todo, or cancelled"
+    - "deferred can transition to todo (reactivated) or cancelled"
+
+test_command: "pytest tests/tasks/test_state_machine.py"

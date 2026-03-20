@@ -1,0 +1,106 @@
+id: "1.11"
+name: "Review flag cascading"
+depends_on: ["1.9"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Implement the review flag inheritance logic: when a task's review flags are
+  null, check the phase; if the phase's flags are also null, check the
+  workplan. Integrate into the task lifecycle so the submit and complete
+  actions correctly route through review gates based on the effective flags.
+
+  Cascade precedence: task (explicit) > phase default > workplan default.
+
+files:
+  create:
+    - src/tasks/review_policy.py
+    - tests/tasks/test_review_policy.py
+    - tests/tasks/test_review_cascading.py
+  modify:
+    - src/tasks/views.py
+
+implementation:
+  approach: |
+    Review policy module: Create src/tasks/review_policy.py with:
+
+    def get_effective_review_flags(task) -> tuple[bool, bool]:
+        """Return (needs_review_before_start, needs_review_on_completion)
+        by cascading: task -> phase -> workplan.
+
+        Returns two booleans. If all levels are null, defaults to False.
+        """
+        # needs_review_before_start
+        if task.needs_review_before_start is not None:
+            before_start = task.needs_review_before_start
+        elif task.phase.default_needs_review_before_start is not None:
+            before_start = task.phase.default_needs_review_before_start
+        else:
+            before_start = task.workplan.default_needs_review_before_start
+
+        # needs_review_on_completion
+        if task.needs_review_on_completion is not None:
+            on_completion = task.needs_review_on_completion
+        elif task.phase.default_needs_review_on_completion is not None:
+            on_completion = task.phase.default_needs_review_on_completion
+        else:
+            on_completion = task.workplan.default_needs_review_on_completion
+
+        return (before_start, on_completion)
+
+    Integration with task lifecycle:
+    Modify the submit action in src/tasks/views.py:
+    - Import get_effective_review_flags
+    - On submit: check effective before_start flag
+      - If True: transition draft -> pending_start_review
+      - If False: transition draft -> todo
+
+    Modify the complete action in src/tasks/views.py:
+    - On complete: check effective on_completion flag
+      - If True: transition doing -> pending_completion_review
+      - If False: transition doing -> done
+
+  constraints:
+    - Cascade order is strict: task > phase > workplan
+    - If task flag is not None, use it (even if False)
+    - If task flag is None and phase flag is not None, use phase flag
+    - If both task and phase are None, use workplan default
+    - Workplan defaults are never null (they are BooleanField with default=False)
+    - The function must work with related objects (task.phase, task.workplan)
+      — ensure select_related is used in the viewset queryset to avoid N+1
+    - Do not change the state machine transitions — the routing decision
+      happens in the view, the state machine just validates the transition
+
+  references:
+    - src/tasks/models.py (Task model — review flag fields)
+    - src/workplans/models.py (Workplan + Phase — default review flags)
+    - src/tasks/views.py (submit and complete actions from 1.6)
+    - src/tasks/state_machine.py (validates transitions)
+    - docs/design/vtaskforge-DESIGN.md (Review flag cascade section)
+
+acceptance_criteria:
+  - "pytest tests/tasks/test_review_policy.py passes"
+  - "pytest tests/tasks/test_review_cascading.py passes"
+  - "Submitting a task where effective before_start=True routes to pending_start_review"
+  - "Submitting a task where effective before_start=False routes to todo"
+  - "Completing a task where effective on_completion=True routes to pending_completion_review"
+  - "Completing a task where effective on_completion=False routes to done"
+
+behavioral_spec:
+  id: bs-1.11
+  priority: high
+  behaviors:
+    - "Task with needs_review_before_start=True: submit routes draft -> pending_start_review"
+    - "Task with needs_review_before_start=False: submit routes draft -> todo"
+    - "Task with needs_review_before_start=None, phase default=True: submit routes draft -> pending_start_review"
+    - "Task with needs_review_before_start=None, phase default=None, workplan default=True: submit routes draft -> pending_start_review"
+    - "Task with needs_review_before_start=None, phase default=None, workplan default=False: submit routes draft -> todo"
+    - "Task with needs_review_before_start=True overrides phase default=False: submit routes draft -> pending_start_review"
+    - "Task with needs_review_on_completion=True: complete routes doing -> pending_completion_review"
+    - "Task with needs_review_on_completion=False: complete routes doing -> done"
+    - "Task with needs_review_on_completion=None, phase default=True: complete routes doing -> pending_completion_review"
+    - "Task with needs_review_on_completion=None, phase default=None, workplan default=False: complete routes doing -> done"
+    - "get_effective_review_flags returns tuple of two booleans"
+    - "Cascade works correctly when phase has one flag set and the other null"
+
+test_command: "pytest tests/tasks/test_review_policy.py tests/tasks/test_review_cascading.py"

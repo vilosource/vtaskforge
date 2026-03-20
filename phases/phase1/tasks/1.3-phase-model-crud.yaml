@@ -1,0 +1,121 @@
+id: "1.3"
+name: "Phase model + CRUD"
+depends_on: ["1.1"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the Phase model within the workplans app (Phase belongs to Workplan
+  in the domain hierarchy), along with serializer, viewset, and endpoints.
+  Phases are nested under workplans for creation and listing, but also
+  accessible directly by ID for detail/update operations.
+
+files:
+  create:
+    - tests/workplans/test_phase_models.py
+    - tests/workplans/test_phase_api.py
+  modify:
+    - src/workplans/models.py
+    - src/workplans/serializers.py
+    - src/workplans/views.py
+    - src/workplans/urls.py
+    - src/vtaskforge/urls.py
+
+implementation:
+  approach: |
+    Model: Add Phase to src/workplans/models.py (same file as Workplan)
+    inheriting from NanoIDMixin and TimestampMixin. Fields:
+
+    - name: CharField(max_length=255)
+    - description: TextField(blank=True, default="")
+    - workplan: ForeignKey(Workplan, on_delete=CASCADE, related_name="phases")
+    - status: CharField with choices PHASE_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("active", "Active"),
+        ("completed", "Completed"),
+      ], default="pending"
+    - order: IntegerField(default=0)
+    - default_needs_review_before_start: BooleanField(null=True, blank=True, default=None)
+    - default_needs_review_on_completion: BooleanField(null=True, blank=True, default=None)
+    - created_by: CharField(max_length=255, blank=True, default="")
+
+    null=True on the review flags means "inherit from workplan" when null.
+
+    Serializer: PhaseSerializer as ModelSerializer. Include workplan as
+    read-only field (shows workplan_id). All fields exposed.
+
+    ViewSet: Two viewset approaches needed to support nested + direct routes:
+    1. PhaseViewSet (ModelViewSet) for direct access: GET/PATCH /v1/phases/:id
+    2. For nested creation/listing under workplan, add custom actions to
+       WorkplanViewSet OR use a separate nested viewset.
+
+    Recommended approach: Create PhaseViewSet as a ModelViewSet. For the
+    nested route POST /v1/workplans/:id/phases, add an @action on
+    WorkplanViewSet that delegates to phase creation, OR use
+    drf-nested-routers. Simpler: add manual URL patterns for the nested
+    routes alongside the router.
+
+    Simplest DRF approach:
+    - PhaseViewSet as ModelViewSet (handles retrieve, partial_update)
+    - Add @action(detail=True, methods=["get","post"]) on WorkplanViewSet
+      named "phases" for listing/creating phases under a workplan
+    - OR register PhaseViewSet with the router and use query params for
+      filtering by workplan
+
+    Cleanest: Register PhaseViewSet on its own router prefix "phases".
+    Add manual paths for the nested routes:
+    - path("workplans/<str:workplan_id>/phases/", PhaseListCreateView.as_view())
+    Use a simple APIView for the nested list/create.
+
+    Custom actions on PhaseViewSet:
+    - @action(detail=True, methods=["post"]) activate — sets status="active"
+    - @action(detail=True, methods=["post"]) complete — sets status="completed"
+    - @action(detail=True, methods=["get"]) stats — placeholder stats
+
+    Wire nested + direct routes into workplans/urls.py and vtaskforge/urls.py.
+
+  constraints:
+    - Phase.workplan FK uses on_delete=CASCADE (deleting workplan deletes phases)
+    - Phase status transitions must be validated (pending->active, active->completed)
+    - Cannot activate a phase that is already completed
+    - null review flags mean "inherit from workplan" — do NOT default to False
+    - order field is for display ordering, not execution ordering (execution
+      order comes from the link/dependency system)
+
+  references:
+    - src/core/mixins.py
+    - src/workplans/models.py (Workplan model from 1.1)
+    - src/workplans/views.py (WorkplanViewSet from 1.1)
+    - src/workplans/urls.py (router setup from 1.1)
+    - docs/design/api-surface-DESIGN.md (Phase endpoints section)
+
+acceptance_criteria:
+  - "python manage.py makemigrations workplans produces a new migration for Phase"
+  - "python manage.py migrate runs without errors"
+  - "python manage.py check returns no issues"
+  - "pytest tests/workplans/test_phase_models.py passes"
+  - "pytest tests/workplans/test_phase_api.py passes"
+  - "POST /v1/workplans/{workplan_id}/phases with {name, description} returns 201"
+  - "GET /v1/workplans/{workplan_id}/phases returns 200 with list of phases"
+  - "GET /v1/phases/{id} returns 200 with phase detail"
+  - "PATCH /v1/phases/{id} returns 200 with updated fields"
+  - "POST /v1/phases/{id}/activate returns 200 with status=active"
+  - "POST /v1/phases/{id}/complete returns 200 with status=completed"
+
+behavioral_spec:
+  id: bs-1.3
+  priority: high
+  behaviors:
+    - "POST /v1/workplans/{workplan_id}/phases with {name: 'Phase 1'} returns 201 with id, workplan_id, status=pending"
+    - "GET /v1/workplans/{workplan_id}/phases returns 200 with list of phases belonging to that workplan"
+    - "GET /v1/phases/{id} for existing phase returns 200 with all fields including workplan reference"
+    - "GET /v1/phases/{id} for non-existent id returns 404"
+    - "PATCH /v1/phases/{id} with {description: 'updated'} returns 200"
+    - "POST /v1/phases/{id}/activate on pending phase returns 200 with status=active"
+    - "POST /v1/phases/{id}/activate on completed phase returns 400"
+    - "POST /v1/phases/{id}/complete on active phase returns 200 with status=completed"
+    - "POST /v1/phases/{id}/complete on pending phase returns 400"
+    - "Phase with default_needs_review_before_start=null is stored as null (not false)"
+    - "Deleting a workplan cascades and deletes its phases"
+
+test_command: "pytest tests/workplans/test_phase_models.py tests/workplans/test_phase_api.py"

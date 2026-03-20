@@ -1,0 +1,112 @@
+id: "1.2"
+name: "Agent model + registration"
+depends_on: ["1.1"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the Agent model, serializer, viewset, and wire registration endpoints.
+  Agents are LLM workers that claim and execute tasks. This task builds the
+  agent registry — agents register themselves, maintain status, and can be
+  queried. The /agents/:id/tasks endpoint returns an empty list for now
+  (populated once task claiming is implemented in 1.6/1.12).
+
+  Depends on 1.1 only because both modify vtaskforge/urls.py (sequential
+  isolation constraint). No logical dependency on Workplan.
+
+files:
+  create:
+    - src/agents/models.py
+    - src/agents/serializers.py
+    - src/agents/views.py
+    - src/agents/urls.py
+    - src/agents/apps.py
+    - src/agents/__init__.py
+    - tests/agents/__init__.py
+    - tests/agents/test_models.py
+    - tests/agents/test_api.py
+  modify:
+    - src/vtaskforge/urls.py
+
+implementation:
+  approach: |
+    Model: Create Agent in src/agents/models.py inheriting from NanoIDMixin
+    and TimestampMixin. Fields:
+
+    - name: CharField(max_length=255)
+    - tags: JSONField(default=list, blank=True)
+    - status: CharField with choices STATUS_CHOICES = [
+        ("online", "Online"),
+        ("offline", "Offline"),
+        ("busy", "Busy"),
+      ], default="offline"
+    - last_heartbeat: DateTimeField(null=True, blank=True)
+    - registered_at: DateTimeField(auto_now_add=True)
+
+    Note: registered_at is separate from created_at (from TimestampMixin) —
+    registered_at is domain-meaningful, created_at is audit metadata.
+
+    App config: src/agents/apps.py with AgentsConfig, name="agents".
+    Already in INSTALLED_APPS.
+
+    Serializer: ModelSerializer with all fields. id, created_at, updated_at,
+    registered_at are read-only.
+
+    ViewSet: ModelViewSet in src/agents/views.py:
+    - POST create = register (creates agent with status="online")
+    - GET list, GET retrieve
+    - PATCH partial_update (update tags, status)
+    - DELETE destroy = deregister
+    - No PUT (return 405)
+    - @action(detail=True, methods=["get"]) tasks — returns empty list
+      for now (placeholder)
+
+    The register endpoint is just POST /v1/agents/ (standard create).
+    The API surface doc shows POST /v1/agents/register but implement as
+    standard REST create at POST /v1/agents/ — cleaner DRF pattern.
+    If the design insists on /register, add it as a list-level action.
+
+    URLs: DefaultRouter, register with prefix "agents".
+    Wire into vtaskforge/urls.py under "v1/".
+
+  constraints:
+    - Use DRF ModelSerializer and ModelViewSet
+    - On create, automatically set status to "online" and registered_at
+    - On delete, this is a hard delete (deregister removes the record)
+    - tags must be a JSON list of strings
+    - Do not add authentication yet
+
+  references:
+    - src/core/mixins.py
+    - src/core/apps.py
+    - src/workplans/models.py (pattern from 1.1)
+    - src/workplans/urls.py (pattern from 1.1)
+    - src/vtaskforge/urls.py
+
+acceptance_criteria:
+  - "python manage.py makemigrations agents produces a migration"
+  - "python manage.py migrate runs without errors"
+  - "python manage.py check returns no issues"
+  - "pytest tests/agents/ passes"
+  - "POST /v1/agents/ with {name, tags} returns 201 with status=online"
+  - "GET /v1/agents/ returns 200 with list"
+  - "GET /v1/agents/{id} returns 200"
+  - "PATCH /v1/agents/{id} with {status: 'busy'} returns 200"
+  - "DELETE /v1/agents/{id} returns 204"
+  - "GET /v1/agents/{id}/tasks returns 200 with empty list"
+
+behavioral_spec:
+  id: bs-1.2
+  priority: high
+  behaviors:
+    - "POST /v1/agents/ with {name: 'Claude Worker', tags: ['executor','opus']} returns 201 with id, status=online, registered_at"
+    - "GET /v1/agents/ returns 200 with list of registered agents"
+    - "GET /v1/agents/{id} for existing agent returns 200 with all fields"
+    - "GET /v1/agents/{id} for non-existent id returns 404"
+    - "PATCH /v1/agents/{id} with {status: 'busy'} returns 200 with updated status"
+    - "PATCH /v1/agents/{id} with {tags: ['reviewer']} returns 200 with updated tags"
+    - "DELETE /v1/agents/{id} returns 204 and agent is no longer retrievable"
+    - "DELETE /v1/agents/{id} for non-existent id returns 404"
+    - "GET /v1/agents/{id}/tasks returns 200 with an empty list"
+
+test_command: "pytest tests/agents/"

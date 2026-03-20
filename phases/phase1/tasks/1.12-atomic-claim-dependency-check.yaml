@@ -1,0 +1,154 @@
+id: "1.12"
+name: "Atomic claim + dependency check"
+depends_on: ["1.7", "1.10"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Implement atomic task claiming with race condition prevention, agent tag
+  matching, assignment enforcement, and dependency checking. Add the
+  GET /v1/tasks/claimable endpoint that returns tasks claimable by an agent
+  with given tags.
+
+  This replaces the simple claim logic from 1.6 with production-grade
+  atomic claiming that prevents two agents from claiming the same task.
+
+files:
+  create:
+    - tests/tasks/test_claiming.py
+  modify:
+    - src/tasks/views.py
+    - src/tasks/urls.py
+
+implementation:
+  approach: |
+    Atomic claim logic in the claim action (src/tasks/views.py):
+
+    Replace the simple claim from 1.6 with:
+
+    from django.db import transaction
+    from django.db.models import F
+
+    @action(detail=True, methods=["post"])
+    def claim(self, request, pk=None):
+        agent_id = request.data.get("agent_id")
+        agent_tags = request.data.get("tags", [])
+        if not agent_id:
+            return error 400 VALIDATION_ERROR
+
+        with transaction.atomic():
+            # Lock the row — select_for_update prevents concurrent reads
+            task = Task.objects.select_for_update().get(pk=pk)
+
+            # Check status is claimable
+            if task.status != "todo":
+                return error 409 ALREADY_CLAIMED (or 422 INVALID_TRANSITION)
+
+            # Check assigned_to — if task is pinned to a specific agent
+            if task.assigned_to and task.assigned_to != agent_id:
+                return error 403 with message "Task assigned to another agent"
+
+            # Check tag matching — agent must have all required tags
+            if task.requires:
+                if not set(task.requires).issubset(set(agent_tags)):
+                    return error 422 with message "Agent tags do not match requirements"
+
+            # Check dependency satisfaction — all depends_on links must be done
+            from links.models import Link
+            depends_on_links = Link.objects.filter(
+                source_type="task", source_id=task.id, link_type="depends_on"
+            )
+            for link in depends_on_links:
+                try:
+                    dep_task = Task.objects.get(pk=link.target_id)
+                    if dep_task.status != "done":
+                        return Response({
+                            "error": {
+                                "code": "DEPENDENCY_UNMET",
+                                "message": f"Dependency {link.target_id} not done (status: {dep_task.status})",
+                                "details": {"dependency_id": link.target_id, "dependency_status": dep_task.status}
+                            }
+                        }, status=422)
+                except Task.DoesNotExist:
+                    pass  # External dependency — skip
+
+            # All checks passed — perform the claim
+            perform_transition(task, "doing", triggered_by=agent_id)
+            task.claimed_by = agent_id
+            task.claimed_at = timezone.now()
+            timeout = task.claim_timeout or timedelta(minutes=30)
+            task.claim_expires_at = timezone.now() + timeout
+            task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
+
+        return Response(TaskSerializer(task).data)
+
+    Claimable endpoint:
+    Add a list-level action or custom view:
+
+    GET /v1/tasks/claimable?tags=executor,opus
+
+    Logic:
+    - Filter tasks where status="todo"
+    - Exclude tasks with unmet depends_on links (subquery: tasks where all
+      depends_on link targets are in "done" status)
+    - If tags provided, filter where task.requires is empty list OR
+      task.requires is a subset of provided tags
+    - If any tasks have assigned_to set, only show them if assigned_to
+      matches the requesting agent
+
+    Add this as @action(detail=False, methods=["get"]) on TaskViewSet
+    or as a separate view.
+
+  constraints:
+    - Must use select_for_update() inside transaction.atomic() for the claim
+    - Two agents racing: one gets 200, the other gets 409 ALREADY_CLAIMED
+    - Tag matching: task.requires must be a SUBSET of agent tags (agent can
+      have more tags than required)
+    - Empty requires means any agent can claim
+    - assigned_to enforcement: if set, only that agent can claim
+    - Dependency check: all depends_on links where source is this task must
+      have target tasks in "done" status
+    - The claimable endpoint must be efficient — avoid N+1 queries
+    - Return 409 ALREADY_CLAIMED (not 422) when task is already being claimed
+    - Use the standard error format from api-surface-DESIGN.md
+
+  references:
+    - src/tasks/views.py (existing claim action from 1.6)
+    - src/tasks/state_machine.py (perform_transition)
+    - src/links/models.py (Link model from 1.7)
+    - src/events/models.py (TaskEvent from 1.10)
+    - src/agents/models.py (Agent from 1.2)
+    - docs/design/api-surface-DESIGN.md (error codes: ALREADY_CLAIMED, DEPENDENCY_UNMET)
+
+acceptance_criteria:
+  - "pytest tests/tasks/test_claiming.py passes"
+  - "Claiming a todo task with valid agent returns 200 with status=doing"
+  - "Claiming an already-doing task returns 409 ALREADY_CLAIMED"
+  - "Claiming a task with unmet dependencies returns 422 DEPENDENCY_UNMET"
+  - "Claiming a pinned task with wrong agent_id returns 403"
+  - "Claiming a task with requires=['opus'] and agent tags=['executor'] returns 422"
+  - "Claiming a task with requires=['opus'] and agent tags=['opus','executor'] succeeds"
+  - "GET /v1/tasks/claimable returns only todo tasks with met dependencies"
+  - "GET /v1/tasks/claimable?tags=opus returns tasks where requires is subset of ['opus']"
+
+behavioral_spec:
+  id: bs-1.12
+  priority: high
+  behaviors:
+    - "POST /v1/tasks/{id}/claim with {agent_id, tags} on todo task with no requirements returns 200"
+    - "POST /v1/tasks/{id}/claim on already-doing task returns 409 ALREADY_CLAIMED"
+    - "POST /v1/tasks/{id}/claim with agent_id != assigned_to returns 403"
+    - "POST /v1/tasks/{id}/claim with tags not matching requires returns 422"
+    - "POST /v1/tasks/{id}/claim with requires=['opus'] and tags=['opus','executor'] succeeds"
+    - "POST /v1/tasks/{id}/claim with requires=[] and any tags succeeds"
+    - "POST /v1/tasks/{id}/claim with unmet depends_on link returns 422 DEPENDENCY_UNMET"
+    - "POST /v1/tasks/{id}/claim with all depends_on tasks done succeeds"
+    - "POST /v1/tasks/{id}/claim with depends_on task in 'doing' returns 422 DEPENDENCY_UNMET"
+    - "Two concurrent claims on same task: one succeeds, one gets 409"
+    - "GET /v1/tasks/claimable returns only todo tasks"
+    - "GET /v1/tasks/claimable excludes tasks with unmet dependencies"
+    - "GET /v1/tasks/claimable?tags=opus returns tasks where requires is subset of given tags"
+    - "GET /v1/tasks/claimable does not return tasks assigned to a different agent"
+    - "Successful claim creates a claimed TaskEvent"
+
+test_command: "pytest tests/tasks/test_claiming.py"

@@ -1,0 +1,107 @@
+id: "1.4"
+name: "Task model (model only)"
+depends_on: ["1.3"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the Task model with ALL fields from the design doc. This is the model
+  only — no serializer, no viewset, no endpoints. The Task model is the central
+  entity of vtaskforge with 11 possible statuses and fields for agent claiming,
+  review gating, and dependency tracking.
+
+  The tasks app is already in INSTALLED_APPS. This task creates the model and
+  migration, plus basic model-level tests.
+
+files:
+  create:
+    - src/tasks/models.py
+    - src/tasks/apps.py
+    - src/tasks/__init__.py
+    - tests/tasks/__init__.py
+    - tests/tasks/test_models.py
+  modify: []
+
+implementation:
+  approach: |
+    Model: Create Task in src/tasks/models.py inheriting from NanoIDMixin
+    and TimestampMixin. Fields:
+
+    Status choices (all 11):
+    TASK_STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_start_review", "Pending Start Review"),
+        ("todo", "To Do"),
+        ("doing", "Doing"),
+        ("pending_completion_review", "Pending Completion Review"),
+        ("changes_requested", "Changes Requested"),
+        ("needs_attention", "Needs Attention"),
+        ("blocked", "Blocked"),
+        ("deferred", "Deferred"),
+        ("cancelled", "Cancelled"),
+        ("done", "Done"),
+    ]
+
+    Fields:
+    - title: CharField(max_length=500)
+    - description: TextField(blank=True, default="")
+    - status: CharField(max_length=30, choices=TASK_STATUS_CHOICES, default="draft")
+    - phase: ForeignKey("workplans.Phase", on_delete=CASCADE, related_name="tasks")
+    - workplan: ForeignKey("workplans.Workplan", on_delete=CASCADE, related_name="tasks")
+      (denormalized for query efficiency — always matches phase.workplan)
+    - acceptance_criteria: JSONField(default=list, blank=True)
+    - needs_review_before_start: BooleanField(null=True, blank=True, default=None)
+    - needs_review_on_completion: BooleanField(null=True, blank=True, default=None)
+    - review_return_to: CharField(max_length=30, null=True, blank=True, default=None)
+    - requires: JSONField(default=list, blank=True) — list of tag strings
+    - assigned_to: CharField(max_length=255, null=True, blank=True, default=None)
+    - claimed_by: CharField(max_length=255, null=True, blank=True, default=None)
+    - claimed_at: DateTimeField(null=True, blank=True, default=None)
+    - claim_timeout: DurationField(null=True, blank=True, default=None)
+    - claim_expires_at: DateTimeField(null=True, blank=True, default=None)
+    - created_by: CharField(max_length=255, blank=True, default="")
+
+    Notes are NOT a field — they will be a separate model in task 1.8.
+
+    App config: src/tasks/apps.py with TasksConfig, name="tasks".
+
+    Add __str__ returning self.title.
+
+  constraints:
+    - Do NOT create serializer, viewset, or URL configuration
+    - Do NOT create a urls.py for the tasks app yet
+    - All 11 status choices must be defined
+    - null review flags mean "inherit from phase -> workplan"
+    - review_return_to stores the review gate to return to on resubmit
+    - requires is a list of tag strings (empty list = any agent can claim)
+    - claim fields (claimed_by, claimed_at, claim_expires_at) are all nullable
+    - Both phase and workplan FKs use on_delete=CASCADE
+
+  references:
+    - src/core/mixins.py
+    - src/workplans/models.py (Workplan and Phase models from 1.1/1.3)
+    - docs/design/vtaskforge-DESIGN.md (Task entity shape)
+
+acceptance_criteria:
+  - "python manage.py makemigrations tasks produces a migration"
+  - "python manage.py migrate runs without errors"
+  - "python manage.py check returns no issues"
+  - "pytest tests/tasks/test_models.py passes"
+
+behavioral_spec:
+  id: bs-1.4
+  priority: high
+  behaviors:
+    - "Task can be created with title, phase, and workplan — all other fields use defaults"
+    - "Task.status defaults to 'draft'"
+    - "Task.acceptance_criteria defaults to empty list"
+    - "Task.requires defaults to empty list"
+    - "Task.needs_review_before_start defaults to None (null)"
+    - "Task.needs_review_on_completion defaults to None (null)"
+    - "Task.claimed_by, claimed_at, claim_expires_at all default to None"
+    - "Task.review_return_to defaults to None"
+    - "Deleting a phase cascades and deletes its tasks"
+    - "Deleting a workplan cascades and deletes its tasks"
+    - "Task.__str__ returns the task title"
+
+test_command: "pytest tests/tasks/test_models.py"

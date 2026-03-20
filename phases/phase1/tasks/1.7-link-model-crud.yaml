@@ -1,0 +1,127 @@
+id: "1.7"
+name: "Link model + CRUD"
+depends_on: ["1.4"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the Link model — the universal relationship system that connects any
+  entity (workplan, phase, task) to other entities or external references.
+  Links power dependencies (depends_on, blocks), context (area, doc, file),
+  and deliverable tracking (commit, mr, jira).
+
+  Uses string-based source/target references rather than GenericForeignKey
+  for simplicity. The link system is deliberately loose-coupled — it stores
+  relationships without enforcing referential integrity at the DB level.
+
+files:
+  create:
+    - src/links/models.py
+    - src/links/serializers.py
+    - src/links/views.py
+    - src/links/urls.py
+    - src/links/apps.py
+    - src/links/__init__.py
+    - tests/links/__init__.py
+    - tests/links/test_models.py
+    - tests/links/test_api.py
+  modify:
+    - src/vtaskforge/urls.py
+
+implementation:
+  approach: |
+    Model: Create Link in src/links/models.py inheriting from NanoIDMixin
+    and TimestampMixin. Fields:
+
+    LINK_TYPE_CHOICES = [
+        ("depends_on", "Depends On"),
+        ("blocks", "Blocks"),
+        ("relates_to", "Relates To"),
+        ("commit", "Commit"),
+        ("mr", "Merge Request"),
+        ("area", "KB Area"),
+        ("doc", "Document"),
+        ("file", "File"),
+        ("jira", "Jira"),
+    ]
+
+    SOURCE_TYPE_CHOICES = [
+        ("workplan", "Workplan"),
+        ("phase", "Phase"),
+        ("task", "Task"),
+    ]
+
+    - source_type: CharField(max_length=20, choices=SOURCE_TYPE_CHOICES)
+    - source_id: CharField(max_length=21) — nanoid of the source entity
+    - target_type: CharField(max_length=20) — free-form for external refs
+    - target_id: CharField(max_length=255) — nanoid or external reference string
+    - link_type: CharField(max_length=20, choices=LINK_TYPE_CHOICES)
+    - metadata: JSONField(null=True, blank=True, default=None)
+    - created_by: CharField(max_length=255, blank=True, default="")
+
+    No FK to source/target — intentionally uses string references for
+    flexibility (can reference external entities like commit SHAs, URLs).
+
+    Add index on (source_type, source_id) and (target_type, target_id)
+    for query performance. Use class Meta: indexes = [...].
+
+    App config: src/links/apps.py with LinksConfig, name="links".
+
+    Serializer: ModelSerializer with all fields. id, created_at, updated_at
+    are read-only.
+
+    ViewSet: ModelViewSet with:
+    - POST create (create link)
+    - GET list (with filters: ?source_id=, ?target_id=, ?source_type=, ?link_type=)
+    - DELETE destroy (remove link)
+    - No retrieve, no update (links are immutable once created)
+    - Override get_queryset() for filtering
+
+    URLs: DefaultRouter with prefix "links". Wire into vtaskforge/urls.py.
+
+  constraints:
+    - Links are immutable — no PATCH/PUT endpoint
+    - GET list must support filtering by source_id, target_id, source_type, link_type
+    - link_type must be one of the defined choices
+    - source_type must be one of workplan/phase/task
+    - target_type is free-form (can be "task", "commit", "url", etc.)
+    - No referential integrity enforcement at DB level — source/target IDs
+      are not validated against existing entities
+    - metadata field is optional, stores type-specific extra data
+
+  references:
+    - src/core/mixins.py
+    - src/core/apps.py
+    - docs/design/vtaskforge-DESIGN.md (Links section)
+    - docs/design/api-surface-DESIGN.md (Links endpoints)
+    - src/workplans/views.py (viewset pattern)
+
+acceptance_criteria:
+  - "python manage.py makemigrations links produces a migration"
+  - "python manage.py migrate runs without errors"
+  - "python manage.py check returns no issues"
+  - "pytest tests/links/ passes"
+  - "POST /v1/links/ with {source_type, source_id, target_type, target_id, link_type} returns 201"
+  - "GET /v1/links/?source_id={id} returns links from that source"
+  - "GET /v1/links/?link_type=depends_on returns only dependency links"
+  - "DELETE /v1/links/{id} returns 204"
+
+behavioral_spec:
+  id: bs-1.7
+  priority: high
+  behaviors:
+    - "POST /v1/links/ with {source_type: 'task', source_id: 'abc', target_type: 'task', target_id: 'def', link_type: 'depends_on'} returns 201"
+    - "POST /v1/links/ with invalid link_type returns 400"
+    - "POST /v1/links/ with invalid source_type returns 400"
+    - "GET /v1/links/ returns 200 with list of all links"
+    - "GET /v1/links/?source_id=abc returns only links with source_id=abc"
+    - "GET /v1/links/?target_id=def returns only links with target_id=def"
+    - "GET /v1/links/?link_type=depends_on returns only depends_on links"
+    - "GET /v1/links/?source_type=task&link_type=area returns only task-to-area links"
+    - "DELETE /v1/links/{id} returns 204 and link is removed"
+    - "DELETE /v1/links/{id} for non-existent id returns 404"
+    - "PATCH /v1/links/{id} returns 405 (links are immutable)"
+    - "POST /v1/links/ with metadata={priority: 'high'} stores metadata as JSON"
+    - "POST /v1/links/ with link_type='commit' and target_id='abc123def' stores commit SHA"
+
+test_command: "pytest tests/links/"

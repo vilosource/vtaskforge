@@ -1,0 +1,123 @@
+id: "1.9"
+name: "Review model + endpoints"
+depends_on: ["1.6"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the Review model and endpoints for formal review decisions at review
+  gates. When a review is submitted, it triggers a state transition via the
+  state machine: approved moves the task forward, rejected/changes_requested
+  sends it to changes_requested status.
+
+  Reviews are the mechanism that powers the two review gates:
+  pending_start_review and pending_completion_review.
+
+files:
+  create:
+    - src/reviews/models.py
+    - src/reviews/serializers.py
+    - src/reviews/views.py
+    - src/reviews/urls.py
+    - src/reviews/apps.py
+    - src/reviews/__init__.py
+    - tests/reviews/__init__.py
+    - tests/reviews/test_models.py
+    - tests/reviews/test_api.py
+  modify:
+    - src/vtaskforge/urls.py
+
+implementation:
+  approach: |
+    Model: Create Review in src/reviews/models.py inheriting from NanoIDMixin
+    and TimestampMixin. Fields:
+
+    DECISION_CHOICES = [
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("changes_requested", "Changes Requested"),
+    ]
+
+    REVIEWER_TYPE_CHOICES = [
+        ("human", "Human"),
+        ("agent", "Agent"),
+    ]
+
+    - task: ForeignKey("tasks.Task", on_delete=CASCADE, related_name="reviews")
+    - decision: CharField(max_length=20, choices=DECISION_CHOICES)
+    - reason: TextField(blank=True, default="")
+    - reviewer_id: CharField(max_length=255)
+    - reviewer_type: CharField(max_length=10, choices=REVIEWER_TYPE_CHOICES, default="human")
+
+    App config: src/reviews/apps.py with ReviewsConfig, name="reviews".
+
+    Serializer: ReviewSerializer as ModelSerializer. All fields exposed.
+    id, created_at, updated_at are read-only. task is read-only (from URL).
+
+    ViewSet: ReviewViewSet — handles POST create and GET list, nested under
+    tasks at /v1/tasks/{task_id}/reviews.
+
+    On review creation (perform_create or create override):
+    1. Validate task is in a reviewable state (pending_start_review or
+       pending_completion_review)
+    2. Based on decision:
+       - "approved" at pending_start_review -> todo
+       - "approved" at pending_completion_review -> done
+       - "rejected" or "changes_requested" -> changes_requested
+         (set task.review_return_to = current task status before transition)
+    3. Use perform_transition from state_machine.py for the transition
+    4. Save the review record
+
+    Also support direct access: GET /v1/tasks/{task_id}/reviews to list
+    all reviews for a task.
+
+    URLs: Manual URL patterns (not router, since this is nested).
+    Wire into vtaskforge/urls.py or tasks/urls.py.
+
+  constraints:
+    - Review can only be submitted when task is in pending_start_review or
+      pending_completion_review — return 400 otherwise
+    - decision must be one of the valid choices
+    - reviewer_id is required
+    - On rejected/changes_requested, set task.review_return_to to the current
+      status (before transition) so resubmit knows where to go back
+    - Reviews are append-only — no update or delete
+    - State transition must use the state machine (perform_transition)
+    - If perform_transition raises InvalidTransition, return 422
+
+  references:
+    - src/tasks/models.py (Task model from 1.4)
+    - src/tasks/state_machine.py (from 1.5)
+    - src/tasks/views.py (TaskViewSet, nested pattern from 1.6)
+    - docs/design/vtaskforge-DESIGN.md (Review System Design section)
+    - docs/design/api-surface-DESIGN.md (Reviews endpoints)
+
+acceptance_criteria:
+  - "python manage.py makemigrations reviews produces a migration"
+  - "python manage.py migrate runs without errors"
+  - "python manage.py check returns no issues"
+  - "pytest tests/reviews/ passes"
+  - "POST /v1/tasks/{id}/reviews with approved decision on pending_start_review task transitions to todo"
+  - "POST /v1/tasks/{id}/reviews with approved decision on pending_completion_review task transitions to done"
+  - "POST /v1/tasks/{id}/reviews with changes_requested sets task.review_return_to and transitions to changes_requested"
+  - "POST /v1/tasks/{id}/reviews on draft task returns 400"
+  - "GET /v1/tasks/{id}/reviews returns list of reviews for that task"
+
+behavioral_spec:
+  id: bs-1.9
+  priority: high
+  behaviors:
+    - "POST /v1/tasks/{id}/reviews with {decision: 'approved', reviewer_id: 'human-jason'} on pending_start_review task returns 201 and task status becomes todo"
+    - "POST /v1/tasks/{id}/reviews with {decision: 'approved', reviewer_id: 'human-jason'} on pending_completion_review task returns 201 and task status becomes done"
+    - "POST /v1/tasks/{id}/reviews with {decision: 'changes_requested', reason: 'Missing tests'} on pending_start_review sets review_return_to=pending_start_review and status=changes_requested"
+    - "POST /v1/tasks/{id}/reviews with {decision: 'rejected', reason: 'Wrong approach'} on pending_completion_review sets review_return_to=pending_completion_review and status=changes_requested"
+    - "POST /v1/tasks/{id}/reviews on draft task returns 400 with error message"
+    - "POST /v1/tasks/{id}/reviews on todo task returns 400 with error message"
+    - "POST /v1/tasks/{id}/reviews on doing task returns 400 with error message"
+    - "POST /v1/tasks/{id}/reviews with missing decision returns 400"
+    - "POST /v1/tasks/{id}/reviews with missing reviewer_id returns 400"
+    - "GET /v1/tasks/{id}/reviews returns 200 with list of reviews ordered by created_at"
+    - "Review records are preserved after task state changes (append-only history)"
+    - "POST /v1/tasks/{non_existent_id}/reviews returns 404"
+
+test_command: "pytest tests/reviews/"

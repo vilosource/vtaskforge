@@ -1,0 +1,136 @@
+id: "1.10"
+name: "TaskEvent model + auto-logging"
+depends_on: ["1.6"]
+agent_model: sonnet
+isolation: sequential
+
+description: |
+  Create the TaskEvent model for append-only audit logging of everything that
+  happens to a task. Integrate with the state machine so status changes
+  automatically create events. Provide read-only endpoints for querying
+  the event timeline.
+
+  TaskEvents enable: task timeline view, cycle time metrics (draft->done),
+  rework rate (changes_requested count), time in review.
+
+files:
+  create:
+    - src/events/models.py
+    - src/events/serializers.py
+    - src/events/views.py
+    - src/events/urls.py
+    - src/events/apps.py
+    - src/events/__init__.py
+    - tests/events/__init__.py
+    - tests/events/test_models.py
+    - tests/events/test_api.py
+    - tests/events/test_auto_logging.py
+  modify:
+    - src/tasks/state_machine.py
+    - src/tasks/views.py
+    - src/vtaskforge/urls.py
+
+implementation:
+  approach: |
+    Model: Create TaskEvent in src/events/models.py inheriting from
+    NanoIDMixin (NOT TimestampMixin — events have their own timestamp).
+    Fields:
+
+    EVENT_TYPE_CHOICES = [
+        ("status_changed", "Status Changed"),
+        ("claimed", "Claimed"),
+        ("unclaimed", "Unclaimed"),
+        ("review_submitted", "Review Submitted"),
+        ("link_added", "Link Added"),
+        ("link_removed", "Link Removed"),
+        ("field_updated", "Field Updated"),
+    ]
+
+    - task: ForeignKey("tasks.Task", on_delete=CASCADE, related_name="events")
+    - event_type: CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
+    - data: JSONField(default=dict)
+    - timestamp: DateTimeField(auto_now_add=True)
+    - triggered_by: CharField(max_length=255, blank=True, default="")
+
+    App config: src/events/apps.py with EventsConfig, name="events".
+
+    Serializer: TaskEventSerializer as ModelSerializer. All fields read-only.
+
+    ViewSet: TaskEventViewSet — read-only (list only, no create/update/delete).
+    Two access patterns:
+    1. GET /v1/tasks/{task_id}/events — events for a specific task
+    2. GET /v1/events — query events across tasks with filters:
+       ?workplan=, ?task=, ?event_type=, ?since= (timestamp)
+
+    Integration with state machine:
+    Modify src/tasks/state_machine.py perform_transition() to create a
+    TaskEvent after successful transition:
+
+    from events.models import TaskEvent
+    TaskEvent.objects.create(
+        task=task,
+        event_type="status_changed",
+        data={"from": old_status, "to": new_status},
+        triggered_by=triggered_by,
+    )
+
+    Integration with task views:
+    Modify claim/unclaim actions in src/tasks/views.py to create
+    claimed/unclaimed events:
+    TaskEvent.objects.create(
+        task=task,
+        event_type="claimed",
+        data={"agent_id": agent_id},
+        triggered_by=agent_id,
+    )
+
+    URLs: Manual paths for nested route + router for /v1/events.
+
+  constraints:
+    - TaskEvent is append-only — no update or delete endpoints
+    - Events are ordered by timestamp descending (newest first) by default
+    - status_changed event data must include "from" and "to" status values
+    - claimed event data must include "agent_id"
+    - perform_transition must still work if events app has issues
+      (wrap event creation in try/except to not break transitions)
+    - GET /v1/events must support filtering by task, event_type, and since
+    - Do NOT create events for review submissions yet (that's handled in 1.9
+      integration — add it here if 1.9 is already done, skip if not)
+
+  references:
+    - src/tasks/state_machine.py (from 1.5 — will be modified)
+    - src/tasks/views.py (from 1.6 — claim/unclaim actions)
+    - src/core/mixins.py (NanoIDMixin)
+    - docs/design/vtaskforge-DESIGN.md (Task event log section)
+    - docs/design/api-surface-DESIGN.md (Task Events endpoints)
+
+acceptance_criteria:
+  - "python manage.py makemigrations events produces a migration"
+  - "python manage.py migrate runs without errors"
+  - "python manage.py check returns no issues"
+  - "pytest tests/events/ passes"
+  - "Transitioning a task via state machine auto-creates a status_changed event"
+  - "Claiming a task auto-creates a claimed event"
+  - "Unclaiming a task auto-creates an unclaimed event"
+  - "GET /v1/tasks/{id}/events returns events for that task"
+  - "GET /v1/events returns events across all tasks"
+  - "GET /v1/events?event_type=status_changed filters correctly"
+
+behavioral_spec:
+  id: bs-1.10
+  priority: high
+  behaviors:
+    - "perform_transition from draft to todo creates a status_changed event with data={from: 'draft', to: 'todo'}"
+    - "Claiming a task creates a claimed event with data={agent_id: '...'}"
+    - "Unclaiming a task creates an unclaimed event"
+    - "GET /v1/tasks/{id}/events returns 200 with list of events for that task"
+    - "GET /v1/tasks/{id}/events returns events ordered by timestamp"
+    - "GET /v1/events returns 200 with events across all tasks"
+    - "GET /v1/events?event_type=status_changed returns only status_changed events"
+    - "GET /v1/events?task={task_id} returns only events for that task"
+    - "Events cannot be created via API (no POST endpoint)"
+    - "Events cannot be updated or deleted via API"
+    - "Multiple transitions on same task produce multiple events in order"
+    - "Event triggered_by field records who triggered the action"
+
+test_command: "pytest tests/events/"
