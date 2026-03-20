@@ -147,38 +147,68 @@ Contracts are documented in each task's spec file. A future improvement is to ex
 ## Execution Flow
 
 ```
-1. Supervisor writes task spec + behavioral spec + contracts
+1. Supervisor writes task spec
 2. Supervisor dispatches Sonnet subagent with task spec
 3. Sonnet executes, commits
 4. Gate 1a — Task-specific tests:
-   - Run test_command (pytest for this task's tests)
+   - Run test_command (pytest/vitest for this task's tests)
    - If fail → back to Sonnet with failure details
 5. Gate 1b — Full suite regression:
-   - Run pytest tests/ (entire test suite)
-   - If fail → agent must fix regressions (check files.affected)
-6. Gate 2 — Judge code review (if judge: true):
+   - Run all test suites (Django + CLI + web)
+   - If fail → agent must fix regressions
+6. Gate 1c — Deployment smoke test (if task touches deployment boundary):
+   - Rebuild dogfood image
+   - Run deployment-smoke.spec.ts against built artifact
+   - Catches: asset serving, auth flow, MIME types, SSE, routing
+   - If fail → agent must fix deployment issues
+7. Gate 2 — Judge code review (if judge: true):
    - Opus judge reads code + design docs
-   - Verifies: design alignment, pattern compliance, contract maintenance
-   - Does NOT re-test behaviors (tests do that)
+   - Verifies: design alignment, pattern compliance, blast radius
    - Produces structured verdict
-7. Approve → move to next task
+8. Approve → move to next task
 ```
 
 ### Gate Details
 
 **Gate 1a (Task tests)** — fast feedback. Runs only the task's test_command. Catches implementation bugs immediately.
 
-**Gate 1b (Full suite)** — regression detection. Runs the entire test suite. Catches cross-task breakage. This gate is mandatory — Phase 1's regression was only caught because it was run. If Gate 1b fails, the executor agent must check `files.affected` and fix tests it broke.
+**Gate 1b (Full suite)** — regression detection. Runs the entire test suite. Catches cross-task breakage. Mandatory on every task.
+
+**Gate 1c (Deployment smoke test)** — environment boundary verification. Runs the built Docker artifact through a real browser via Playwright. This gate catches bugs that are **invisible to unit and integration tests** because they only manifest when the application runs in its production-like environment.
+
+Gate 1c is triggered when a task modifies any **deployment boundary file**:
+- `Dockerfile*`, `docker-compose*` — container build/runtime
+- `settings/base.py`, `settings/prod.py` — shared or production configuration
+- `urls.py` — routing (affects what Django serves vs what the SPA catches)
+- `requirements/*.txt` — dependency changes
+- `web/vite.config.ts` — frontend build configuration
+- Middleware, auth classes, static file configuration
+
+Gate 1c runs: `cd web && npx playwright test tests/deployment-smoke.spec.ts`
+
+The deployment smoke test verifies:
+1. Login page renders for unauthenticated users (no blank 401 page)
+2. Login with credentials works and reaches the workplan list
+3. SPA assets serve with correct MIME types (no catch-all interception)
+4. API responds through Django (not just Vite proxy)
+5. Kanban board loads without console errors
+6. SSE endpoint accepts browser connections (no 406 from content negotiation)
+
+**Why this gate exists:** Phase 4 shipped three production bugs that all tests passed on:
+- SPA asset MIME types (Vite serves correctly, Django's catch-all returned HTML)
+- Missing login page (dev uses localStorage token, real users have no way in)
+- SSE 406 (DRF content negotiation rejects text/event-stream from EventSource)
+
+All three were invisible to Gate 1a and Gate 1b because those tests run in a different environment than production. Gate 1c is the only gate that tests the actual deployed artifact.
 
 **Gate 2 (Judge code review)** — design alignment. The judge is a code reviewer, NOT a behavior tester. Tests verify behavior. The judge verifies:
 - Does the implementation match the design doc's intent?
 - Does the code follow the established pattern (or introduce dead code)?
 - Are there N+1 queries, missing indexes, or architectural issues?
-- Are contracts maintained — if this task modifies a contract, did it update all consumers?
-- Does the code match the referenced pattern template?
+- Blast radius: were all consumers of changed interfaces updated?
 
 The judge does NOT:
-- Re-test behaviors via curl (tests already proved this)
+- Re-test behaviors via curl or browser (tests and Gate 1c do that)
 - Make design decisions or suggest improvements
 - Block on code style preferences
 
@@ -536,3 +566,31 @@ Process changes:
 3. **Simplified spec template.** Removed mandatory contracts, affected_files, behavioral_spec, and pattern fields. These added complexity without proven value. The blast radius is discovered by the agent, not predicted by the spec. Optional fields remain available when useful.
 
 4. **vtf-dogfood release stack.** Production Docker image (built, not mounted) running on port 8001 with separate Postgres. Dogfood data survives dev test runs. The DB wipe issue was specific to self-hosting (same DB for tracking and development), not a product deficiency.
+
+### Iteration 4 — Post-Phase 4 (2026-03-20)
+
+Phase 4 built the web UI (React SPA). Three production bugs were found by a human user, not by any automated test:
+
+1. **SPA asset MIME types** — Django's catch-all URL returned index.html for /assets/*.js requests
+2. **Missing login page** — unauthenticated users saw blank page with 401 console errors
+3. **SSE 406** — DRF's @api_view rejected Accept: text/event-stream from browser EventSource
+
+All three passed every test gate (Vitest, pytest, Playwright against dev server). They only manifested when the **built SPA was served through Django in a Docker container** — an environment no test exercised.
+
+Key finding: **Environment Boundary Testing**
+
+Every environment boundary is a potential failure point:
+- Unit test ←→ Real API (mocks vs real responses)
+- Vite dev server ←→ Django (asset serving, routing)
+- Test client ←→ Real browser (headers, cookies, CSRF, MIME types)
+- Dev Docker ←→ Prod Docker (dependencies, settings, static files)
+
+We test exhaustively within each environment but never across them. Bugs that cross environment boundaries are invisible to all existing test layers.
+
+Process changes:
+
+1. **Gate 1c (Deployment smoke test).** A new mandatory gate that runs Playwright against the built/deployed artifact (dogfood instance), not against the dev server. Catches asset serving, auth flow, MIME types, SSE connectivity, and routing issues. Triggered when any deployment boundary file changes (Dockerfile, docker-compose, settings, urls.py, requirements, vite.config).
+
+2. **Deployment smoke test script.** Created `web/tests/deployment-smoke.spec.ts` — 7 tests that verify: login page renders, login works, invalid credentials show error, assets serve with correct MIME types, API responds through Django, Kanban board loads without console errors, SSE accepts browser connections.
+
+3. **Login page added.** Unauthenticated browser users are now redirected to /login instead of seeing 401 errors. Uses Django session auth (POST /v1/auth/login) — no token management needed for humans.
