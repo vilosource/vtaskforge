@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { usePhaseStats } from '../api/phases';
 import type { Phase } from '../api/phases';
@@ -7,6 +6,8 @@ interface PhasePipelineProps {
   phases: Phase[];
   workplanId: string;
 }
+
+const PHASES_PER_ROW = 4;
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   completed: { bg: '#e8f5e9', border: '#4caf50', text: '#2e7d32' },
@@ -24,11 +25,10 @@ function PipelineNode({ phase, workplanId }: { phase: Phase; workplanId: string 
   return (
     <Link
       to={`/workplans/${workplanId}/phases/${phase.id}`}
-      style={{ textDecoration: 'none' }}
+      style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}
     >
       <div style={{
-        minWidth: 160,
-        padding: '12px 16px',
+        padding: '10px 12px',
         background: colors.bg,
         border: `2px solid ${colors.border}`,
         borderRadius: 8,
@@ -36,37 +36,58 @@ function PipelineNode({ phase, workplanId }: { phase: Phase; workplanId: string 
         cursor: 'pointer',
         transition: 'box-shadow 0.2s',
       }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: colors.text }}>{phase.name}</div>
-        <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-          {done}/{total} tasks
-        </div>
-        <div style={{ marginTop: 6, height: 4, background: '#e0e0e0', borderRadius: 2 }}>
-          <div style={{
-            width: `${pct}%`,
-            height: '100%',
-            background: colors.border,
-            borderRadius: 2,
-            transition: 'width 0.3s',
-          }} />
-        </div>
         <div style={{
-          marginTop: 4, fontSize: 11, fontWeight: 600,
-          textTransform: 'uppercase', color: colors.text,
+          fontWeight: 600, fontSize: 13, color: colors.text,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
-          {phase.status}
+          {phase.name}
+        </div>
+        <div style={{ fontSize: 11, color: '#666', marginTop: 3 }}>
+          {done}/{total}
+        </div>
+        <div style={{ marginTop: 4, height: 3, background: '#e0e0e0', borderRadius: 2 }}>
+          <div style={{
+            width: `${pct}%`, height: '100%',
+            background: colors.border, borderRadius: 2,
+          }} />
         </div>
       </div>
     </Link>
   );
 }
 
-function Arrow() {
+function HArrow({ reverse }: { reverse?: boolean }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center',
-      padding: '0 4px', color: '#bdbdbd', fontSize: 20,
+      padding: '0 2px', color: '#bdbdbd', fontSize: 16, flexShrink: 0,
     }}>
-      →
+      {reverse ? '\u2190' : '\u2192'}
+    </div>
+  );
+}
+
+function VConnector({ side }: { side: 'right' | 'left' }) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: side === 'right' ? 'flex-end' : 'flex-start',
+      padding: side === 'right' ? '0 24px 0 0' : '0 0 0 24px',
+    }}>
+      <div style={{
+        width: 2, height: 20,
+        background: '#bdbdbd',
+        position: 'relative',
+      }}>
+        {/* Down arrow */}
+        <div style={{
+          position: 'absolute', bottom: -6, left: -4,
+          width: 0, height: 0,
+          borderLeft: '5px solid transparent',
+          borderRight: '5px solid transparent',
+          borderTop: '6px solid #bdbdbd',
+        }} />
+      </div>
     </div>
   );
 }
@@ -76,17 +97,40 @@ export function PhasePipeline({ phases, workplanId }: PhasePipelineProps) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>No phases yet.</div>;
   }
 
+  // Split phases into rows
+  const rows: Phase[][] = [];
+  for (let i = 0; i < phases.length; i += PHASES_PER_ROW) {
+    rows.push(phases.slice(i, i + PHASES_PER_ROW));
+  }
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      overflowX: 'auto', padding: '16px 0', gap: 0,
-    }}>
-      {phases.map((phase, i) => (
-        <Fragment key={phase.id}>
-          <PipelineNode phase={phase} workplanId={workplanId} />
-          {i < phases.length - 1 && <Arrow />}
-        </Fragment>
-      ))}
+    <div style={{ padding: '8px 0' }}>
+      {rows.map((row, rowIndex) => {
+        const isReversed = rowIndex % 2 === 1;
+        const displayRow = isReversed ? [...row].reverse() : row;
+        const isLastRow = rowIndex === rows.length - 1;
+
+        return (
+          <div key={rowIndex}>
+            {/* Phase row */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 0,
+            }}>
+              {displayRow.map((phase, i) => (
+                <div key={phase.id} style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                  <PipelineNode phase={phase} workplanId={workplanId} />
+                  {i < displayRow.length - 1 && <HArrow reverse={isReversed} />}
+                </div>
+              ))}
+            </div>
+
+            {/* Vertical connector to next row */}
+            {!isLastRow && (
+              <VConnector side={isReversed ? 'left' : 'right'} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
