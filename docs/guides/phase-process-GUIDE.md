@@ -182,6 +182,115 @@ The judge does NOT:
 - Make design decisions or suggest improvements
 - Block on code style preferences
 
+## Testing Strategy by Project Type
+
+Different parts of the system require different testing approaches. The gate structure (1a → 1b → judge) stays the same, but the tools change.
+
+### Backend (Django/DRF)
+
+| Layer | Tool | What it tests | When to run |
+|---|---|---|---|
+| Unit | pytest + pytest-django | Models, state machine, business logic | Gate 1a |
+| Integration | pytest + DRF test client | API endpoints, auth, serialization | Gate 1a |
+| E2E | vtf-blackbox-tester (curl) | Full lifecycle across endpoints | After phase completion |
+
+```yaml
+# Task spec for backend tasks
+test_command: "docker compose exec api pytest tests/tasks/test_claiming.py"
+```
+
+Gate 1b (full suite): `docker compose exec api pytest tests/ && pytest cli/tests/`
+
+### Frontend (React/Web UI)
+
+| Layer | Tool | What it tests | When to run |
+|---|---|---|---|
+| Unit | Vitest + React Testing Library | Components in isolation, hooks, utilities | Gate 1a |
+| Integration | Vitest + MSW (Mock Service Worker) | Components with mocked API responses | Gate 1a |
+| E2E | Playwright | Real browser, real clicks, real page loads | Gate 1a + after phase |
+
+```yaml
+# Task spec for frontend tasks
+test_command:
+  unit: "cd web && npx vitest run"
+  e2e: "cd web && npx playwright test tests/kanban.spec.ts"
+```
+
+Gate 1b (full suite): `docker compose exec api pytest tests/ && pytest cli/tests/ && cd web && npx vitest run && npx playwright test`
+
+### Playwright as the Web Black-Box Tester
+
+Playwright is the curl equivalent for web UIs. It opens a real browser and tests the application as a user would:
+
+```typescript
+test('task moves to doing column after claim', async ({ page }) => {
+  await page.goto('/workplans/abc123');
+  const taskCard = page.locator('text=Fix unclaim');
+  await expect(taskCard).toBeVisible();
+
+  await taskCard.click();
+  await page.locator('button:text("Claim")').click();
+
+  // Verify task moved to doing column
+  const doingColumn = page.locator('[data-column="doing"]');
+  await expect(doingColumn.locator('text=Fix unclaim')).toBeVisible();
+});
+```
+
+Playwright tests verify:
+- Pages render correctly
+- Navigation works
+- User interactions trigger correct API calls
+- SSE updates appear without page refresh
+- Error states display properly
+
+### SSE Testing
+
+SSE live updates require special testing:
+- **Unit**: Mock EventSource, verify component reacts to events
+- **Integration**: Vitest with a fake SSE server
+- **E2E**: Playwright creates data via API, verifies the UI updates within a timeout
+
+```typescript
+test('SSE updates kanban board live', async ({ page, request }) => {
+  await page.goto('/workplans/abc123');
+
+  // Create a task via API (bypassing the UI)
+  await request.post('/v1/phases/def456/tasks/', {
+    data: { title: 'New task from API' },
+    headers: { Authorization: 'Token ...' },
+  });
+
+  // Verify the task appears on the board without refresh
+  await expect(page.locator('text=New task from API')).toBeVisible({ timeout: 5000 });
+});
+```
+
+### Judge Considerations for Web Tasks
+
+The judge reviews frontend code for:
+- **Component structure**: Clean separation of concerns, no business logic in components
+- **API integration**: Uses the shared API client, handles loading/error states
+- **Accessibility**: Semantic HTML, ARIA attributes, keyboard navigation
+- **Blast radius**: API response format changes reflected in mocks (MSW handlers)
+- **Performance**: No unnecessary re-renders, proper memoization for large lists
+
+The judge does NOT:
+- Evaluate visual design or CSS aesthetics
+- Test in a browser (Playwright does that)
+- Judge framework-specific style preferences (class vs functional components)
+
+### Cross-Stack Blast Radius
+
+Web projects introduce a new blast radius surface: **the API contract between backend and frontend.**
+
+When a backend task changes an API response format:
+1. The executor must search frontend code for consumers (API client calls, TypeScript types, MSW mock handlers)
+2. The executor must update all frontend consumers and mocks
+3. The judge must verify no stale mocks remain in MSW handlers
+
+This is the same blast radius principle, but the consumer is in a different language/framework. The search pattern: grep for the endpoint path in the web/ directory.
+
 ### Judge Policy
 
 Run the judge (`judge: true`) on:
