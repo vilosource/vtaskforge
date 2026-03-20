@@ -5,6 +5,8 @@ from django.contrib import admin
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.urls import include, path, re_path
 
+from django.contrib.auth import authenticate, login, logout
+from django.views.decorators.csrf import ensure_csrf_cookie
 from core.views import BulkImportView, HealthCheckView
 
 
@@ -46,8 +48,49 @@ def serve_spa(request, path=''):
     )
 
 
+import json as json_module
+
+
+@ensure_csrf_cookie
+def api_login(request):
+    """POST /v1/auth/login — session login for browser users."""
+    if request.method == 'GET':
+        # GET returns CSRF cookie + current auth status
+        if request.user.is_authenticated:
+            return JsonResponse({'authenticated': True, 'username': request.user.username})
+        return JsonResponse({'authenticated': False})
+
+    if request.method != 'POST':
+        return JsonResponse({'detail': 'Method not allowed.'}, status=405)
+
+    try:
+        data = json_module.loads(request.body)
+    except (json_module.JSONDecodeError, ValueError):
+        return JsonResponse({'detail': 'Invalid JSON.'}, status=400)
+
+    username = data.get('username', '')
+    password = data.get('password', '')
+    if not username or not password:
+        return JsonResponse({'detail': 'Username and password required.'}, status=400)
+
+    user = authenticate(request, username=username, password=password)
+    if user is None:
+        return JsonResponse({'detail': 'Invalid credentials.'}, status=401)
+
+    login(request, user)
+    return JsonResponse({'authenticated': True, 'username': user.username})
+
+
+def api_logout(request):
+    """POST /v1/auth/logout — session logout."""
+    logout(request)
+    return JsonResponse({'authenticated': False})
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('v1/auth/login', api_login, name='api-login'),
+    path('v1/auth/logout', api_logout, name='api-logout'),
     path('v1/health', HealthCheckView.as_view(), name='health-check'),
     path('v1/bulk/import', BulkImportView.as_view(), name='bulk-import'),
     path('v1/', include('workplans.urls')),
