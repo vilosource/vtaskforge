@@ -26,6 +26,7 @@ urlpatterns = [
     path('v1/', include('agents.urls')),
     path('v1/', include('tasks.urls')),
     path('v1/', include('links.urls')),
+    path('v1/', include('reviews.urls')),
 ]
 
 handler404 = custom_404
