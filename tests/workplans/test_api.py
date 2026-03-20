@@ -1,7 +1,7 @@
 import pytest
 from rest_framework import status
 
-from tests.factories import WorkplanFactory
+from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
 from workplans.models import Workplan
 
 
@@ -243,3 +243,47 @@ class TestWorkplanStats:
     def test_stats_nonexistent_returns_404(self, api_client):
         response = api_client.get("/v1/workplans/nonexistentid12345678/stats/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_stats_empty_workplan_returns_zeros(self, api_client, workplan):
+        response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
+        assert response.data["total_tasks"] == 0
+        assert response.data["completed_percentage"] == 0.0
+        assert response.data["by_status"] == {}
+
+    def test_stats_counts_tasks_by_status(self, api_client, workplan):
+        phase = PhaseFactory(workplan=workplan)
+        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        TaskFactory(workplan=workplan, phase=phase, status="doing")
+        TaskFactory(workplan=workplan, phase=phase, status="done")
+        response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
+        assert response.data["total_tasks"] == 4
+        assert response.data["by_status"]["todo"] == 2
+        assert response.data["by_status"]["doing"] == 1
+        assert response.data["by_status"]["done"] == 1
+
+    def test_stats_completed_percentage(self, api_client, workplan):
+        phase = PhaseFactory(workplan=workplan)
+        TaskFactory(workplan=workplan, phase=phase, status="done")
+        TaskFactory(workplan=workplan, phase=phase, status="done")
+        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
+        assert response.data["completed_percentage"] == 50.0
+
+    def test_stats_completed_percentage_is_float(self, api_client, workplan):
+        phase = PhaseFactory(workplan=workplan)
+        TaskFactory(workplan=workplan, phase=phase, status="done")
+        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
+        assert isinstance(response.data["completed_percentage"], float)
+
+    def test_stats_only_counts_own_workplan_tasks(self, api_client, workplan):
+        other_workplan = WorkplanFactory()
+        phase = PhaseFactory(workplan=workplan)
+        other_phase = PhaseFactory(workplan=other_workplan)
+        TaskFactory(workplan=workplan, phase=phase, status="done")
+        TaskFactory(workplan=other_workplan, phase=other_phase, status="done")
+        response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
+        assert response.data["total_tasks"] == 1

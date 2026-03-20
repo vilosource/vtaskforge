@@ -1,9 +1,12 @@
+from django.db.models import Count
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from tasks.models import Task
 from .models import Phase, Workplan
 from .serializers import PhaseSerializer, WorkplanSerializer
 
@@ -56,13 +59,22 @@ class WorkplanViewSet(ModelViewSet):
     @action(detail=True, methods=["get"])
     def stats(self, request, pk=None):
         workplan = self.get_object()
-        # Placeholder stats — task counts will be populated in later tasks
+        tasks = Task.objects.filter(workplan=workplan)
+        total = tasks.count()
+        status_counts = {
+            row["status"]: row["count"]
+            for row in tasks.values("status").annotate(count=Count("id"))
+        }
+        done_count = status_counts.get("done", 0)
+        completed_percentage = round(done_count / total * 100, 1) if total > 0 else 0.0
         stats_data = {
             "workplan_id": workplan.id,
-            "total_tasks": 0,
-            "completed_tasks": 0,
-            "pending_tasks": 0,
-            "in_progress_tasks": 0,
+            "total_tasks": total,
+            "by_status": status_counts,
+            "completed_percentage": completed_percentage,
+            "completed_tasks": done_count,
+            "pending_tasks": status_counts.get("todo", 0),
+            "in_progress_tasks": status_counts.get("doing", 0),
         }
         return Response(stats_data)
 
@@ -140,11 +152,21 @@ class PhaseViewSet(ModelViewSet):
     @action(detail=True, methods=["get"])
     def stats(self, request, pk=None):
         phase = self.get_object()
+        tasks = Task.objects.filter(phase=phase)
+        total = tasks.count()
+        status_counts = {
+            row["status"]: row["count"]
+            for row in tasks.values("status").annotate(count=Count("id"))
+        }
+        done_count = status_counts.get("done", 0)
+        completed_percentage = round(done_count / total * 100, 1) if total > 0 else 0.0
         stats_data = {
             "phase_id": phase.id,
-            "total_tasks": 0,
-            "completed_tasks": 0,
-            "pending_tasks": 0,
-            "in_progress_tasks": 0,
+            "total_tasks": total,
+            "by_status": status_counts,
+            "completed_percentage": completed_percentage,
+            "completed_tasks": done_count,
+            "pending_tasks": status_counts.get("todo", 0),
+            "in_progress_tasks": status_counts.get("doing", 0),
         }
         return Response(stats_data)
