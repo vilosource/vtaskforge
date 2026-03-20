@@ -60,9 +60,28 @@ urlpatterns = [
 
 handler404 = custom_404
 
+# SPA static assets — serve JS/CSS/images from the built SPA directory
+def serve_spa_asset(request, asset_path):
+    """Serve SPA static assets (JS, CSS, images) with correct MIME types."""
+    import mimetypes
+    candidates = [
+        f'/app/static/spa/assets/{asset_path}',
+    ]
+    static_root = getattr(settings, 'STATIC_ROOT', None)
+    if static_root:
+        candidates.append(os.path.join(static_root, 'spa', 'assets', asset_path))
+
+    for filepath in candidates:
+        if os.path.exists(filepath):
+            content_type, _ = mimetypes.guess_type(filepath)
+            return FileResponse(open(filepath, 'rb'), content_type=content_type or 'application/octet-stream')
+
+    return JsonResponse({'detail': 'Not found.'}, status=404)
+
+
 # SPA catch-all — must come LAST. Serves index.html for any route that isn't
-# /v1/* (API) or /admin/* (Django admin). This allows React Router to handle
-# client-side navigation when the user refreshes or deep-links.
+# /v1/* (API), /admin/* (Django admin), or /assets/* (SPA static files).
 urlpatterns += [
-    re_path(r'^(?!v1/|admin/).*$', serve_spa),
+    path('assets/<path:asset_path>', serve_spa_asset),
+    re_path(r'^(?!v1/|admin/|assets/).*$', serve_spa),
 ]
