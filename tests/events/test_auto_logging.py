@@ -133,7 +133,7 @@ class TestClaimAutoLogging:
         """Claiming a task that's not in 'todo' should fail and create no claimed event."""
         # task is in draft status
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-1"}, format="json")
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_409_CONFLICT
         assert TaskEvent.objects.filter(task=task, event_type="claimed").count() == 0
 
 
