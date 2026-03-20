@@ -1,7 +1,9 @@
 from datetime import timedelta
 
 import pytest
+from django.contrib.auth.models import User
 from django.utils import timezone
+from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from tests.factories import AgentFactory, TaskFactory, WorkplanFactory, PhaseFactory
@@ -25,7 +27,16 @@ def _celery_eager(settings):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def api_client():
+def api_client(db):
+    client = APIClient()
+    user = User.objects.create_user(username='testuser', password='testpass')
+    token = Token.objects.create(user=user)
+    client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+    return client
+
+
+@pytest.fixture
+def unauthenticated_client():
     return APIClient()
 
 

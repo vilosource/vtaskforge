@@ -59,6 +59,13 @@ class TestAgentCreate:
         assert "id" in response.data
         assert len(response.data["id"]) == 21
 
+    def test_create_returns_token(self, api_client):
+        payload = {"name": "New Agent"}
+        response = api_client.post("/v1/agents/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "token" in response.data
+        assert len(response.data["token"]) == 40
+
     def test_create_with_tags(self, api_client):
         payload = {"name": "Tagged Agent", "tags": ["python", "llm"]}
         response = api_client.post("/v1/agents/", payload, format="json")

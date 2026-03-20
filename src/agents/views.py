@@ -1,5 +1,8 @@
+from django.contrib.auth.models import User
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
@@ -12,8 +15,27 @@ class AgentViewSet(ModelViewSet):
     serializer_class = AgentSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
+    def get_permissions(self):
+        if self.action == "create":
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
     def perform_create(self, serializer):
         serializer.save(status="online")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        agent = serializer.instance
+
+        # Create a Django User for this agent and issue a DRF Token
+        user = User.objects.create_user(username=agent.id)
+        token = Token.objects.create(user=user)
+
+        data = serializer.data
+        data["token"] = token.key
+        return Response(data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         # Disable full PUT — PATCH only

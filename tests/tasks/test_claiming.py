@@ -12,7 +12,9 @@ Covers:
 import threading
 
 import pytest
+from django.contrib.auth.models import User
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from links.models import Link
@@ -421,13 +423,21 @@ class TestClaimDependencyUnmet:
 
 @pytest.mark.django_db(transaction=True)
 class TestConcurrentClaim:
+    def _make_token_key(self):
+        """Create a shared auth token for use in threads."""
+        user = User.objects.create_user(username='concurrent-test-user')
+        token = Token.objects.create(user=user)
+        return token.key
+
     def test_concurrent_claim_one_wins_one_gets_409(self, phase, workplan):
         """Two agents race to claim the same task; exactly one should win."""
         task = make_task(phase, workplan)
+        token_key = self._make_token_key()
         results = []
 
         def do_claim(agent_id):
             client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f'Token {token_key}')
             resp = client.post(
                 f"/v1/tasks/{task.id}/claim/",
                 {"agent_id": agent_id},
@@ -447,9 +457,11 @@ class TestConcurrentClaim:
     def test_concurrent_claim_task_ends_in_doing(self, phase, workplan):
         """After concurrent claims, task should be in 'doing' state."""
         task = make_task(phase, workplan)
+        token_key = self._make_token_key()
 
         def do_claim(agent_id):
             client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f'Token {token_key}')
             client.post(
                 f"/v1/tasks/{task.id}/claim/",
                 {"agent_id": agent_id},
