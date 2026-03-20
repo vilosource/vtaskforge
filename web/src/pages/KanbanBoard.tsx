@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTasksByWorkplan, useWorkplan } from '../api/tasks';
 import type { Task } from '../api/tasks';
 import { KanbanColumn } from '../components/KanbanColumn';
 import type { ColumnConfig } from '../components/KanbanColumn';
+import { useSSE } from '../hooks/useSSE';
+import { LiveIndicator } from '../components/LiveIndicator';
 
 const COLUMNS: ColumnConfig[] = [
   { id: 'draft', label: 'Draft', statuses: ['draft'], color: 'grey' },
@@ -63,6 +66,29 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
   const [showHidden, setShowHidden] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleSSEEvent = useCallback(
+    (event: MessageEvent) => {
+      let data: { task_id?: string } = {};
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        // ignore malformed events
+      }
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'workplan', workplanId] });
+      if (data.task_id) {
+        queryClient.invalidateQueries({ queryKey: ['task', data.task_id] });
+      }
+    },
+    [queryClient, workplanId],
+  );
+
+  const { status: sseStatus } = useSSE({
+    url: `/v1/events/stream/?workplan=${workplanId}`,
+    onEvent: handleSSEEvent,
+    enabled: !!workplanId,
+  });
 
   const {
     data: workplanData,
@@ -99,7 +125,10 @@ export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
   return (
     <div className="kanban-board">
       <div className="kanban-board-header">
-        <h1>{workplanData?.name ?? workplanId}</h1>
+        <div className="kanban-board-title">
+          <h1>{workplanData?.name ?? workplanId}</h1>
+          <LiveIndicator status={sseStatus} />
+        </div>
         <div className="kanban-board-controls">
           <span className="task-count">{totalTasks} tasks</span>
           <label className="show-hidden-toggle">
