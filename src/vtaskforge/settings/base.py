@@ -31,7 +31,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     'core',
-    'initiatives',
+    'workplans',
     'tasks',
     'links',
     'reviews',

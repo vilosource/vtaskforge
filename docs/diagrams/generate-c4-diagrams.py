@@ -28,12 +28,12 @@ with Diagram(
 ):
     human = Person(
         name="Product Owner",
-        description="Defines initiatives, reviews tasks, triages issues, final authority",
+        description="Defines workplans, reviews tasks, triages issues, final authority",
     )
 
     vtf = System(
         name="vtaskforge",
-        description="Distributed task execution system. Manages initiatives, phases, tasks, reviews, links, and events.",
+        description="Distributed task execution system. Manages workplans, phases, tasks, reviews, links, and events.",
         external=False,
     )
 
@@ -69,11 +69,11 @@ with Diagram(
 
     intake = System(
         name="Intake Tooling",
-        description="Converts markdown plans into structured initiatives, phases, and tasks.",
+        description="Converts markdown plans into structured workplans, phases, and tasks.",
         external=True,
     )
 
-    human >> Edge(label="defines initiatives\nreviews tasks") >> vtf
+    human >> Edge(label="defines workplans\nreviews tasks") >> vtf
     human >> Edge(label="uses browser") >> webui
     human >> Edge(label="monitors via CLI") >> tui
 
@@ -112,7 +112,7 @@ with Diagram(
         db = Database(
             name="Postgres",
             technology="PostgreSQL, Port 5432",
-            description="Initiatives, phases, tasks, links, reviews, events",
+            description="Workplans, phases, tasks, links, reviews, events",
         )
         events = Container(
             name="Event Bus",

@@ -11,7 +11,7 @@ Designed for these consumers:
 - **Scrum Master Agent** — event stream, triage, metrics
 - **Web UI** (SPA) — full CRUD, live updates, reviews
 - **Terminal UI** (Python) — same operations via CLI
-- **Intake Tooling** — bulk creation of initiatives/phases/tasks
+- **Intake Tooling** — bulk creation of workplans/phases/tasks
 - **External Systems** — unblock tasks, future webhook support
 
 ## API Style Decisions
@@ -43,27 +43,27 @@ Alternatives considered:
 
 ```
 GET  /v1/health                          Liveness (DB connection, etc.)
-GET  /v1/status                          System stats: active initiatives, task counts,
+GET  /v1/status                          System stats: active workplans, task counts,
                                          registered agents, event stream subscribers
 ```
 
-### Initiatives
+### Workplans
 
 ```
-POST   /v1/initiatives                   Create initiative
-GET    /v1/initiatives                   List (filter: status, tags, search)
-GET    /v1/initiatives/:id               Get details
-PATCH  /v1/initiatives/:id               Update fields
-POST   /v1/initiatives/:id/archive       Archive initiative
-POST   /v1/initiatives/:id/complete      Complete initiative
-GET    /v1/initiatives/:id/stats         Aggregate stats (task counts by status, progress %)
+POST   /v1/workplans                     Create workplan
+GET    /v1/workplans                     List (filter: status, tags, search)
+GET    /v1/workplans/:id                 Get details
+PATCH  /v1/workplans/:id                 Update fields
+POST   /v1/workplans/:id/archive         Archive workplan
+POST   /v1/workplans/:id/complete        Complete workplan
+GET    /v1/workplans/:id/stats           Aggregate stats (task counts by status, progress %)
 ```
 
 ### Phases
 
 ```
-POST   /v1/initiatives/:id/phases        Create phase in initiative
-GET    /v1/initiatives/:id/phases         List phases in initiative
+POST   /v1/workplans/:id/phases          Create phase in workplan
+GET    /v1/workplans/:id/phases           List phases in workplan
 GET    /v1/phases/:id                     Get phase details
 PATCH  /v1/phases/:id                     Update fields
 POST   /v1/phases/:id/activate            Activate manually
@@ -83,7 +83,7 @@ PATCH  /v1/tasks/:id                      Update fields
 **Task list filters:**
 - `?status=doing,blocked` — multiple statuses
 - `?phase=id` — tasks in a phase
-- `?initiative=id` — tasks in an initiative
+- `?workplan=id` — tasks in a workplan
 - `?assigned_to=agent-id` — pinned to agent
 - `?requires=opus,architect` — matching required tags
 - `?claimable=true&tags=x,y` — claimable by agent with given tags
@@ -148,7 +148,7 @@ Review body:
 
 ### Links
 
-Universal link system — source can be initiative, phase, or task.
+Universal link system — source can be workplan, phase, or task.
 
 ```
 POST   /v1/links                         Create link (body: source_id, target_id, link_type)
@@ -163,7 +163,7 @@ Append-only audit log of everything that happened to a task.
 ```
 GET    /v1/tasks/:id/events              Event timeline for a task
 GET    /v1/events                        Query events across tasks
-                                         (?initiative=id, ?agent=id, ?type=x, ?since=timestamp)
+                                         (?workplan=id, ?agent=id, ?type=x, ?since=timestamp)
 ```
 
 ### Event Stream (SSE)
@@ -172,7 +172,7 @@ Real-time server-sent events for live updates.
 
 ```
 GET    /v1/events/stream                 SSE endpoint
-                                         (?initiative=id, ?phase=id, ?type=x)
+                                         (?workplan=id, ?phase=id, ?type=x)
 ```
 
 **SSE event format:**
@@ -202,10 +202,10 @@ review.submitted
 link.added
 link.removed
 
-initiative.created
-initiative.updated
-initiative.completed
-initiative.archived
+workplan.created
+workplan.updated
+workplan.completed
+workplan.archived
 
 phase.created
 phase.updated
@@ -244,16 +244,16 @@ Agent shape:
 
 ### Bulk Operations
 
-For intake tooling — create an entire initiative structure in one call.
+For intake tooling — create an entire workplan structure in one call.
 
 ```
-POST   /v1/bulk/import                    Create initiative + phases + tasks + links
+POST   /v1/bulk/import                    Create workplan + phases + tasks + links
 ```
 
 Request body:
 ```json
 {
-  "initiative": {
+  "workplan": {
     "name": "Auth rewrite",
     "description": "...",
     "tags": ["backend"]
@@ -287,7 +287,7 @@ Critical safety mechanism: prevents tasks from being stuck in `doing` when an ag
 
 ### How it works
 
-1. Tasks have a `claim_timeout` (default configurable at phase/initiative level, e.g., 30 minutes)
+1. Tasks have a `claim_timeout` (default configurable at phase/workplan level, e.g., 30 minutes)
 2. When a task is claimed, `claim_expires_at` is set to `now + claim_timeout`
 3. Agent extends the timeout by calling `POST /tasks/:id/heartbeat`
 4. A background process in the API server periodically checks for expired claims
@@ -296,7 +296,7 @@ Critical safety mechanism: prevents tasks from being stuck in `doing` when an ag
 ### Task fields
 
 ```
-claim_timeout: duration (default: 30m, configurable per phase/initiative)
+claim_timeout: duration (default: 30m, configurable per phase/workplan)
 claim_expires_at: ISO 8601 | null (set on claim, extended on heartbeat)
 claimed_by: agent_id | null
 claimed_at: ISO 8601 | null

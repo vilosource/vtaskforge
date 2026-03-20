@@ -6,14 +6,14 @@ Identified gaps in the current design that need resolution before or during impl
 
 ## Gaps
 
-### 1. ~~Initiative & Phase Shape — Not Defined~~ (Resolved)
+### 1. ~~Workplan & Phase Shape — Not Defined~~ (Resolved)
 
 **Decided:**
 
-- **Initiative**: id, name, description, status (active/completed/archived), owner, tags, target_date, default review flags. Completing last phase auto-completes the initiative.
-- **Phase**: id, name, description, initiative_id, status (pending/active/completed), review flag overrides (null = inherit). Dependencies are a DAG via the link system — multiple phases can be active simultaneously.
-- **Links are universal** — initiatives, phases, and tasks can all be link sources. Added `jira` link type.
-- **Review flag cascade**: task (explicit) > phase default > initiative default.
+- **Workplan**: id, name, description, status (active/completed/archived), owner, tags, target_date, default review flags. Completing last phase auto-completes the workplan.
+- **Phase**: id, name, description, workplan_id, status (pending/active/completed), review flag overrides (null = inherit). Dependencies are a DAG via the link system — multiple phases can be active simultaneously.
+- **Links are universal** — workplans, phases, and tasks can all be link sources. Added `jira` link type.
+- **Review flag cascade**: task (explicit) > phase default > workplan default.
 
 Full shapes documented in vtaskforge-DESIGN.md under "Entity Shapes".
 
@@ -123,11 +123,11 @@ Key decisions:
 
 **Decided:** Full event type list defined in [api-surface-DESIGN.md](api-surface-DESIGN.md) under the Event Stream section.
 
-Event types cover: task lifecycle (created, updated, status_changed, claimed, unclaimed, completed, failed, blocked, unblocked, heartbeat), reviews (submitted), links (added, removed), initiatives (created, updated, completed, archived), phases (created, updated, activated, completed), agents (registered, deregistered, status_changed).
+Event types cover: task lifecycle (created, updated, status_changed, claimed, unclaimed, completed, failed, blocked, unblocked, heartbeat), reviews (submitted), links (added, removed), workplans (created, updated, completed, archived), phases (created, updated, activated, completed), agents (registered, deregistered, status_changed).
 
 Key decisions:
 - SSE format with event ID, type, and JSON data payload
-- Consumers filter on subscription via query params (`?initiative=id&type=x`)
+- Consumers filter on subscription via query params (`?workplan=id&type=x`)
 - `Last-Event-ID` header for reconnection replay (24h retention)
 - Events are the same records stored in the `task_events` table — one source of truth
 
@@ -159,7 +159,7 @@ Django's auth is pluggable by design — adding backends doesn't touch the API o
 
 **Decided: No workspace binding. vtf stands alone.**
 
-Initiatives are standalone entities — no mandatory binding to mykb workspaces or any external system. External references (mykb workspace, Jira epic, wiki page) are optional links via the link system, not structural requirements.
+Workplans are standalone entities — no mandatory binding to mykb workspaces or any external system. External references (mykb workspace, Jira epic, wiki page) are optional links via the link system, not structural requirements.
 
 This keeps vtf decoupled and usable without mykb. The link system already handles the real integration — tasks link to KB areas, docs, and external references as needed.
 

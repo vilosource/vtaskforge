@@ -9,8 +9,8 @@ vtaskforge models a development team:
 | Real team role | System equivalent |
 |---|---|
 | **Developer** | vf-agents — claims and executes tasks |
-| **Project board** | vtaskforge — tracks initiatives, phases, tasks, reviews, events |
-| **Product owner** | Human — defines initiatives, approves tasks, final say |
+| **Project board** | vtaskforge — tracks workplans, phases, tasks, reviews, events |
+| **Product owner** | Human — defines workplans, approves tasks, final say |
 | **Scrum master** | This proposal — facilitates flow, removes blockers, monitors health |
 
 The scrum master doesn't write code or decide what to build. It ensures the process runs smoothly — noticing problems, nudging actors, and surfacing insights.
@@ -46,7 +46,7 @@ An autonomous process agent that watches vtaskforge's event stream and takes act
 | Ceremony | Equivalent |
 |----------|-----------|
 | **Standup summary** | Periodic report: what was done, what's in progress, what's blocked |
-| **Sprint review** | Phase/initiative completion summary with metrics |
+| **Sprint review** | Phase/workplan completion summary with metrics |
 | **Retrospective** | Analysis of rework rates, failure patterns, bottleneck trends |
 
 ## Architecture
@@ -77,7 +77,7 @@ vtaskforge event stream
 ### Key design principles
 
 - **Read-heavy, write-light** — mostly observes, occasionally nudges. Does not make product decisions (that's the human/product owner).
-- **Configurable thresholds** — "stuck" means different things for different initiatives. Thresholds should be settable per initiative or phase.
+- **Configurable thresholds** — "stuck" means different things for different workplans. Thresholds should be settable per workplan or phase.
 - **Pluggable rules** — the trigger→action mapping should be extensible. New rules without code changes.
 - **High-reasoning model** — triage decisions (especially for `needs_attention` tasks) require understanding context, not just pattern matching. This agent needs a capable model.
 - **Non-blocking** — if the scrum master agent is down, work continues. It's an accelerator, not a gatekeeper.
@@ -104,4 +104,4 @@ The scrum master agent is the primary consumer of `needs_attention` tasks.
 - Notification channels — Slack, email, web UI alerts, all of the above?
 - How much autonomy? Can it reassign tasks or only suggest?
 - Should it have its own UI panel on the kanban board?
-- Is this a single agent instance or one per initiative?
+- Is this a single agent instance or one per workplan?

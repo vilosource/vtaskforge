@@ -10,7 +10,7 @@ vtaskforge's execution model is analogous to GitLab CI/CD pipelines. This is int
 
 | vtaskforge | GitLab CI | Behavior |
 |---|---|---|
-| **Initiative** | Pipeline | The whole execution plan |
+| **Workplan** | Pipeline | The whole execution plan |
 | **Phase** | Stage | Grouping that can depend on other groups |
 | **Task** | Job | Individual unit of work, runs in a container |
 | **`depends_on` links** | `needs:` keyword | DAG dependencies — start as soon as specific dependencies are met |
@@ -32,7 +32,7 @@ GitLab CI went through the same design evolution we're following:
 1. **Sequential stages** (early) → Stages ran strictly in order. Simple but slow — independent jobs waited unnecessarily.
 2. **DAG with `needs:`** (later) → Jobs declare specific dependencies. Can start as soon as their dependencies finish, not the whole stage. Massive parallelism improvement.
 3. **Manual gates** (`when: manual`) → Human approval before proceeding. Critical for production deployments.
-4. **Child pipelines** → Decompose large pipelines into smaller ones. Analogous to cross-initiative references.
+4. **Child pipelines** → Decompose large pipelines into smaller ones. Analogous to cross-workplan references.
 5. **Rules/conditions** → Dynamic job inclusion based on context. Analogous to our ReviewPolicy interface.
 
 We're starting at step 2 (DAG from day one) with step 3 built in (review gates).
@@ -67,7 +67,7 @@ Areas where we can draw from GitLab's implementation:
 
 ### Pipeline Visualization
 - GitLab's pipeline graph shows stages as columns, jobs as nodes, with dependency arrows. Status is color-coded.
-- The kanban board is our equivalent, but we should also consider a pipeline/graph view for initiatives — showing phases and task dependencies visually.
+- The kanban board is our equivalent, but we should also consider a pipeline/graph view for workplans — showing phases and task dependencies visually.
 
 ### Retry and Failure Handling
 - GitLab has auto-retry (configurable count), manual retry, and `allow_failure`.
@@ -75,7 +75,7 @@ Areas where we can draw from GitLab's implementation:
 
 ### Scheduled Pipelines
 - GitLab supports cron-triggered pipelines.
-- Future vtf consideration: scheduled initiative creation or recurring task patterns.
+- Future vtf consideration: scheduled workplan creation or recurring task patterns.
 
 ## Key Takeaway
 

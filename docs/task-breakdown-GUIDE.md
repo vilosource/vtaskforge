@@ -1,6 +1,6 @@
 # vtaskforge — Task Breakdown Guide
 
-How to decompose a phase into tasks with dependencies. This process applies to any initiative in vtaskforge.
+How to decompose a phase into tasks with dependencies. This process applies to any workplan in vtaskforge.
 
 ## The Process
 

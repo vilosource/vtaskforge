@@ -30,7 +30,7 @@ vtaskforge/
 │   │   ├── wsgi.py
 │   │   └── celery.py               # Celery app configuration
 │   ├── core/                       # Shared: base models, utils, mixins
-│   ├── initiatives/                # Initiative + Phase models, serializers, views
+│   ├── workplans/                  # Workplan + Phase models, serializers, views
 │   ├── tasks/                      # Task models, state machine, serializers, views
 │   ├── links/                      # Link system models, serializers, views
 │   ├── reviews/                    # Review system models, serializers, views
@@ -159,7 +159,7 @@ ENV PYTHONPATH=/app/src
 | App | Purpose | Phase 0 scope |
 |---|---|---|
 | `core` | Base models (NanoID mixin, timestamp mixin), shared utils | Create app, base model mixins |
-| `initiatives` | Initiative + Phase models, views | Create app only, no models yet |
+| `workplans` | Workplan + Phase models, views | Create app only, no models yet |
 | `tasks` | Task models, state machine, views | Create app only, no models yet |
 | `links` | Link system | Create app only, no models yet |
 | `reviews` | Review system | Create app only, no models yet |
@@ -187,7 +187,7 @@ Phase 0 is NOT complete until every item below is verified. No exceptions.
 - [ ] API returns proper 404 JSON response for unknown routes (not Django HTML debug page)
 
 #### Django Apps
-- [ ] All 7 apps created: `core`, `initiatives`, `tasks`, `links`, `reviews`, `events`, `agents`
+- [ ] All 7 apps created: `core`, `workplans`, `tasks`, `links`, `reviews`, `events`, `agents`
 - [ ] All 7 apps registered in `INSTALLED_APPS`
 - [ ] `core` app contains `NanoIDMixin` (or equivalent) for generating nanoid primary keys
 - [ ] `core` app contains `TimestampMixin` with `created_at` and `updated_at` fields
@@ -233,7 +233,7 @@ Phase 0 is NOT complete until every item below is verified. No exceptions.
 
 ### Task Breakdown
 
-Phase 0 structured as a vtaskforge initiative — tasks with dependencies forming a DAG.
+Phase 0 structured as a vtaskforge workplan — tasks with dependencies forming a DAG.
 
 #### Task 0.1: Project scaffolding & .gitignore
 
@@ -251,8 +251,8 @@ src/vtaskforge/settings/
 src/vtaskforge/settings/__init__.py
 src/core/__init__.py
 src/core/apps.py        (placeholder AppConfig)
-src/initiatives/__init__.py
-src/initiatives/apps.py
+src/workplans/__init__.py
+src/workplans/apps.py
 src/tasks/__init__.py
 src/tasks/apps.py
 src/links/__init__.py
@@ -569,7 +569,7 @@ Configure Celery with a test task to verify the worker pipeline works.
 Create 6 app stubs. These are empty shells — no models, views, or serializers. Just the app registration so they're ready for Phase 1.
 
 **Apps to create (under `src/`):**
-- `initiatives` — label: `initiatives`
+- `workplans` — label: `workplans`
 - `tasks` — label: `tasks`
 - `links` — label: `links`
 - `reviews` — label: `reviews`
@@ -582,16 +582,16 @@ Create 6 app stubs. These are empty shells — no models, views, or serializers.
   ```python
   from django.apps import AppConfig
 
-  class InitiativesConfig(AppConfig):
+  class WorkplansConfig(AppConfig):
       default_auto_field = 'django.db.models.BigAutoField'
-      name = 'initiatives'
+      name = 'workplans'
   ```
 
 **Update `INSTALLED_APPS` in `src/vtaskforge/settings/base.py`** to include all 7 apps:
 ```python
 LOCAL_APPS = [
     'core',
-    'initiatives',
+    'workplans',
     'tasks',
     'links',
     'reviews',
@@ -751,7 +751,7 @@ docker compose down
 
 *To be designed after Phase 0 is complete.*
 
-Likely scope: Initiative, Phase, Task, Link models + migrations + basic DRF serializers and viewsets. State machine enforcement on Task transitions.
+Likely scope: Workplan, Phase, Task, Link models + migrations + basic DRF serializers and viewsets. State machine enforcement on Task transitions.
 
 ## Phase 2+
 

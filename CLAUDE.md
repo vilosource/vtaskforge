@@ -75,7 +75,7 @@ src/
       dev.py           # Dev overrides (DEBUG=True)
       prod.py          # Production overrides
   core/                # Base model mixins (NanoIDMixin, TimestampMixin), health endpoint, shared utils
-  initiatives/         # Initiative + Phase models (stub - Phase 1)
+  workplans/           # Workplan + Phase models (stub - Phase 1)
   tasks/               # Task models, state machine (stub - Phase 1)
   links/               # Link system (stub - Phase 1)
   reviews/             # Review system (stub - Phase 1)

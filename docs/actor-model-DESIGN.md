@@ -38,7 +38,7 @@ flowchart TB
     TUI("💻 Terminal UI<br/>CLI Interface")
     INTAKE("📝 Intake Tooling<br/>Markdown Converter")
 
-    HUMAN -.->|"defines initiatives<br/>reviews tasks"| VTF
+    HUMAN -.->|"defines workplans<br/>reviews tasks"| VTF
     HUMAN -->|"manages via browser"| WEBUI
     HUMAN -->|"monitors via CLI"| TUI
 
@@ -66,7 +66,7 @@ flowchart TB
 
 | Actor type | Identity | Role in vtf |
 |---|---|---|
-| **Human** | User ID, name | Creates initiatives, reviews tasks, triages, final authority |
+| **Human** | User ID, name | Creates workplans, reviews tasks, triages, final authority |
 | **Agent** | Agent ID, role label | Claims tasks, submits results, submits reviews |
 
 Agent roles are labels, not permissions:
@@ -83,7 +83,7 @@ actor_role: executor | reviewer | architect | scrum_master
 |---|---|---|
 | **vf-agents** (pool manager) | Spins up executor agents, manages containers, retries, session capture | RPC API + event stream |
 | **Scrum Master Agent** | Watches events, triages blockers, nudges slow reviews, generates reports | Event stream (read) + RPC API (write) |
-| **Intake Tooling** | Converts plan documents into initiatives/phases/tasks | RPC API |
+| **Intake Tooling** | Converts plan documents into workplans/phases/tasks | RPC API |
 | **Web UI** | Human interaction — kanban board, task editing, agent chat | RPC API + event stream |
 | **Terminal UI** | Human monitoring — kanban view, CLI task management | RPC API + event stream |
 
@@ -246,7 +246,7 @@ The system maps directly to a real-world development team:
 
 | Real-world role | System equivalent | What they do |
 |---|---|---|
-| **Product Owner** | Human | Defines initiatives, approves tasks, final say on priorities and scope |
+| **Product Owner** | Human | Defines workplans, approves tasks, final say on priorities and scope |
 | **Developer** | Executor Agent (via vf-agents) | Claims tasks, writes code, pushes commits, reports results |
 | **Tech Lead / Senior Dev** | Reviewer Agent | Reviews task definitions (pre-start) and deliverables (post-completion) |
 | **Solutions Architect** | Architect Agent | Refines tasks via chat, improves work packet quality, designs solutions |
@@ -432,10 +432,10 @@ sequenceDiagram
 
     Note over H,SM: Task Lifecycle Flow
 
-    alt Initiative Creation
-        H->>VT: Create initiative/phases/tasks
+    alt Workplan Creation
+        H->>VT: Create workplan/phases/tasks
     else Automated Intake
-        IT->>VT: Create initiative/phases/tasks
+        IT->>VT: Create workplan/phases/tasks
     end
 
     VT->>VT: Queue tasks for review
