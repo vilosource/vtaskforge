@@ -9,8 +9,7 @@ from tasks.state_machine import (
     perform_transition,
     validate_transition,
 )
-from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import TaskFactory
 
 
 # ---------------------------------------------------------------------------
@@ -18,9 +17,7 @@ from workplans.models import Phase, Workplan
 # ---------------------------------------------------------------------------
 
 def make_task(status="draft", **kwargs):
-    wp = Workplan.objects.create(name="WP")
-    phase = Phase.objects.create(name="Phase", workplan=wp)
-    return Task.objects.create(title="Task", phase=phase, workplan=wp, status=status, **kwargs)
+    return TaskFactory(status=status, **kwargs)
 
 
 # ---------------------------------------------------------------------------

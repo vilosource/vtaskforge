@@ -1,18 +1,13 @@
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from links.models import Link
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
+from tests.factories import LinkFactory
 
 
 @pytest.fixture
 def link(db):
-    return Link.objects.create(
+    return LinkFactory(
         source_type="task",
         source_id="taskid123456789012345",
         target_type="commit",
@@ -51,11 +46,11 @@ class TestLinkList:
         assert response.data[0]["id"] == link.id
 
     def test_list_filter_by_source_id(self, api_client, db):
-        link1 = Link.objects.create(
+        link1 = LinkFactory(
             source_type="task", source_id="source_aaa", target_type="commit",
             target_id="sha1", link_type="commit",
         )
-        Link.objects.create(
+        LinkFactory(
             source_type="task", source_id="source_bbb", target_type="commit",
             target_id="sha2", link_type="commit",
         )
@@ -65,11 +60,11 @@ class TestLinkList:
         assert response.data[0]["id"] == link1.id
 
     def test_list_filter_by_target_id(self, api_client, db):
-        link1 = Link.objects.create(
+        link1 = LinkFactory(
             source_type="task", source_id="source_aaa", target_type="jira",
             target_id="PROJ-1", link_type="jira",
         )
-        Link.objects.create(
+        LinkFactory(
             source_type="task", source_id="source_bbb", target_type="jira",
             target_id="PROJ-2", link_type="jira",
         )
@@ -79,11 +74,11 @@ class TestLinkList:
         assert response.data[0]["id"] == link1.id
 
     def test_list_filter_by_source_type(self, api_client, db):
-        Link.objects.create(
+        LinkFactory(
             source_type="task", source_id="source_aaa", target_type="commit",
             target_id="sha1", link_type="commit",
         )
-        Link.objects.create(
+        LinkFactory(
             source_type="workplan", source_id="source_bbb", target_type="commit",
             target_id="sha2", link_type="commit",
         )
@@ -93,11 +88,11 @@ class TestLinkList:
         assert response.data[0]["source_type"] == "workplan"
 
     def test_list_filter_by_link_type(self, api_client, db):
-        Link.objects.create(
+        LinkFactory(
             source_type="task", source_id="source_aaa", target_type="commit",
             target_id="sha1", link_type="commit",
         )
-        Link.objects.create(
+        LinkFactory(
             source_type="task", source_id="source_bbb", target_type="jira",
             target_id="PROJ-1", link_type="jira",
         )
@@ -107,11 +102,11 @@ class TestLinkList:
         assert response.data[0]["link_type"] == "jira"
 
     def test_list_multiple_filters_combined(self, api_client, db):
-        link1 = Link.objects.create(
+        link1 = LinkFactory(
             source_type="task", source_id="source_aaa", target_type="commit",
             target_id="sha1", link_type="commit",
         )
-        Link.objects.create(
+        LinkFactory(
             source_type="task", source_id="source_bbb", target_type="commit",
             target_id="sha2", link_type="commit",
         )

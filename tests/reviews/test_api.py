@@ -3,11 +3,10 @@ Tests for Review API endpoints (nested under tasks).
 """
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from reviews.models import Review
 from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, ReviewFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -15,23 +14,18 @@ from workplans.models import Phase, Workplan
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task_pending_start(db, phase, workplan):
-    return Task.objects.create(
+    return TaskFactory(
         title="Start Review Task",
         phase=phase,
         workplan=workplan,
@@ -41,7 +35,7 @@ def task_pending_start(db, phase, workplan):
 
 @pytest.fixture
 def task_pending_completion(db, phase, workplan):
-    return Task.objects.create(
+    return TaskFactory(
         title="Completion Review Task",
         phase=phase,
         workplan=workplan,
@@ -51,7 +45,7 @@ def task_pending_completion(db, phase, workplan):
 
 @pytest.fixture
 def task_todo(db, phase, workplan):
-    return Task.objects.create(
+    return TaskFactory(
         title="Todo Task",
         phase=phase,
         workplan=workplan,
@@ -78,7 +72,7 @@ class TestReviewList:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_returns_reviews_for_task(self, api_client, task_pending_start):
-        Review.objects.create(
+        ReviewFactory(
             task=task_pending_start,
             decision="approved",
             reviewer_id="user-1",
@@ -92,11 +86,11 @@ class TestReviewList:
         assert response.data[0]["decision"] == "approved"
 
     def test_list_only_returns_reviews_for_task(self, api_client, phase, workplan, task_pending_start):
-        other_task = Task.objects.create(
+        other_task = TaskFactory(
             title="Other Task", phase=phase, workplan=workplan, status="pending_start_review"
         )
-        Review.objects.create(task=task_pending_start, decision="approved", reviewer_id="user-1")
-        Review.objects.create(task=other_task, decision="rejected", reviewer_id="user-2")
+        ReviewFactory(task=task_pending_start, decision="approved", reviewer_id="user-1")
+        ReviewFactory(task=other_task, decision="rejected", reviewer_id="user-2")
         response = api_client.get(f"/v1/tasks/{task_pending_start.id}/reviews/")
         assert len(response.data) == 1
         assert response.data[0]["decision"] == "approved"
@@ -296,7 +290,7 @@ class TestReviewCreateValidation:
 @pytest.mark.django_db
 class TestReviewAppendOnly:
     def test_no_update_endpoint(self, api_client, task_pending_start):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task_pending_start,
             decision="approved",
             reviewer_id="user-1",
@@ -309,7 +303,7 @@ class TestReviewAppendOnly:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_no_delete_endpoint(self, api_client, task_pending_start):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task_pending_start,
             decision="approved",
             reviewer_id="user-1",

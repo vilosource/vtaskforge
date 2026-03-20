@@ -1,40 +1,33 @@
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from events.models import TaskEvent
-from tasks.models import Task
-from workplans.models import Phase, Workplan
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
+from tests.factories import PhaseFactory, TaskEventFactory, TaskFactory, WorkplanFactory
 
 
 @pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return Task.objects.create(title="Test Task", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
 
 
 @pytest.fixture
 def task2(db, phase, workplan):
-    return Task.objects.create(title="Test Task 2", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task 2", phase=phase, workplan=workplan)
 
 
 @pytest.fixture
 def event(db, task):
-    return TaskEvent.objects.create(
+    return TaskEventFactory(
         task=task,
         event_type="status_changed",
         data={"from": "draft", "to": "todo"},
@@ -67,7 +60,7 @@ class TestNestedTaskEvents:
 
     def test_only_returns_events_for_that_task(self, api_client, task, task2, event):
         # Create an event for task2
-        TaskEvent.objects.create(
+        TaskEventFactory(
             task=task2, event_type="status_changed", data={"from": "draft", "to": "todo"}
         )
         response = api_client.get(f"/v1/tasks/{task.id}/events/")
@@ -103,21 +96,21 @@ class TestTopLevelEvents:
         assert response.status_code == status.HTTP_200_OK
 
     def test_returns_all_events(self, api_client, task, task2):
-        TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
-        TaskEvent.objects.create(task=task2, event_type="claimed", data={"agent_id": "agent-1"})
+        TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        TaskEventFactory(task=task2, event_type="claimed", data={"agent_id": "agent-1"})
         response = api_client.get("/v1/events/")
         assert len(response.data) == 2
 
     def test_filter_by_task(self, api_client, task, task2):
-        e1 = TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
-        TaskEvent.objects.create(task=task2, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        e1 = TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        TaskEventFactory(task=task2, event_type="status_changed", data={"from": "draft", "to": "todo"})
         response = api_client.get(f"/v1/events/?task={task.id}")
         assert len(response.data) == 1
         assert response.data[0]["id"] == e1.id
 
     def test_filter_by_event_type(self, api_client, task):
-        TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
-        TaskEvent.objects.create(task=task, event_type="claimed", data={"agent_id": "agent-1"})
+        TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        TaskEventFactory(task=task, event_type="claimed", data={"agent_id": "agent-1"})
         response = api_client.get("/v1/events/?event_type=claimed")
         assert len(response.data) == 1
         assert response.data[0]["event_type"] == "claimed"
@@ -126,7 +119,7 @@ class TestTopLevelEvents:
         from django.utils import timezone
         import datetime
         past = timezone.now() - datetime.timedelta(hours=1)
-        TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         # Use UTC format (Z suffix) to avoid URL encoding issues with +00:00
         since_str = past.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         response = api_client.get(f"/v1/events/?since={since_str}")
@@ -137,8 +130,8 @@ class TestTopLevelEvents:
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_ordering_newest_first(self, api_client, task):
-        e1 = TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
-        e2 = TaskEvent.objects.create(task=task, event_type="claimed", data={"agent_id": "a"})
+        e1 = TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        e2 = TaskEventFactory(task=task, event_type="claimed", data={"agent_id": "a"})
         response = api_client.get("/v1/events/")
         assert response.data[0]["id"] == e2.id
         assert response.data[1]["id"] == e1.id

@@ -1,13 +1,14 @@
 import pytest
 from django.utils import timezone
 
+from tests.factories import WorkplanFactory
 from workplans.models import Workplan
 
 
 @pytest.mark.django_db
 class TestWorkplanModel:
     def test_create_workplan_minimal(self):
-        wp = Workplan.objects.create(name="Test Workplan")
+        wp = WorkplanFactory(name="Test Workplan")
         assert wp.id is not None
         assert len(wp.id) == 21
         assert wp.name == "Test Workplan"
@@ -22,7 +23,7 @@ class TestWorkplanModel:
 
     def test_create_workplan_all_fields(self):
         target = timezone.now()
-        wp = Workplan.objects.create(
+        wp = WorkplanFactory(
             name="Full Workplan",
             description="A description",
             status="completed",
@@ -44,17 +45,17 @@ class TestWorkplanModel:
         assert wp.created_by == "bob"
 
     def test_timestamps_auto_populated(self):
-        wp = Workplan.objects.create(name="Timestamps Test")
+        wp = WorkplanFactory(name="Timestamps Test")
         assert wp.created_at is not None
         assert wp.updated_at is not None
 
     def test_str_representation(self):
-        wp = Workplan.objects.create(name="My Workplan")
+        wp = WorkplanFactory(name="My Workplan")
         assert str(wp) == "My Workplan"
 
     def test_nanoid_primary_key(self):
-        wp1 = Workplan.objects.create(name="WP1")
-        wp2 = Workplan.objects.create(name="WP2")
+        wp1 = WorkplanFactory(name="WP1")
+        wp2 = WorkplanFactory(name="WP2")
         assert wp1.id != wp2.id
         assert len(wp1.id) == 21
 
@@ -65,14 +66,14 @@ class TestWorkplanModel:
         assert "archived" in choices
 
     def test_default_ordering(self):
-        wp1 = Workplan.objects.create(name="First")
-        wp2 = Workplan.objects.create(name="Second")
+        wp1 = WorkplanFactory(name="First")
+        wp2 = WorkplanFactory(name="Second")
         workplans = list(Workplan.objects.all())
         # Most recently created should come first
         assert workplans[0].id == wp2.id
         assert workplans[1].id == wp1.id
 
     def test_tags_accepts_list(self):
-        wp = Workplan.objects.create(name="Tagged", tags=["tag1", "tag2", "tag3"])
+        wp = WorkplanFactory(name="Tagged", tags=["tag1", "tag2", "tag3"])
         wp.refresh_from_db()
         assert wp.tags == ["tag1", "tag2", "tag3"]

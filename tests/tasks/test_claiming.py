@@ -16,8 +16,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from links.models import Link
-from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -26,23 +25,18 @@ from workplans.models import Phase, Workplan
 
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 def make_task(phase, workplan, task_status="todo", **kwargs):
     kwargs.setdefault("title", "Test Task")
-    return Task.objects.create(
+    return TaskFactory(
         phase=phase,
         workplan=workplan,
         status=task_status,

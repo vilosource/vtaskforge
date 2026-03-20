@@ -1,29 +1,23 @@
 import pytest
-from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient
 
+from tests.factories import WorkplanFactory
 from workplans.models import Workplan
 
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan", description="A test workplan")
+    return WorkplanFactory(name="Test Workplan", description="A test workplan")
 
 
 @pytest.fixture
 def archived_workplan(db):
-    return Workplan.objects.create(name="Archived Workplan", status="archived")
+    return WorkplanFactory(name="Archived Workplan", status="archived")
 
 
 @pytest.fixture
 def completed_workplan(db):
-    return Workplan.objects.create(name="Completed Workplan", status="completed")
+    return WorkplanFactory(name="Completed Workplan", status="completed")
 
 
 @pytest.mark.django_db

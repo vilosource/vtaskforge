@@ -3,39 +3,30 @@ Tests verifying that TaskEvents are auto-created during state transitions,
 claim actions, and unclaim actions.
 """
 import pytest
-from rest_framework import status
-from rest_framework.test import APIClient
 
 from events.models import TaskEvent
-from tasks.models import Task
+from tasks.exceptions import InvalidTransition
 from tasks.state_machine import perform_transition
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
 
 
 def make_task(status="draft", **kwargs):
-    wp = Workplan.objects.create(name="WP")
-    phase = Phase.objects.create(name="Phase", workplan=wp)
-    return Task.objects.create(title="Task", phase=phase, workplan=wp, status=status, **kwargs)
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
+    return TaskFactory(status=status, **kwargs)
 
 
 @pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return Task.objects.create(title="Test Task", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +71,6 @@ class TestStateMachineAutoLogging:
         assert events.count() == 3
 
     def test_invalid_transition_does_not_create_event(self):
-        from tasks.exceptions import InvalidTransition
         task = make_task("draft")
         with pytest.raises(InvalidTransition):
             perform_transition(task, "doing")
@@ -103,7 +93,7 @@ class TestClaimAutoLogging:
         task.status = "todo"
         task.save(update_fields=["status", "updated_at"])
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-1"}, format="json")
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == 200
         claimed_events = TaskEvent.objects.filter(task=task, event_type="claimed")
         assert claimed_events.count() == 1
 
@@ -133,7 +123,7 @@ class TestClaimAutoLogging:
         """Claiming a task that's not in 'todo' should fail and create no claimed event."""
         # task is in draft status
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": "agent-1"}, format="json")
-        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.status_code == 409
         assert TaskEvent.objects.filter(task=task, event_type="claimed").count() == 0
 
 
@@ -148,7 +138,7 @@ class TestUnclaimAutoLogging:
         task.claimed_by = "agent-1"
         task.save(update_fields=["status", "claimed_by", "updated_at"])
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == 200
         unclaimed_events = TaskEvent.objects.filter(task=task, event_type="unclaimed")
         assert unclaimed_events.count() == 1
 
@@ -163,5 +153,5 @@ class TestUnclaimAutoLogging:
     def test_unclaim_invalid_status_no_event(self, api_client, task):
         """Unclaiming a task not in 'doing' should fail and create no event."""
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == 422
         assert TaskEvent.objects.filter(task=task, event_type="unclaimed").count() == 0

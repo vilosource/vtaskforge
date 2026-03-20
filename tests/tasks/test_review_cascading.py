@@ -6,10 +6,9 @@ to verify the cascade: task -> phase -> workplan.
 """
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -17,13 +16,8 @@ from workplans.models import Phase, Workplan
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan_no_review(db):
-    return Workplan.objects.create(
+    return WorkplanFactory(
         name="No Review Workplan",
         default_needs_review_before_start=False,
         default_needs_review_on_completion=False,
@@ -32,7 +26,7 @@ def workplan_no_review(db):
 
 @pytest.fixture
 def workplan_review_both(db):
-    return Workplan.objects.create(
+    return WorkplanFactory(
         name="Review Both Workplan",
         default_needs_review_before_start=True,
         default_needs_review_on_completion=True,
@@ -41,7 +35,7 @@ def workplan_review_both(db):
 
 @pytest.fixture
 def phase_no_override(db, workplan_no_review):
-    return Phase.objects.create(
+    return PhaseFactory(
         name="Phase No Override",
         workplan=workplan_no_review,
         default_needs_review_before_start=None,
@@ -51,7 +45,7 @@ def phase_no_override(db, workplan_no_review):
 
 @pytest.fixture
 def phase_review_both(db, workplan_no_review):
-    return Phase.objects.create(
+    return PhaseFactory(
         name="Phase Review Both",
         workplan=workplan_no_review,
         default_needs_review_before_start=True,
@@ -62,7 +56,7 @@ def phase_review_both(db, workplan_no_review):
 @pytest.fixture
 def phase_no_review(db, workplan_review_both):
     """Phase that disables review even though workplan enables it."""
-    return Phase.objects.create(
+    return PhaseFactory(
         name="Phase No Review",
         workplan=workplan_review_both,
         default_needs_review_before_start=False,
@@ -71,7 +65,7 @@ def phase_no_review(db, workplan_review_both):
 
 
 def make_task(phase, workplan, task_status="draft", **kwargs):
-    return Task.objects.create(
+    return TaskFactory(
         title="Test Task",
         phase=phase,
         workplan=workplan,
@@ -95,7 +89,7 @@ class TestSubmitReviewCascading:
     def test_submit_workplan_before_start_true_goes_to_pending_start_review(
         self, api_client, workplan_review_both, db
     ):
-        phase = Phase.objects.create(
+        phase = PhaseFactory(
             name="Phase",
             workplan=workplan_review_both,
             default_needs_review_before_start=None,
@@ -187,7 +181,7 @@ class TestCompleteReviewCascading:
     def test_complete_workplan_on_completion_true_goes_to_pending_completion_review(
         self, api_client, workplan_review_both, db
     ):
-        phase = Phase.objects.create(
+        phase = PhaseFactory(
             name="Phase",
             workplan=workplan_review_both,
             default_needs_review_before_start=None,

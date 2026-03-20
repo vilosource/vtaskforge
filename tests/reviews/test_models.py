@@ -4,8 +4,7 @@ Tests for Review model.
 import pytest
 
 from reviews.models import Review
-from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, ReviewFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -14,17 +13,17 @@ from workplans.models import Phase, Workplan
 
 @pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return Task.objects.create(
+    return TaskFactory(
         title="Test Task",
         phase=phase,
         workplan=workplan,
@@ -39,7 +38,7 @@ def task(db, phase, workplan):
 @pytest.mark.django_db
 class TestReviewModel:
     def test_create_review(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="approved",
             reviewer_id="user-1",
@@ -55,7 +54,7 @@ class TestReviewModel:
         assert review.updated_at is not None
 
     def test_default_reviewer_type_is_human(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="approved",
             reviewer_id="user-1",
@@ -63,7 +62,7 @@ class TestReviewModel:
         assert review.reviewer_type == "human"
 
     def test_agent_reviewer_type(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="rejected",
             reviewer_id="agent-1",
@@ -72,7 +71,7 @@ class TestReviewModel:
         assert review.reviewer_type == "agent"
 
     def test_reason_optional(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="approved",
             reviewer_id="user-1",
@@ -80,7 +79,7 @@ class TestReviewModel:
         assert review.reason == ""
 
     def test_reason_can_be_set(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="changes_requested",
             reviewer_id="user-1",
@@ -89,7 +88,7 @@ class TestReviewModel:
         assert review.reason == "Needs more detail"
 
     def test_cascade_delete(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="approved",
             reviewer_id="user-1",
@@ -99,14 +98,14 @@ class TestReviewModel:
         assert not Review.objects.filter(id=review_id).exists()
 
     def test_ordering_ascending(self, task):
-        review1 = Review.objects.create(task=task, decision="approved", reviewer_id="user-1")
-        review2 = Review.objects.create(task=task, decision="rejected", reviewer_id="user-2")
+        review1 = ReviewFactory(task=task, decision="approved", reviewer_id="user-1")
+        review2 = ReviewFactory(task=task, decision="rejected", reviewer_id="user-2")
         reviews = list(Review.objects.filter(task=task))
         assert reviews[0].id == review1.id
         assert reviews[1].id == review2.id
 
     def test_str_representation(self, task):
-        review = Review.objects.create(
+        review = ReviewFactory(
             task=task,
             decision="approved",
             reviewer_id="user-1",

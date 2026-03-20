@@ -1,38 +1,33 @@
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
-from workplans.models import Phase, Workplan
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
+from tests.factories import PhaseFactory, WorkplanFactory
+from workplans.models import Phase
 
 
 @pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan", description="A test workplan")
+    return WorkplanFactory(name="Test Workplan", description="A test workplan")
 
 
 @pytest.fixture
 def other_workplan(db):
-    return Workplan.objects.create(name="Other Workplan")
+    return WorkplanFactory(name="Other Workplan")
 
 
 @pytest.fixture
 def pending_phase(db, workplan):
-    return Phase.objects.create(name="Pending Phase", workplan=workplan)
+    return PhaseFactory(name="Pending Phase", workplan=workplan)
 
 
 @pytest.fixture
 def active_phase(db, workplan):
-    return Phase.objects.create(name="Active Phase", workplan=workplan, status="active")
+    return PhaseFactory(name="Active Phase", workplan=workplan, status="active")
 
 
 @pytest.fixture
 def completed_phase(db, workplan):
-    return Phase.objects.create(name="Completed Phase", workplan=workplan, status="completed")
+    return PhaseFactory(name="Completed Phase", workplan=workplan, status="completed")
 
 
 @pytest.mark.django_db
@@ -140,8 +135,8 @@ class TestNestedPhaseList:
     def test_list_does_not_include_other_workplan_phases(
         self, api_client, workplan, other_workplan
     ):
-        Phase.objects.create(name="Phase A", workplan=workplan)
-        Phase.objects.create(name="Phase B", workplan=other_workplan)
+        PhaseFactory(name="Phase A", workplan=workplan)
+        PhaseFactory(name="Phase B", workplan=other_workplan)
         response = api_client.get(f"/v1/workplans/{workplan.id}/phases/")
         assert len(response.data) == 1
 

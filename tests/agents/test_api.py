@@ -1,23 +1,18 @@
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from agents.models import Agent
-
-
-@pytest.fixture
-def api_client():
-    return APIClient()
+from tests.factories import AgentFactory
 
 
 @pytest.fixture
 def agent(db):
-    return Agent.objects.create(name="Test Agent", tags=["python"], status="online")
+    return AgentFactory(name="Test Agent", tags=["python"], status="online")
 
 
 @pytest.fixture
 def offline_agent(db):
-    return Agent.objects.create(name="Offline Agent", status="offline")
+    return AgentFactory(name="Offline Agent", status="offline")
 
 
 @pytest.mark.django_db

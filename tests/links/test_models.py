@@ -1,12 +1,13 @@
 import pytest
 
 from links.models import Link, LINK_TYPE_CHOICES, SOURCE_TYPE_CHOICES
+from tests.factories import LinkFactory
 
 
 @pytest.mark.django_db
 class TestLinkModel:
     def test_create_link_minimal(self):
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="commit",
@@ -24,7 +25,7 @@ class TestLinkModel:
         assert link.created_by == ""
 
     def test_create_link_all_fields(self):
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="workplan",
             source_id="abc123def456ghi7890ab",
             target_type="jira",
@@ -41,7 +42,7 @@ class TestLinkModel:
         assert link.created_by == "alice"
 
     def test_timestamps_auto_populated(self):
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="commit",
@@ -52,14 +53,14 @@ class TestLinkModel:
         assert link.updated_at is not None
 
     def test_nanoid_primary_key(self):
-        link1 = Link.objects.create(
+        link1 = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="commit",
             target_id="sha1",
             link_type="commit",
         )
-        link2 = Link.objects.create(
+        link2 = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="commit",
@@ -70,7 +71,7 @@ class TestLinkModel:
         assert len(link1.id) == 21
 
     def test_str_representation(self):
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="task",
             source_id="taskid123456789012345",
             target_type="commit",
@@ -100,7 +101,7 @@ class TestLinkModel:
 
     def test_target_type_is_free_form(self):
         # target_type is not restricted to choices — any string is valid
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="custom_external_system",
@@ -110,7 +111,7 @@ class TestLinkModel:
         assert link.target_type == "custom_external_system"
 
     def test_metadata_accepts_dict(self):
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="commit",
@@ -122,7 +123,7 @@ class TestLinkModel:
         assert link.metadata == {"branch": "main", "sha": "abc123"}
 
     def test_metadata_accepts_none(self):
-        link = Link.objects.create(
+        link = LinkFactory(
             source_type="task",
             source_id="abc123def456ghi7890ab",
             target_type="commit",

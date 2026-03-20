@@ -5,10 +5,8 @@ Tests both valid transitions and the 422 INVALID_TRANSITION error format.
 """
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
-from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -16,22 +14,17 @@ from workplans.models import Phase, Workplan
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 def make_task(phase, workplan, task_status="draft", **kwargs):
-    return Task.objects.create(
+    return TaskFactory(
         title="Test Task",
         phase=phase,
         workplan=workplan,

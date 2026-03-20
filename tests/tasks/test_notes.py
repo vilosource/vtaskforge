@@ -3,10 +3,9 @@ Tests for Note model and nested notes API endpoint.
 """
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from tasks.models import Note, Task
-from workplans.models import Phase, Workplan
+from tests.factories import NoteFactory, PhaseFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -14,28 +13,23 @@ from workplans.models import Phase, Workplan
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return Task.objects.create(title="Test Task", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
 
 
 @pytest.fixture
 def note(db, task):
-    return Note.objects.create(task=task, text="First note", actor_id="agent-1")
+    return NoteFactory(task=task, text="First note", actor_id="agent-1")
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +39,7 @@ def note(db, task):
 @pytest.mark.django_db
 class TestNoteModel:
     def test_create_note(self, task):
-        note = Note.objects.create(task=task, text="Hello world", actor_id="agent-1")
+        note = NoteFactory(task=task, text="Hello world", actor_id="agent-1")
         assert note.id is not None
         assert len(note.id) == 21
         assert note.task == task
@@ -55,28 +49,27 @@ class TestNoteModel:
 
     def test_note_str_truncates(self, task):
         long_text = "A" * 100
-        note = Note.objects.create(task=task, text=long_text, actor_id="agent-1")
+        note = NoteFactory(task=task, text=long_text, actor_id="agent-1")
         assert str(note) == long_text[:50]
 
     def test_note_str_short_text(self, task):
-        note = Note.objects.create(task=task, text="Short", actor_id="agent-1")
+        note = NoteFactory(task=task, text="Short", actor_id="agent-1")
         assert str(note) == "Short"
 
     def test_cascade_delete(self, task, note):
-        task_id = task.id
         note_id = note.id
         task.delete()
         assert not Note.objects.filter(id=note_id).exists()
 
     def test_ordering_ascending(self, task):
-        note1 = Note.objects.create(task=task, text="First", actor_id="agent-1")
-        note2 = Note.objects.create(task=task, text="Second", actor_id="agent-2")
+        note1 = NoteFactory(task=task, text="First", actor_id="agent-1")
+        note2 = NoteFactory(task=task, text="Second", actor_id="agent-2")
         notes = list(Note.objects.filter(task=task))
         assert notes[0].id == note1.id
         assert notes[1].id == note2.id
 
     def test_no_updated_at_field(self, task):
-        note = Note.objects.create(task=task, text="Test", actor_id="agent-1")
+        note = NoteFactory(task=task, text="Test", actor_id="agent-1")
         assert not hasattr(note, "updated_at")
 
 
@@ -106,16 +99,16 @@ class TestNoteList:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_only_returns_notes_for_task(self, api_client, phase, workplan, task):
-        other_task = Task.objects.create(title="Other Task", phase=phase, workplan=workplan)
-        Note.objects.create(task=task, text="Task note", actor_id="agent-1")
-        Note.objects.create(task=other_task, text="Other note", actor_id="agent-2")
+        other_task = TaskFactory(title="Other Task", phase=phase, workplan=workplan)
+        NoteFactory(task=task, text="Task note", actor_id="agent-1")
+        NoteFactory(task=other_task, text="Other note", actor_id="agent-2")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
         assert len(response.data) == 1
         assert response.data[0]["text"] == "Task note"
 
     def test_list_ordered_ascending(self, api_client, task):
-        Note.objects.create(task=task, text="First", actor_id="agent-1")
-        Note.objects.create(task=task, text="Second", actor_id="agent-2")
+        NoteFactory(task=task, text="First", actor_id="agent-1")
+        NoteFactory(task=task, text="Second", actor_id="agent-2")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
         assert response.data[0]["text"] == "First"
         assert response.data[1]["text"] == "Second"

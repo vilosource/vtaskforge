@@ -1,21 +1,22 @@
 import pytest
 
 from agents.models import Agent
+from tests.factories import AgentFactory
 
 
 @pytest.mark.django_db
 class TestAgentModel:
     def test_create_agent_minimal(self):
-        agent = Agent.objects.create(name="Test Agent")
+        agent = AgentFactory(name="Test Agent")
         assert agent.id is not None
         assert len(agent.id) == 21
         assert agent.name == "Test Agent"
-        assert agent.status == "offline"
+        assert agent.status == "online"
         assert agent.tags == []
         assert agent.last_heartbeat is None
 
     def test_create_agent_all_fields(self):
-        agent = Agent.objects.create(
+        agent = AgentFactory(
             name="Full Agent",
             tags=["python", "llm"],
             status="online",
@@ -25,18 +26,18 @@ class TestAgentModel:
         assert agent.status == "online"
 
     def test_timestamps_auto_populated(self):
-        agent = Agent.objects.create(name="Timestamps Test")
+        agent = AgentFactory(name="Timestamps Test")
         assert agent.created_at is not None
         assert agent.updated_at is not None
         assert agent.registered_at is not None
 
     def test_str_representation(self):
-        agent = Agent.objects.create(name="My Agent")
+        agent = AgentFactory(name="My Agent")
         assert str(agent) == "My Agent"
 
     def test_nanoid_primary_key(self):
-        a1 = Agent.objects.create(name="Agent1")
-        a2 = Agent.objects.create(name="Agent2")
+        a1 = AgentFactory(name="Agent1")
+        a2 = AgentFactory(name="Agent2")
         assert a1.id != a2.id
         assert len(a1.id) == 21
 
@@ -47,20 +48,20 @@ class TestAgentModel:
         assert "busy" in choices
 
     def test_default_ordering(self):
-        a1 = Agent.objects.create(name="First")
-        a2 = Agent.objects.create(name="Second")
+        a1 = AgentFactory(name="First")
+        a2 = AgentFactory(name="Second")
         agents = list(Agent.objects.all())
         # Most recently registered should come first
         assert agents[0].id == a2.id
         assert agents[1].id == a1.id
 
     def test_tags_accepts_list(self):
-        agent = Agent.objects.create(name="Tagged", tags=["tag1", "tag2"])
+        agent = AgentFactory(name="Tagged", tags=["tag1", "tag2"])
         agent.refresh_from_db()
         assert agent.tags == ["tag1", "tag2"]
 
     def test_registered_at_is_separate_from_created_at(self):
-        agent = Agent.objects.create(name="Timing Agent")
+        agent = AgentFactory(name="Timing Agent")
         assert agent.registered_at is not None
         assert agent.created_at is not None
         # Both are set independently

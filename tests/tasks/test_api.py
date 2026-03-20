@@ -3,10 +3,10 @@ Tests for Task CRUD API endpoints.
 """
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
+from workplans.models import Phase
 
 
 # ---------------------------------------------------------------------------
@@ -14,28 +14,23 @@ from workplans.models import Phase, Workplan
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def api_client():
-    return APIClient()
-
-
-@pytest.fixture
 def workplan(db):
-    return Workplan.objects.create(name="Test Workplan")
+    return WorkplanFactory(name="Test Workplan")
 
 
 @pytest.fixture
 def phase(db, workplan):
-    return Phase.objects.create(name="Test Phase", workplan=workplan)
+    return PhaseFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return Task.objects.create(title="Test Task", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
 
 
 @pytest.fixture
 def doing_task(db, phase, workplan):
-    return Task.objects.create(
+    return TaskFactory(
         title="Doing Task",
         phase=phase,
         workplan=workplan,
@@ -80,8 +75,8 @@ class TestTaskList:
         assert len(response.data) == 1
 
     def test_filter_by_assigned_to(self, api_client, phase, workplan):
-        Task.objects.create(title="Assigned", phase=phase, workplan=workplan, assigned_to="bob")
-        Task.objects.create(title="Unassigned", phase=phase, workplan=workplan)
+        TaskFactory(title="Assigned", phase=phase, workplan=workplan, assigned_to="bob")
+        TaskFactory(title="Unassigned", phase=phase, workplan=workplan)
         response = api_client.get("/v1/tasks/?assigned_to=bob")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
@@ -332,15 +327,15 @@ class TestPhaseTasksNested:
         assert task.workplan_id == workplan.id
 
     def test_list_filters_by_status(self, api_client, phase, workplan):
-        Task.objects.create(title="Draft Task", phase=phase, workplan=workplan, status="draft")
-        Task.objects.create(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/?status=draft")
         assert response.status_code == status.HTTP_200_OK
         assert all(t["status"] == "draft" for t in response.data)
 
     def test_list_does_not_include_tasks_from_other_phases(self, api_client, workplan, phase, task):
-        other_phase = Phase.objects.create(name="Other Phase", workplan=workplan)
-        Task.objects.create(title="Other Task", phase=other_phase, workplan=workplan)
+        other_phase = PhaseFactory(name="Other Phase", workplan=workplan)
+        TaskFactory(title="Other Task", phase=other_phase, workplan=workplan)
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/")
         assert len(response.data) == 1
         assert response.data[0]["id"] == task.id

@@ -1,21 +1,18 @@
 import pytest
 
 from events.models import TaskEvent, EVENT_TYPE_CHOICES
-from tasks.models import Task
-from workplans.models import Phase, Workplan
+from tests.factories import TaskEventFactory, TaskFactory
 
 
 def make_task(status="draft", **kwargs):
-    wp = Workplan.objects.create(name="WP")
-    phase = Phase.objects.create(name="Phase", workplan=wp)
-    return Task.objects.create(title="Task", phase=phase, workplan=wp, status=status, **kwargs)
+    return TaskFactory(status=status, **kwargs)
 
 
 @pytest.mark.django_db
 class TestTaskEventModel:
     def test_create_status_changed_event(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="status_changed",
             data={"from": "draft", "to": "todo"},
@@ -28,7 +25,7 @@ class TestTaskEventModel:
 
     def test_create_claimed_event(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="claimed",
             data={"agent_id": "agent-1"},
@@ -39,7 +36,7 @@ class TestTaskEventModel:
 
     def test_create_unclaimed_event(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="unclaimed",
             data={"agent_id": "agent-1"},
@@ -49,7 +46,7 @@ class TestTaskEventModel:
 
     def test_event_has_nanoid(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="status_changed",
             data={"from": "draft", "to": "todo"},
@@ -58,7 +55,7 @@ class TestTaskEventModel:
 
     def test_event_timestamp_auto_set(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="status_changed",
             data={"from": "draft", "to": "todo"},
@@ -67,7 +64,7 @@ class TestTaskEventModel:
 
     def test_default_triggered_by_is_empty_string(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="status_changed",
             data={"from": "draft", "to": "todo"},
@@ -76,7 +73,7 @@ class TestTaskEventModel:
 
     def test_default_data_is_dict(self):
         task = make_task()
-        event = TaskEvent.objects.create(
+        event = TaskEventFactory(
             task=task,
             event_type="status_changed",
             data={},
@@ -85,8 +82,8 @@ class TestTaskEventModel:
 
     def test_ordering_newest_first(self):
         task = make_task()
-        e1 = TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
-        e2 = TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "todo", "to": "doing"})
+        e1 = TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        e2 = TaskEventFactory(task=task, event_type="status_changed", data={"from": "todo", "to": "doing"})
         events = list(TaskEvent.objects.filter(task=task))
         # Newest first: e2 should come before e1
         assert events[0].pk == e2.pk
@@ -94,24 +91,24 @@ class TestTaskEventModel:
 
     def test_cascades_on_task_delete(self):
         task = make_task()
-        TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         task_id = task.pk
         task.delete()
         assert TaskEvent.objects.filter(task_id=task_id).count() == 0
 
     def test_related_name_events(self):
         task = make_task()
-        TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         assert task.events.count() == 1
 
     def test_all_event_types_valid(self):
         task = make_task()
         valid_types = [choice[0] for choice in EVENT_TYPE_CHOICES]
         for event_type in valid_types:
-            event = TaskEvent.objects.create(task=task, event_type=event_type, data={})
+            event = TaskEventFactory(task=task, event_type=event_type, data={})
             assert event.event_type == event_type
 
     def test_str_representation(self):
         task = make_task()
-        event = TaskEvent.objects.create(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
+        event = TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         assert str(event)  # just make sure it doesn't blow up

@@ -1,4 +1,10 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
+from rest_framework.test import APIClient
+
+from tests.factories import AgentFactory, TaskFactory, WorkplanFactory, PhaseFactory
 
 
 @pytest.fixture(scope="session")
@@ -12,3 +18,47 @@ def _celery_eager(settings):
     """Run all Celery tasks synchronously in tests — no Redis needed."""
     settings.CELERY_TASK_ALWAYS_EAGER = True
     settings.CELERY_TASK_EAGER_PROPAGATES = True
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def api_client():
+    return APIClient()
+
+
+@pytest.fixture
+def workplan(db):
+    return WorkplanFactory()
+
+
+@pytest.fixture
+def phase(db):
+    return PhaseFactory()
+
+
+@pytest.fixture
+def task(db):
+    return TaskFactory()
+
+
+@pytest.fixture
+def todo_task(db):
+    return TaskFactory(status="todo")
+
+
+@pytest.fixture
+def doing_task(db):
+    return TaskFactory(
+        status="doing",
+        claimed_by="agent-1",
+        claimed_at=timezone.now(),
+        claim_expires_at=timezone.now() + timedelta(minutes=30),
+    )
+
+
+@pytest.fixture
+def agent(db):
+    return AgentFactory()
