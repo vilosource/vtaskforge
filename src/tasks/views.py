@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
+from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
 from workplans.models import Phase
 
 from .exceptions import InvalidTransition
@@ -250,6 +251,11 @@ class TaskViewSet(ModelViewSet):
             assigned_to_me = tasks.filter(assigned_to=agent_id)
             tasks = Task.objects.filter(id__in=list(unassigned.values_list("id", flat=True)) + list(assigned_to_me.values_list("id", flat=True)))
 
+        paginator = VTFCursorPagination()
+        page = paginator.paginate_queryset(tasks, request)
+        if page is not None:
+            serializer = TaskSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
         serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
 
@@ -423,6 +429,7 @@ class TaskViewSet(ModelViewSet):
 
 class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
     serializer_class = NoteSerializer
+    pagination_class = VTFNoteCursorPagination
 
     def get_task(self):
         task_id = self.kwargs["task_id"]
@@ -473,6 +480,11 @@ class PhaseTasksView(APIView):
         assigned_to = request.query_params.get("assigned_to")
         if assigned_to:
             tasks = tasks.filter(assigned_to=assigned_to)
+        paginator = VTFCursorPagination()
+        page = paginator.paginate_queryset(tasks, request)
+        if page is not None:
+            serializer = TaskSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
         serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
 

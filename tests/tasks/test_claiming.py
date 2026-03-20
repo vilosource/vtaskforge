@@ -527,7 +527,7 @@ class TestClaimableEndpoint:
         make_task(phase, workplan, "doing", title="Task C")
         response = api_client.get("/v1/tasks/claimable/")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["results"]) == 2
 
     def test_claimable_excludes_non_todo(self, api_client, phase, workplan):
         make_task(phase, workplan, "draft")
@@ -535,27 +535,27 @@ class TestClaimableEndpoint:
         make_task(phase, workplan, "done")
         make_task(phase, workplan, "blocked")
         response = api_client.get("/v1/tasks/claimable/")
-        assert len(response.data) == 0
+        assert len(response.data["results"]) == 0
 
     def test_claimable_tag_filter_includes_matching(self, api_client, phase, workplan):
         make_task(phase, workplan, requires=["executor"])
         make_task(phase, workplan, requires=[])
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["results"]) == 2
 
     def test_claimable_tag_filter_excludes_non_matching(self, api_client, phase, workplan):
         make_task(phase, workplan, requires=["opus"])
         make_task(phase, workplan, requires=["executor"])
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
-        assert len(response.data) == 1
-        assert response.data[0]["requires"] == ["executor"]
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["requires"] == ["executor"]
 
     def test_claimable_no_tags_returns_all_todo(self, api_client, phase, workplan):
         make_task(phase, workplan, requires=["executor"])
         make_task(phase, workplan, requires=[])
         response = api_client.get("/v1/tasks/claimable/")
-        assert len(response.data) == 2
+        assert len(response.data["results"]) == 2
 
     def test_claimable_excludes_tasks_with_unmet_deps(self, api_client, phase, workplan):
         dep_task = make_task(phase, workplan, "todo", title="Dep")
@@ -568,7 +568,7 @@ class TestClaimableEndpoint:
             link_type="depends_on",
         )
         response = api_client.get("/v1/tasks/claimable/")
-        ids = [t["id"] for t in response.data]
+        ids = [t["id"] for t in response.data["results"]]
         assert task.id not in ids
 
     def test_claimable_includes_tasks_with_met_deps(self, api_client, phase, workplan):
@@ -582,7 +582,7 @@ class TestClaimableEndpoint:
             link_type="depends_on",
         )
         response = api_client.get("/v1/tasks/claimable/")
-        ids = [t["id"] for t in response.data]
+        ids = [t["id"] for t in response.data["results"]]
         assert task.id in ids
 
     def test_claimable_agent_id_excludes_other_assigned(
@@ -591,8 +591,8 @@ class TestClaimableEndpoint:
         make_task(phase, workplan, assigned_to=agent_other.id, title="Other's task")
         make_task(phase, workplan, assigned_to=None, title="Unassigned")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent1.id}")
-        assert len(response.data) == 1
-        assert response.data[0]["title"] == "Unassigned"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["title"] == "Unassigned"
 
     def test_claimable_agent_id_includes_own_assigned(
         self, api_client, phase, workplan, agent1
@@ -600,13 +600,13 @@ class TestClaimableEndpoint:
         make_task(phase, workplan, assigned_to=agent1.id, title="My task")
         make_task(phase, workplan, assigned_to=None, title="Unassigned")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent1.id}")
-        assert len(response.data) == 2
+        assert len(response.data["results"]) == 2
 
     def test_claimable_no_agent_id_shows_all_todo(self, api_client, phase, workplan, agent_other):
         make_task(phase, workplan, assigned_to=agent_other.id)
         make_task(phase, workplan, assigned_to=None)
         response = api_client.get("/v1/tasks/claimable/")
-        assert len(response.data) == 2
+        assert len(response.data["results"]) == 2
 
     def test_claimable_combined_tags_and_deps(self, api_client, phase, workplan):
         dep = make_task(phase, workplan, "done", title="Dep")
@@ -620,7 +620,7 @@ class TestClaimableEndpoint:
         )
         task_no_dep = make_task(phase, workplan, requires=["executor"], title="No dep")
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
-        ids = [t["id"] for t in response.data]
+        ids = [t["id"] for t in response.data["results"]]
         assert task_with_dep.id in ids
         assert task_no_dep.id in ids
 
@@ -716,7 +716,7 @@ class TestClaimableDBTagLookup:
         make_task(phase, workplan, requires=["opus"], title="Non-matching task")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent.id}")
         assert response.status_code == status.HTTP_200_OK
-        titles = [t["title"] for t in response.data]
+        titles = [t["title"] for t in response.data["results"]]
         assert "Matching task" in titles
         assert "Non-matching task" not in titles
 
@@ -727,7 +727,7 @@ class TestClaimableDBTagLookup:
         make_task(phase, workplan, requires=["executor"], title="Executor task")
         # Explicit tags=opus in query param should override agent's DB tags (executor)
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent.id}&tags=opus")
-        titles = [t["title"] for t in response.data]
+        titles = [t["title"] for t in response.data["results"]]
         assert "Opus task" in titles
         assert "Executor task" not in titles
 
@@ -740,6 +740,6 @@ class TestClaimableDBTagLookup:
         response = api_client.get("/v1/tasks/claimable/?agent_id=nonexistent")
         # With empty tags from failed DB lookup, tag filter is skipped — all todo tasks returned
         assert response.status_code == status.HTTP_200_OK
-        titles = [t["title"] for t in response.data]
+        titles = [t["title"] for t in response.data["results"]]
         assert "No requires" in titles
         assert "Needs executor" in titles

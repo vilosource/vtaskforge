@@ -47,12 +47,12 @@ class TestNestedTaskEvents:
 
     def test_returns_empty_list_when_no_events(self, api_client, task):
         response = api_client.get(f"/v1/tasks/{task.id}/events/")
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_returns_events_for_task(self, api_client, task, event):
         response = api_client.get(f"/v1/tasks/{task.id}/events/")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == event.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == event.id
 
     def test_returns_404_for_nonexistent_task(self, api_client):
         response = api_client.get("/v1/tasks/nonexistent123456789/events/")
@@ -64,12 +64,12 @@ class TestNestedTaskEvents:
             task=task2, event_type="status_changed", data={"from": "draft", "to": "todo"}
         )
         response = api_client.get(f"/v1/tasks/{task.id}/events/")
-        assert len(response.data) == 1
-        assert response.data[0]["task"] == task.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["task"] == task.id
 
     def test_event_fields_present(self, api_client, task, event):
         response = api_client.get(f"/v1/tasks/{task.id}/events/")
-        ev = response.data[0]
+        ev = response.data["results"][0]
         assert "id" in ev
         assert "task" in ev
         assert "event_type" in ev
@@ -99,21 +99,21 @@ class TestTopLevelEvents:
         TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         TaskEventFactory(task=task2, event_type="claimed", data={"agent_id": "agent-1"})
         response = api_client.get("/v1/events/")
-        assert len(response.data) == 2
+        assert len(response.data["results"]) == 2
 
     def test_filter_by_task(self, api_client, task, task2):
         e1 = TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         TaskEventFactory(task=task2, event_type="status_changed", data={"from": "draft", "to": "todo"})
         response = api_client.get(f"/v1/events/?task={task.id}")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == e1.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == e1.id
 
     def test_filter_by_event_type(self, api_client, task):
         TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         TaskEventFactory(task=task, event_type="claimed", data={"agent_id": "agent-1"})
         response = api_client.get("/v1/events/?event_type=claimed")
-        assert len(response.data) == 1
-        assert response.data[0]["event_type"] == "claimed"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["event_type"] == "claimed"
 
     def test_filter_by_since(self, api_client, task):
         from django.utils import timezone
@@ -123,7 +123,7 @@ class TestTopLevelEvents:
         # Use UTC format (Z suffix) to avoid URL encoding issues with +00:00
         since_str = past.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         response = api_client.get(f"/v1/events/?since={since_str}")
-        assert len(response.data) == 1
+        assert len(response.data["results"]) == 1
 
     def test_no_write_methods_allowed(self, api_client):
         response = api_client.post("/v1/events/", {}, format="json")
@@ -133,5 +133,5 @@ class TestTopLevelEvents:
         e1 = TaskEventFactory(task=task, event_type="status_changed", data={"from": "draft", "to": "todo"})
         e2 = TaskEventFactory(task=task, event_type="claimed", data={"agent_id": "a"})
         response = api_client.get("/v1/events/")
-        assert response.data[0]["id"] == e2.id
-        assert response.data[1]["id"] == e1.id
+        assert response.data["results"][0]["id"] == e2.id
+        assert response.data["results"][1]["id"] == e1.id

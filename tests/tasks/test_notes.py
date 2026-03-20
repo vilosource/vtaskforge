@@ -85,14 +85,14 @@ class TestNoteList:
 
     def test_list_empty(self, api_client, task):
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_returns_notes(self, api_client, task, note):
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == note.id
-        assert response.data[0]["text"] == note.text
-        assert response.data[0]["actor_id"] == note.actor_id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == note.id
+        assert response.data["results"][0]["text"] == note.text
+        assert response.data["results"][0]["actor_id"] == note.actor_id
 
     def test_list_404_if_task_not_found(self, api_client):
         response = api_client.get("/v1/tasks/nonexistent-task-id/notes/")
@@ -103,15 +103,15 @@ class TestNoteList:
         NoteFactory(task=task, text="Task note", actor_id="agent-1")
         NoteFactory(task=other_task, text="Other note", actor_id="agent-2")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
-        assert len(response.data) == 1
-        assert response.data[0]["text"] == "Task note"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["text"] == "Task note"
 
     def test_list_ordered_ascending(self, api_client, task):
         NoteFactory(task=task, text="First", actor_id="agent-1")
         NoteFactory(task=task, text="Second", actor_id="agent-2")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
-        assert response.data[0]["text"] == "First"
-        assert response.data[1]["text"] == "Second"
+        assert response.data["results"][0]["text"] == "First"
+        assert response.data["results"][1]["text"] == "Second"
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from core.pagination import VTFAgentCursorPagination
+
 from .models import Agent
 from .serializers import AgentSerializer
 
@@ -14,6 +16,7 @@ class AgentViewSet(ModelViewSet):
     queryset = Agent.objects.all()
     serializer_class = AgentSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    pagination_class = VTFAgentCursorPagination
 
     def get_permissions(self):
         if self.action == "create":

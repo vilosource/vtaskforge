@@ -24,14 +24,14 @@ class TestAgentList:
     def test_list_returns_empty_when_no_agents(self, api_client):
         response = api_client.get("/v1/agents/")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_returns_agents(self, api_client, agent):
         response = api_client.get("/v1/agents/")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == agent.id
-        assert response.data[0]["name"] == agent.name
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == agent.id
+        assert response.data["results"][0]["name"] == agent.name
 
 
 @pytest.mark.django_db

@@ -51,41 +51,41 @@ class TestTaskList:
 
     def test_list_empty(self, api_client):
         response = api_client.get("/v1/tasks/")
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_returns_tasks(self, api_client, task):
         response = api_client.get("/v1/tasks/")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == task.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == task.id
 
     def test_filter_by_status(self, api_client, task, doing_task):
         response = api_client.get("/v1/tasks/?status=doing")
         assert response.status_code == status.HTTP_200_OK
-        assert all(t["status"] == "doing" for t in response.data)
-        assert len(response.data) == 1
+        assert all(t["status"] == "doing" for t in response.data["results"])
+        assert len(response.data["results"]) == 1
 
     def test_filter_by_phase(self, api_client, task, phase):
         response = api_client.get(f"/v1/tasks/?phase={phase.id}")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
+        assert len(response.data["results"]) == 1
 
     def test_filter_by_workplan(self, api_client, task, workplan):
         response = api_client.get(f"/v1/tasks/?workplan={workplan.id}")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
+        assert len(response.data["results"]) == 1
 
     def test_filter_by_assigned_to(self, api_client, phase, workplan):
         TaskFactory(title="Assigned", phase=phase, workplan=workplan, assigned_to="bob")
         TaskFactory(title="Unassigned", phase=phase, workplan=workplan)
         response = api_client.get("/v1/tasks/?assigned_to=bob")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["assigned_to"] == "bob"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["assigned_to"] == "bob"
 
     def test_filter_by_unknown_status_returns_empty(self, api_client, task):
         response = api_client.get("/v1/tasks/?status=nonexistent")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == []
+        assert response.data["results"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -296,8 +296,8 @@ class TestPhaseTasksNested:
 
     def test_list_returns_tasks_in_phase(self, api_client, phase, task):
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == task.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == task.id
 
     def test_list_returns_404_for_unknown_phase(self, api_client):
         response = api_client.get("/v1/phases/nonexistentid12345678/tasks/")
@@ -331,11 +331,11 @@ class TestPhaseTasksNested:
         TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/?status=draft")
         assert response.status_code == status.HTTP_200_OK
-        assert all(t["status"] == "draft" for t in response.data)
+        assert all(t["status"] == "draft" for t in response.data["results"])
 
     def test_list_does_not_include_tasks_from_other_phases(self, api_client, workplan, phase, task):
         other_phase = PhaseFactory(name="Other Phase", workplan=workplan)
         TaskFactory(title="Other Task", phase=other_phase, workplan=workplan)
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == task.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == task.id

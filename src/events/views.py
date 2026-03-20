@@ -2,6 +2,7 @@ from rest_framework import mixins, status
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from core.pagination import VTFEventCursorPagination
 from tasks.models import Task
 
 from .models import TaskEvent
@@ -17,6 +18,7 @@ class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
     """
 
     serializer_class = TaskEventSerializer
+    pagination_class = VTFEventCursorPagination
 
     def get_queryset(self):
         # If nested under a task, filter by task_id from URL kwargs

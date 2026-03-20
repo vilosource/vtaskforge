@@ -29,14 +29,14 @@ class TestWorkplanList:
     def test_list_returns_empty_when_no_workplans(self, api_client):
         response = api_client.get("/v1/workplans/")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_returns_workplans(self, api_client, workplan):
         response = api_client.get("/v1/workplans/")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == workplan.id
-        assert response.data[0]["name"] == workplan.name
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == workplan.id
+        assert response.data["results"][0]["name"] == workplan.name
 
 
 @pytest.mark.django_db

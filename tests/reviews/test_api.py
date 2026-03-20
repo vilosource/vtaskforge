@@ -65,7 +65,7 @@ class TestReviewList:
 
     def test_list_empty(self, api_client, task_pending_start):
         response = api_client.get(f"/v1/tasks/{task_pending_start.id}/reviews/")
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_404_if_task_not_found(self, api_client):
         response = api_client.get("/v1/tasks/nonexistent-task-id/reviews/")
@@ -82,8 +82,8 @@ class TestReviewList:
         task_pending_start.save()
         response = api_client.get(f"/v1/tasks/{task_pending_start.id}/reviews/")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["decision"] == "approved"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["decision"] == "approved"
 
     def test_list_only_returns_reviews_for_task(self, api_client, phase, workplan, task_pending_start):
         other_task = TaskFactory(
@@ -92,8 +92,8 @@ class TestReviewList:
         ReviewFactory(task=task_pending_start, decision="approved", reviewer_id="user-1")
         ReviewFactory(task=other_task, decision="rejected", reviewer_id="user-2")
         response = api_client.get(f"/v1/tasks/{task_pending_start.id}/reviews/")
-        assert len(response.data) == 1
-        assert response.data[0]["decision"] == "approved"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["decision"] == "approved"
 
 
 # ---------------------------------------------------------------------------

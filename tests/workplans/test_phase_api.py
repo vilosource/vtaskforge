@@ -125,12 +125,12 @@ class TestNestedPhaseList:
 
     def test_list_returns_empty_when_no_phases(self, api_client, workplan):
         response = api_client.get(f"/v1/workplans/{workplan.id}/phases/")
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_returns_phases_for_workplan(self, api_client, workplan, pending_phase):
         response = api_client.get(f"/v1/workplans/{workplan.id}/phases/")
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == pending_phase.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == pending_phase.id
 
     def test_list_does_not_include_other_workplan_phases(
         self, api_client, workplan, other_workplan
@@ -138,7 +138,7 @@ class TestNestedPhaseList:
         PhaseFactory(name="Phase A", workplan=workplan)
         PhaseFactory(name="Phase B", workplan=other_workplan)
         response = api_client.get(f"/v1/workplans/{workplan.id}/phases/")
-        assert len(response.data) == 1
+        assert len(response.data["results"]) == 1
 
     def test_list_nonexistent_workplan_returns_404(self, api_client):
         response = api_client.get("/v1/workplans/nonexistentid12345678/phases/")

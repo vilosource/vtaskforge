@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from core.pagination import VTFCursorPagination
 from tasks.models import Task
 from .models import Phase, Workplan
 from .serializers import PhaseSerializer, WorkplanSerializer
@@ -93,6 +94,11 @@ class WorkplanPhasesView(APIView):
         if workplan is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         phases = Phase.objects.filter(workplan=workplan)
+        paginator = VTFCursorPagination()
+        page = paginator.paginate_queryset(phases, request)
+        if page is not None:
+            serializer = PhaseSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
         serializer = PhaseSerializer(phases, many=True)
         return Response(serializer.data)
 

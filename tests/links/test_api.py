@@ -37,13 +37,13 @@ class TestLinkList:
     def test_list_returns_empty_when_no_links(self, api_client):
         response = api_client.get("/v1/links/")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == []
+        assert response.data["results"] == []
 
     def test_list_returns_links(self, api_client, link):
         response = api_client.get("/v1/links/")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == link.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == link.id
 
     def test_list_filter_by_source_id(self, api_client, db):
         link1 = LinkFactory(
@@ -56,8 +56,8 @@ class TestLinkList:
         )
         response = api_client.get("/v1/links/?source_id=source_aaa")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == link1.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == link1.id
 
     def test_list_filter_by_target_id(self, api_client, db):
         link1 = LinkFactory(
@@ -70,8 +70,8 @@ class TestLinkList:
         )
         response = api_client.get("/v1/links/?target_id=PROJ-1")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == link1.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == link1.id
 
     def test_list_filter_by_source_type(self, api_client, db):
         LinkFactory(
@@ -84,8 +84,8 @@ class TestLinkList:
         )
         response = api_client.get("/v1/links/?source_type=workplan")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["source_type"] == "workplan"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["source_type"] == "workplan"
 
     def test_list_filter_by_link_type(self, api_client, db):
         LinkFactory(
@@ -98,8 +98,8 @@ class TestLinkList:
         )
         response = api_client.get("/v1/links/?link_type=jira")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["link_type"] == "jira"
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["link_type"] == "jira"
 
     def test_list_multiple_filters_combined(self, api_client, db):
         link1 = LinkFactory(
@@ -112,8 +112,8 @@ class TestLinkList:
         )
         response = api_client.get("/v1/links/?source_id=source_aaa&link_type=commit")
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == link1.id
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == link1.id
 
 
 @pytest.mark.django_db
