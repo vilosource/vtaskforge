@@ -1,0 +1,87 @@
+# vtf-dogfood: Built release instance for tracking development
+#
+# Usage:
+#   docker compose -f docker-compose.dogfood.yml up -d
+#   vtf config set api_url http://localhost:8001
+#   vtf agent register --name "supervisor" --tags supervisor
+#   vtf import phases/phase4/
+#
+# This runs the RELEASED version of vtaskforge — source baked into the image,
+# no volume mounts, production settings, gunicorn. Agents develop against the
+# dev stack (docker-compose.yml on port 8000), tracking happens here (port 8001).
+#
+# Build:
+#   docker compose -f docker-compose.dogfood.yml build
+#
+# The dogfood DB is completely separate from the dev DB.
+
+services:
+  dogfood-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "8001:8000"
+    depends_on:
+      dogfood-db:
+        condition: service_healthy
+      dogfood-redis:
+        condition: service_started
+    environment:
+      - DJANGO_SETTINGS_MODULE=vtaskforge.settings.prod
+      - DATABASE_URL=postgres://vtf:vtfdogfood@dogfood-db:5432/vtf_dogfood
+      - CELERY_BROKER_URL=redis://dogfood-redis:6379/0
+      - SECRET_KEY=dogfood-secret-change-in-real-prod
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+
+  dogfood-db:
+    image: postgres:16-alpine
+    volumes:
+      - dogfood-pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=vtf_dogfood
+      - POSTGRES_USER=vtf
+      - POSTGRES_PASSWORD=vtfdogfood
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vtf -d vtf_dogfood"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  dogfood-redis:
+    image: redis:7-alpine
+
+  dogfood-celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    command: celery -A vtaskforge worker -l info
+    depends_on:
+      dogfood-db:
+        condition: service_healthy
+      dogfood-redis:
+        condition: service_started
+    environment:
+      - DJANGO_SETTINGS_MODULE=vtaskforge.settings.prod
+      - DATABASE_URL=postgres://vtf:vtfdogfood@dogfood-db:5432/vtf_dogfood
+      - CELERY_BROKER_URL=redis://dogfood-redis:6379/0
+      - SECRET_KEY=dogfood-secret-change-in-real-prod
+
+  dogfood-celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    command: celery -A vtaskforge beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      dogfood-db:
+        condition: service_healthy
+      dogfood-redis:
+        condition: service_started
+    environment:
+      - DJANGO_SETTINGS_MODULE=vtaskforge.settings.prod
+      - DATABASE_URL=postgres://vtf:vtfdogfood@dogfood-db:5432/vtf_dogfood
+      - CELERY_BROKER_URL=redis://dogfood-redis:6379/0
+      - SECRET_KEY=dogfood-secret-change-in-real-prod
+
+volumes:
+  dogfood-pgdata:
