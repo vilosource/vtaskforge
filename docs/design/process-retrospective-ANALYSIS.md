@@ -111,16 +111,15 @@ Auto-approved every single task across all phases. The process guide says "human
 
 **Verdict:** Either enforce it (blocking gate) or remove it from the process. Pretending it exists while skipping it is worse than not having it.
 
-### 4. Database Durability for Dogfooding
+### 4. Database Wipe During Dogfooding (Self-Hosting Only)
 
-The database was wiped 4 times during Phase 3. Each wipe destroyed:
-- All imported workplan/phase/task data
-- Auth tokens (required re-registration)
-- Event history and review records
+The database was wiped 4 times during Phase 3. Each wipe destroyed all imported workplan/phase/task data, auth tokens, and event history.
 
-**Root cause:** Django test runner creates a test database but migrations run against the dev database. Agent execution of `manage.py migrate` or test suite flush operations affect the same Postgres instance that stores vtf tracking data.
+**Root cause:** A circular dependency unique to dogfooding — vtf's tracking database lives on the same Postgres instance that agents interact with when developing vtf itself. When agents run `pytest` or `manage.py migrate` against vtf's codebase, they affect the same database that stores the tracking data.
 
-**This is the single biggest blocker for self-hosting.** Without a durable tracking database, vtf cannot track its own development.
+**This is NOT a general vtf problem.** In normal use — vtf tracking development of any other project — agents never touch vtf's database. They run tests and migrations against the target project's infrastructure. vtf's database is completely isolated.
+
+**The real lesson:** vtf should be deployed as a service, not co-located with the project it tracks. In production, vtf would run on its own infrastructure. The dogfooding scenario (tracking yourself) is a special case that requires explicit separation (separate Postgres instance or container).
 
 ### 5. The Supervisor Gap
 
@@ -178,8 +177,8 @@ vtf's tracking database should never have shared infrastructure with the develop
 
 ### Tier 1: Do Immediately
 
-#### 1. Separate vtf tracking database
-Use a separate Postgres database (or SQLite file) for vtf tracking data. The dev database is for application development; the tracking database is for process management. They should never share a Postgres instance that agents can affect.
+#### 1. Deploy vtf as a service, not co-located
+In production, vtf runs on its own infrastructure — separate from any project it tracks. The DB wipe issue only occurred because we dogfooded vtf on itself, creating a circular dependency. For any other project, vtf's database is naturally isolated. For self-hosting, use a separate Postgres instance or container.
 
 #### 2. Simplify the task spec
 Remove fields that didn't prove their value:
@@ -285,7 +284,7 @@ Everything else we added — judges, contracts, patterns, behavioral specs, tier
 
 ### The problem we should solve next
 
-Database durability for self-hosting. Without it, vtf can't track its own development, which means every "dogfooding" attempt is theater — we import, it gets wiped, we re-import. The tracking system needs to survive agent execution.
+Supervisor automation. The supervisor role was manual throughout all phases. Building it as a script or hook that polls vtf for work, dispatches agents, runs gates, and updates status would close the loop — making vtf a fully automated execution system, not just a tracking board with manual orchestration.
 
 ### The meta-lesson
 
