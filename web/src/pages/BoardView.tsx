@@ -1,12 +1,12 @@
 import { useParams } from 'react-router-dom';
+import { KanbanBoard } from './KanbanBoard';
 
 export function BoardView() {
   const { id } = useParams<{ id: string }>();
 
-  return (
-    <div>
-      <h1>Board View</h1>
-      <p>Board for workplan <strong>{id}</strong> — stub. Implementation coming in a later task.</p>
-    </div>
-  );
+  if (!id) {
+    return <div className="error">Invalid workplan ID.</div>;
+  }
+
+  return <KanbanBoard workplanId={id} />;
 }
