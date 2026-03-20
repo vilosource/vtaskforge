@@ -1,0 +1,210 @@
+id: "3.5"
+name: "SSE event stream"
+depends_on: ["3.1", "3.2", "3.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create a Server-Sent Events (SSE) endpoint at GET /v1/events/stream that
+  streams TaskEvents in SSE format. This enables real-time updates for the
+  web UI, CLI, and scrum master agent.
+
+  V1 implementation uses a simple polling approach: query for new events every
+  1-2 seconds and stream them. This avoids external dependencies (no Redis
+  pubsub, no django-eventstream).
+
+  Supports query filters (?workplan=, ?phase=, ?type=) and the Last-Event-ID
+  header for reconnection replay.
+
+files:
+  create:
+    - src/events/stream.py
+    - tests/events/test_stream.py
+  modify:
+    - src/events/urls.py
+  affected: []
+
+contracts:
+  establishes:
+    - name: "sse-stream"
+      description: "GET /v1/events/stream returns SSE-formatted event stream with id, event, and data fields"
+  depends_on: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/events/views.py — existing event viewset
+    - src/events/urls.py — current URL patterns
+    - src/events/models.py — TaskEvent model (id, task, event_type, data, timestamp, triggered_by)
+    - docs/design/api-surface-DESIGN.md — SSE format spec
+
+    Step 1: Create src/events/stream.py with the SSE view:
+    ```python
+    import json
+    import time
+
+    from django.http import StreamingHttpResponse
+    from rest_framework.decorators import api_view, permission_classes
+    from rest_framework.permissions import IsAuthenticated
+
+    from .models import TaskEvent
+
+
+    def format_sse(event_id, event_type, data):
+        """Format a single SSE event."""
+        lines = []
+        lines.append(f"id: {event_id}")
+        lines.append(f"event: {event_type}")
+        lines.append(f"data: {json.dumps(data)}")
+        lines.append("")
+        lines.append("")
+        return "\n".join(lines)
+
+
+    def event_stream(request):
+        """Generator that yields SSE events by polling TaskEvent table."""
+        # Parse filters
+        workplan = request.GET.get("workplan")
+        phase = request.GET.get("phase")
+        event_type = request.GET.get("type")
+
+        # Support Last-Event-ID for reconnection
+        last_event_id = request.META.get("HTTP_LAST_EVENT_ID", "")
+
+        # Determine starting point
+        last_id = None
+        if last_event_id:
+            try:
+                last_event = TaskEvent.objects.get(pk=last_event_id)
+                last_id = last_event_id
+            except TaskEvent.DoesNotExist:
+                pass
+
+        while True:
+            # Query for new events
+            qs = TaskEvent.objects.select_related("task").order_by("timestamp", "id")
+
+            if last_id:
+                # Get events after the last seen event
+                try:
+                    last_event = TaskEvent.objects.get(pk=last_id)
+                    qs = qs.filter(timestamp__gte=last_event.timestamp).exclude(pk=last_id)
+                except TaskEvent.DoesNotExist:
+                    pass
+
+            # Apply filters
+            if workplan:
+                qs = qs.filter(task__workplan_id=workplan)
+            if phase:
+                qs = qs.filter(task__phase_id=phase)
+            if event_type:
+                qs = qs.filter(event_type=event_type)
+
+            for event in qs[:100]:  # batch limit
+                data = {
+                    "task_id": str(event.task_id),
+                    "event_type": event.event_type,
+                    "data": event.data,
+                    "timestamp": event.timestamp.isoformat(),
+                    "triggered_by": event.triggered_by,
+                }
+                yield format_sse(str(event.id), event.event_type, data)
+                last_id = str(event.id)
+
+            time.sleep(2)  # poll interval
+
+
+    @api_view(["GET"])
+    @permission_classes([IsAuthenticated])
+    def stream_events(request):
+        """SSE endpoint: GET /v1/events/stream"""
+        response = StreamingHttpResponse(
+            event_stream(request),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"  # nginx compatibility
+        return response
+    ```
+
+    This is a reference implementation. The agent should implement this pattern
+    but may adjust details (error handling, connection detection, etc.).
+
+    Step 2: Add the URL to src/events/urls.py:
+    ```python
+    from .stream import stream_events
+
+    urlpatterns = router.urls + [
+        path("tasks/<str:task_id>/events/", ...),  # existing
+        path("events/stream/", stream_events, name="event-stream"),
+    ]
+    ```
+
+    Note: the stream URL must be added BEFORE the router URLs to avoid the
+    router's catch-all from intercepting "stream" as an event ID.
+
+    Step 3: Create tests/events/test_stream.py:
+    - Test that GET /v1/events/stream returns Content-Type: text/event-stream
+    - Test SSE format: response contains "id:", "event:", "data:" lines
+    - Test filtering: ?type=claimed only returns claimed events
+    - Test Last-Event-ID: create events, reconnect with Last-Event-ID, verify
+      only events after that ID are returned
+    - For testing streaming responses, use Django's test client. The response
+      is a StreamingHttpResponse — iterate over response.streaming_content.
+
+    Important: streaming tests need to be careful about the infinite loop.
+    Options:
+    a) Mock time.sleep to raise an exception after first iteration
+    b) Create a test-specific generator that yields events then stops
+    c) Use itertools.islice on the streaming content
+
+    Recommended approach: make the event_stream function accept a max_iterations
+    parameter (default None = infinite) for testability:
+    ```python
+    def event_stream(request, max_iterations=None):
+        iterations = 0
+        while max_iterations is None or iterations < max_iterations:
+            ...
+            iterations += 1
+            time.sleep(2)
+    ```
+    Tests pass max_iterations=1.
+
+  constraints:
+    - Use Django's StreamingHttpResponse — do NOT add django-eventstream or
+      other dependencies
+    - SSE format must follow the spec: "id: ...\nevent: ...\ndata: ...\n\n"
+    - The endpoint must be authenticated (IsAuthenticated permission)
+    - Polling interval should be 2 seconds
+    - Do NOT use async views — keep it synchronous with time.sleep()
+    - The stream URL must not conflict with the events router
+  references:
+    - src/events/views.py
+    - src/events/urls.py
+    - src/events/models.py
+    - docs/design/api-surface-DESIGN.md
+
+acceptance_criteria:
+  - "GET /v1/events/stream returns Content-Type text/event-stream"
+  - "Response body contains SSE-formatted events with id, event, and data fields"
+  - "?workplan= filter limits events to those from tasks in that workplan"
+  - "?phase= filter limits events to those from tasks in that phase"
+  - "?type= filter limits events to those with matching event_type"
+  - "Last-Event-ID header causes replay of events after that ID"
+  - "Endpoint requires authentication"
+  - "pytest tests/events/test_stream.py passes"
+  - "pytest tests/ passes (full suite)"
+
+behavioral_spec:
+  id: bs-3.5
+  priority: high
+  behaviors:
+    - "GET /v1/events/stream returns 200 with Content-Type text/event-stream"
+    - "Events are formatted as SSE: id, event, data fields separated by newlines"
+    - "Filter by workplan returns only events from tasks in that workplan"
+    - "Filter by type returns only events with matching event_type"
+    - "Last-Event-ID header replays events after the specified event"
+    - "Unauthenticated request returns 401"
+
+test_command: "pytest tests/events/test_stream.py"

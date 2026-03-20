@@ -1,0 +1,143 @@
+id: "3.7"
+name: "Black-box test suite"
+depends_on: ["3.6"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  End-to-end verification of all Phase 3 features plus the 4 existing scenarios
+  from Phase 2. This is primarily an EXECUTION task — the agent runs scenarios
+  against the live API, not a code-writing task.
+
+  Run the existing 4 scenarios (full-lifecycle, unhappy-paths, review-rejection,
+  agent-tag-matching) and add 2 new scenarios:
+
+  1. pagination-test: verify paginated responses on list endpoints
+  2. sse-test: verify SSE stream format and filtering
+
+  Also fix the review-rejection scenario if the tester was calling /submit/
+  instead of /resubmit/ for the resubmit step.
+
+files:
+  create: []
+  modify: []
+  affected:
+    - src/tasks/views.py
+    - src/events/stream.py
+    - src/workplans/views.py
+
+contracts:
+  depends_on:
+    - name: "cursor-pagination"
+    - name: "sse-stream"
+    - name: "stats-response"
+    - name: "task-state-machine"
+    - name: "task-claim-endpoint"
+
+implementation:
+  approach: |
+    This is a VERIFICATION task. The agent exercises the API, not writes code.
+
+    Prerequisites:
+    - API server must be running (docker compose up or manage.py runserver)
+    - Database must be migrated
+    - Register an agent first to get an auth token
+
+    **Scenario 1: full-lifecycle** (existing)
+    - Register agent -> get token
+    - Create workplan -> phase -> task
+    - Submit (draft -> todo)
+    - Claim (todo -> doing) — note: claim should work without passing tags
+      in body (task 3.2 made it look up from DB)
+    - Heartbeat
+    - Complete (doing -> done)
+    - Verify each step
+
+    **Scenario 2: unhappy-paths** (existing)
+    - Claim non-todo task -> 409 ALREADY_CLAIMED
+    - Claim with missing agent_id -> 400
+    - Complete draft task -> 422 INVALID_TRANSITION
+    - Heartbeat non-doing task -> 400
+    - Access without token -> 401
+    - Claim with non-existent agent_id -> 404 (new, from task 3.2)
+
+    **Scenario 3: review-rejection** (existing, fix needed)
+    - Create task with needs_review_on_completion=true
+    - Submit -> claim -> complete -> verify pending_completion_review
+    - Submit review with changes_requested
+    - Verify task in changes_requested
+    - RESUBMIT (POST /v1/tasks/{id}/resubmit/) -> verify pending_completion_review
+    - NOTE: if previous test used /submit/ for resubmit, fix to use /resubmit/
+
+    **Scenario 4: agent-tag-matching** (existing, updated)
+    - Create task with requires=["opus"]
+    - Register agent with tags=["sonnet"]
+    - Claim without passing tags in body (DB lookup) -> 422 tag mismatch
+    - Register agent with tags=["opus", "executor"]
+    - Claim without passing tags in body -> success
+    - Create task with assigned_to=agent-1, claim with agent-2 -> 403
+
+    **Scenario 5: pagination-test** (new)
+    - Create a workplan with a phase and 60 tasks
+    - GET /v1/tasks/ -> verify response has "results", "next", "previous" keys
+    - Verify first page has 50 results
+    - Follow "next" URL -> verify remaining 10 results
+    - Verify "previous" URL on second page
+    - Test custom page_size: GET /v1/tasks/?page_size=10 -> 10 results
+
+    **Scenario 6: sse-test** (new)
+    - Create a workplan/phase/task
+    - Perform some actions (submit, claim) to generate events
+    - GET /v1/events/stream -> verify Content-Type is text/event-stream
+    - Verify response body contains SSE format (id:, event:, data:)
+    - Test with filter: ?type=status_changed
+    - Test Last-Event-ID header replay
+    - NOTE: SSE is a streaming response — read a few events then disconnect
+
+    **Scenario 7: unclaim-test** (new, validates 3.1)
+    - Create task, submit, claim
+    - Unclaim -> verify status is todo, claimed_by is null
+    - Verify both status_changed and unclaimed events created
+
+    **Scenario 8: stats-test** (new, validates 3.3)
+    - Create workplan with phase and tasks in various statuses
+    - GET /v1/workplans/{id}/stats -> verify real counts
+    - GET /v1/phases/{id}/stats -> verify real counts
+
+    Report results: pass/fail for each scenario.
+
+  constraints:
+    - This is an EXECUTION task — do not write production code
+    - All API calls must include authentication token
+    - Report MUST include pass/fail for each scenario
+    - If a scenario fails, document expected vs actual
+    - For SSE testing, use a timeout/limit to avoid hanging on the stream
+  references:
+    - phases/phase2/tasks/2.10-blackbox-test-suite.yaml
+    - docs/design/api-surface-DESIGN.md
+    - src/tasks/views.py
+    - src/events/stream.py
+
+acceptance_criteria:
+  - "full-lifecycle scenario passes"
+  - "unhappy-paths scenario passes (including 404 for non-existent agent)"
+  - "review-rejection scenario passes (uses /resubmit/ endpoint)"
+  - "agent-tag-matching scenario passes (without passing tags in body)"
+  - "pagination-test scenario passes (50 results, cursor navigation)"
+  - "sse-test scenario passes (SSE format, filters, Last-Event-ID)"
+  - "unclaim-test scenario passes (status_changed + unclaimed events)"
+  - "stats-test scenario passes (real counts)"
+  - "All 8 scenarios report pass/fail"
+
+behavioral_spec:
+  id: bs-3.7
+  priority: high
+  behaviors:
+    - "All 4 existing scenarios pass with updated behavior (DB tag lookup, etc.)"
+    - "Pagination test verifies cursor-based response format and navigation"
+    - "SSE test verifies event stream format and filtering"
+    - "Unclaim test verifies state machine fix"
+    - "Stats test verifies real counts"
+
+test_command: "echo 'Manual execution — see scenario results'"

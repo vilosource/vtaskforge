@@ -1,0 +1,162 @@
+id: "3.6"
+name: "CLI — events and stats commands"
+depends_on: ["3.3", "3.5"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Add three new CLI commands to vtf:
+  1. vtf task events <id> — display event timeline for a task
+  2. vtf workplan stats <id> — display workplan progress stats
+  3. vtf phase stats <id> — display phase progress stats
+
+  These commands consume the stats and events endpoints implemented in tasks
+  3.3 and 3.5.
+
+files:
+  create: []
+  modify:
+    - cli/vtf/commands/task.py
+    - cli/vtf/commands/workplan.py
+  affected:
+    - cli/tests/test_task_commands.py
+    - cli/tests/test_workplan_commands.py
+
+contracts:
+  depends_on:
+    - name: "stats-response"
+    - name: "sse-stream"
+
+implementation:
+  approach: |
+    Read these files first:
+    - cli/vtf/commands/task.py — existing task commands (list, show, claim, etc.)
+    - cli/vtf/commands/workplan.py — existing workplan commands (create, list, show)
+    - cli/vtf/client.py — API client class (get, post methods)
+
+    Step 1: Add "events" command to task group in cli/vtf/commands/task.py:
+    ```python
+    @task.command()
+    @click.argument("id")
+    @click.option("--type", "event_type", default=None, help="Filter by event type")
+    @click.option("--limit", default=20, help="Number of events to show")
+    @click.pass_context
+    def events(ctx, id, event_type, limit):
+        """Show event timeline for a task."""
+        client = ctx.obj["client"]
+        params = {}
+        if event_type:
+            params["event_type"] = event_type
+        try:
+            results = client.get(f"/v1/tasks/{id}/events/", params=params if params else None)
+        except VTFAPIError as e:
+            click.echo(f"Error: {e}", err=True)
+            raise SystemExit(1)
+
+        # Handle paginated response
+        if isinstance(results, dict) and "results" in results:
+            events_list = results["results"]
+        else:
+            events_list = results
+
+        if not events_list:
+            click.echo("No events found.")
+            return
+
+        # Display as timeline (most recent first, limited)
+        for event in events_list[:limit]:
+            ts = event.get("timestamp", "")[:19]  # trim microseconds
+            etype = event.get("event_type", "")
+            by = event.get("triggered_by", "")
+            data = event.get("data", {})
+            line = f"  {ts}  {etype:<20} by {by}"
+            if data:
+                if "from" in data and "to" in data:
+                    line += f"  ({data['from']} -> {data['to']})"
+                elif "agent_id" in data:
+                    line += f"  (agent: {data['agent_id']})"
+            click.echo(line)
+    ```
+
+    Step 2: Add "stats" command to workplan group in cli/vtf/commands/workplan.py:
+    ```python
+    @workplan.command()
+    @click.argument("id")
+    @click.pass_context
+    def stats(ctx, id):
+        """Show workplan progress stats."""
+        client = ctx.obj["client"]
+        try:
+            data = client.get(f"/v1/workplans/{id}/stats/")
+        except VTFAPIError as e:
+            click.echo(f"Error: {e}", err=True)
+            raise SystemExit(1)
+
+        click.echo(f"Workplan: {data['workplan_id']}")
+        click.echo(f"Total tasks: {data['total_tasks']}")
+        click.echo(f"Completed: {data['completed_percentage']}%")
+        click.echo()
+        if data.get("by_status"):
+            click.echo("By status:")
+            for status, count in sorted(data["by_status"].items()):
+                click.echo(f"  {status:<30} {count}")
+    ```
+
+    Step 3: Add phase stats command. The phase commands may be in workplan.py
+    or a separate file. Check if there's a phase group in the CLI. If not,
+    add a "phase" subgroup. If phase commands are under the workplan group,
+    add there.
+
+    Check cli/vtf/cli.py for registered command groups. If there's no phase
+    group, create one or nest under workplan:
+    ```python
+    @workplan.group()
+    def phase():
+        """Manage phases."""
+        pass
+
+    @phase.command()
+    @click.argument("id")
+    @click.pass_context
+    def stats(ctx, id):
+        """Show phase progress stats."""
+        # Same pattern as workplan stats but hits /v1/phases/{id}/stats/
+    ```
+
+    Step 4: Update CLI tests:
+    - In test_task_commands.py: add test for "vtf task events <id>"
+    - In test_workplan_commands.py: add test for "vtf workplan stats <id>"
+    - Mock the API responses in tests (use responses library or unittest.mock)
+
+  constraints:
+    - Follow the existing CLI command patterns in task.py and workplan.py
+    - Use the same client.get() pattern for API calls
+    - Handle paginated responses (response may be {results: [...]} or [...])
+    - Display should be human-readable, not raw JSON
+    - Error handling must match existing pattern (VTFAPIError catch)
+  references:
+    - cli/vtf/commands/task.py
+    - cli/vtf/commands/workplan.py
+    - cli/vtf/client.py
+    - cli/vtf/cli.py
+
+acceptance_criteria:
+  - "vtf task events <id> displays event timeline"
+  - "vtf workplan stats <id> displays progress with total, by_status, percentage"
+  - "vtf phase stats <id> displays phase progress stats"
+  - "Commands handle API errors gracefully"
+  - "CLI tests pass"
+  - "pytest tests/ passes (full suite)"
+
+behavioral_spec:
+  id: bs-3.6
+  priority: medium
+  behaviors:
+    - "vtf task events <id> shows timestamped event timeline for the task"
+    - "vtf task events <id> with --type filter shows only matching events"
+    - "vtf workplan stats <id> shows total tasks, completion percentage, and by-status breakdown"
+    - "vtf phase stats <id> shows equivalent stats scoped to the phase"
+    - "All commands print error messages on API errors"
+
+test_command: "pytest cli/tests/"

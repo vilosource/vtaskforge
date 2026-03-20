@@ -1,0 +1,107 @@
+id: "3.3"
+name: "Workplan and phase stats (real counts)"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  The stats endpoints on WorkplanViewSet and PhaseViewSet currently return
+  placeholder dicts with all zeros. Replace with real counts by querying
+  Task.objects.filter() and aggregating by status.
+
+  Both endpoints should return the same shape:
+  - total_tasks: int
+  - by_status: dict mapping each status to its count
+  - completed_percentage: float (0.0-100.0)
+
+files:
+  create: []
+  modify:
+    - src/workplans/views.py
+  affected:
+    - tests/workplans/test_api.py
+    - tests/workplans/test_phase_api.py
+
+contracts:
+  establishes:
+    - name: "stats-response"
+      description: "GET /v1/workplans/{id}/stats and GET /v1/phases/{id}/stats return total_tasks, by_status dict, and completed_percentage"
+  depends_on: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/workplans/views.py — find WorkplanViewSet.stats() (around line 56) and
+      PhaseViewSet.stats() (around line 140)
+    - src/tasks/models.py — Task model, understand status field
+    - tests/workplans/test_api.py — find existing stats tests
+    - tests/workplans/test_phase_api.py — find existing phase stats tests
+
+    Step 1: Modify WorkplanViewSet.stats():
+    ```python
+    @action(detail=True, methods=["get"])
+    def stats(self, request, pk=None):
+        workplan = self.get_object()
+        from tasks.models import Task
+        tasks = Task.objects.filter(workplan=workplan)
+        total = tasks.count()
+        by_status = {}
+        for t in tasks.values("status").annotate(count=models.Count("id")):
+            by_status[t["status"]] = t["count"]
+        done_count = by_status.get("done", 0)
+        completed_pct = (done_count / total * 100) if total > 0 else 0.0
+        return Response({
+            "workplan_id": workplan.id,
+            "total_tasks": total,
+            "by_status": by_status,
+            "completed_percentage": round(completed_pct, 1),
+        })
+    ```
+    Add `from django.db import models` at the top of the file (for Count).
+
+    Step 2: Modify PhaseViewSet.stats() with the same logic but filtering by phase:
+    ```python
+    tasks = Task.objects.filter(phase=phase)
+    ```
+    Response uses "phase_id" instead of "workplan_id".
+
+    Step 3: Update tests:
+    - In test_api.py: update the stats test to create several tasks with different
+      statuses and verify the counts are correct. Use TaskFactory from tests/factories.py.
+    - In test_phase_api.py: same pattern for phase stats.
+    - Test edge case: stats on workplan/phase with zero tasks returns
+      total_tasks=0, by_status={}, completed_percentage=0.0
+
+  constraints:
+    - Use Django ORM aggregation (values + annotate) not Python loops
+    - completed_percentage should be rounded to 1 decimal place
+    - Response must include by_status as a dict, not a list
+    - Empty workplan/phase should return zeros, not errors
+  references:
+    - src/workplans/views.py
+    - src/tasks/models.py
+    - tests/workplans/test_api.py
+    - tests/workplans/test_phase_api.py
+    - tests/factories.py
+
+acceptance_criteria:
+  - "GET /v1/workplans/{id}/stats returns total_tasks with real count"
+  - "GET /v1/workplans/{id}/stats returns by_status dict with per-status counts"
+  - "GET /v1/workplans/{id}/stats returns completed_percentage as float"
+  - "GET /v1/phases/{id}/stats returns the same shape with phase-specific counts"
+  - "Stats on empty workplan/phase return total_tasks=0, by_status={}, completed_percentage=0.0"
+  - "pytest tests/workplans/test_api.py tests/workplans/test_phase_api.py passes"
+  - "pytest tests/ passes (full suite)"
+
+behavioral_spec:
+  id: bs-3.3
+  priority: high
+  behaviors:
+    - "GET /v1/workplans/{id}/stats returns total_tasks matching actual task count"
+    - "GET /v1/workplans/{id}/stats returns by_status dict with counts per status"
+    - "GET /v1/workplans/{id}/stats returns completed_percentage as done/total * 100"
+    - "GET /v1/phases/{id}/stats returns equivalent stats scoped to the phase"
+    - "Stats on workplan/phase with no tasks returns zeros"
+
+test_command: "pytest tests/workplans/test_api.py tests/workplans/test_phase_api.py"

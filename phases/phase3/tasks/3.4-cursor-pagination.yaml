@@ -1,0 +1,142 @@
+id: "3.4"
+name: "Cursor pagination on list endpoints"
+depends_on: ["3.1", "3.2", "3.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add cursor-based pagination to all list endpoints using DRF's built-in
+  CursorPagination. This is a cross-cutting change that affects every list
+  endpoint: workplans, phases, tasks, agents, links, events.
+
+  DRF CursorPagination uses an ordering field for cursor position and returns
+  opaque cursor strings in next/previous URLs. Default page size: 50, max: 100.
+
+files:
+  create:
+    - src/core/pagination.py
+  modify:
+    - src/vtaskforge/settings/base.py
+  affected:
+    - tests/workplans/test_api.py
+    - tests/workplans/test_phase_api.py
+    - tests/tasks/test_api.py
+    - tests/tasks/test_claiming.py
+    - tests/tasks/test_notes.py
+    - tests/agents/test_api.py
+    - tests/links/test_api.py
+    - tests/events/test_api.py
+
+contracts:
+  establishes:
+    - name: "cursor-pagination"
+      description: "All list endpoints return paginated responses with results array and next/previous cursor URLs"
+  depends_on:
+    - name: "stats-response"
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/vtaskforge/settings/base.py — find REST_FRAMEWORK dict (around line 105)
+    - src/core/ — existing files in core app (health view, bulk import)
+    - DRF docs for CursorPagination: ordering field, page_size, max_page_size
+
+    Step 1: Create src/core/pagination.py:
+    ```python
+    from rest_framework.pagination import CursorPagination
+
+
+    class VTFCursorPagination(CursorPagination):
+        page_size = 50
+        max_page_size = 100
+        ordering = "-created_at"  # default ordering, viewsets can override
+    ```
+
+    Step 2: Add to REST_FRAMEWORK settings in base.py:
+    ```python
+    'DEFAULT_PAGINATION_CLASS': 'core.pagination.VTFCursorPagination',
+    'PAGE_SIZE': 50,
+    ```
+
+    Step 3: Handle ordering field compatibility. DRF CursorPagination requires
+    the ordering field to exist on the model. Most models have created_at
+    (from TimestampMixin). For TaskEvent, the ordering field is "timestamp"
+    (not created_at). Override ordering in the TaskEventViewSet:
+    ```python
+    # In events/views.py TaskEventViewSet
+    class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
+        ...
+        # Override pagination ordering for events (uses timestamp, not created_at)
+        ordering = ["-timestamp"]
+    ```
+
+    Or set pagination_class on the viewset with a custom ordering. The simplest
+    approach: set `ordering` attribute on the viewset (DRF CursorPagination reads
+    the viewset's ordering attribute if set).
+
+    Step 4: Update ALL existing tests that call list endpoints.
+    With pagination enabled, list responses change from a flat array to:
+    ```json
+    {"next": "url_or_null", "previous": "url_or_null", "results": [...]}
+    ```
+
+    Every test that does `response.data` expecting a list must change to
+    `response.data["results"]`. Search all test files for patterns like:
+    - `assert len(response.data) ==`
+    - `response.data[0]`
+    - `for item in response.data`
+
+    This is the biggest risk. Grep all test files systematically.
+
+    Step 5: Add pagination-specific tests:
+    - Create a test that creates 60 items and verifies the first page has 50
+    - Verify response includes "next" cursor URL
+    - Follow the "next" URL and verify it returns the remaining items
+    - Verify "previous" cursor works from the second page
+    - Test with custom page_size via ?page_size=10 query param
+
+    Suggested location: tests/core/test_pagination.py
+
+  constraints:
+    - Use DRF's built-in CursorPagination — do NOT implement custom pagination
+    - Default page_size MUST be 50, max MUST be 100
+    - The ordering field must exist on every paginated model
+    - ALL existing list endpoint tests must be updated to handle paginated responses
+    - Stats endpoints (workplan/stats, phase/stats) are NOT list endpoints and should
+      NOT be paginated — they return a single dict
+    - The claimable endpoint returns a list and WILL be paginated
+    - Nested list endpoints (notes, events under tasks, phases under workplans) WILL
+      be paginated
+  references:
+    - src/vtaskforge/settings/base.py
+    - src/core/views.py
+    - src/events/views.py
+    - tests/workplans/test_api.py
+    - tests/tasks/test_api.py
+    - tests/agents/test_api.py
+
+acceptance_criteria:
+  - "src/core/pagination.py exists with VTFCursorPagination class"
+  - "REST_FRAMEWORK settings include DEFAULT_PAGINATION_CLASS"
+  - "GET /v1/tasks/ returns {next, previous, results} format"
+  - "GET /v1/workplans/ returns {next, previous, results} format"
+  - "GET /v1/agents/ returns {next, previous, results} format"
+  - "GET /v1/events/ returns {next, previous, results} format"
+  - "Default page size is 50"
+  - "Creating 60 tasks and listing returns 50 on first page with next cursor"
+  - "Following next cursor returns remaining items"
+  - "pytest tests/ passes (full suite)"
+
+behavioral_spec:
+  id: bs-3.4
+  priority: high
+  behaviors:
+    - "All list endpoints return JSON with results, next, and previous fields"
+    - "Default page contains at most 50 items"
+    - "Next cursor URL returns the next page of results"
+    - "Previous cursor URL returns the previous page"
+    - "Stats endpoints are NOT paginated (return flat dict)"
+    - "page_size query param allows custom page size up to 100"
+
+test_command: "pytest tests/"

@@ -1,0 +1,101 @@
+id: "3.1"
+name: "Fix unclaim state machine gap"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  The unclaim action (doing -> todo) bypasses the state machine. Currently,
+  src/tasks/views.py unclaim() checks status == "doing" manually and sets
+  task.status = "todo" directly instead of calling perform_transition(). This
+  means the state machine's VALID_TRANSITIONS dict doesn't include "todo" in
+  the "doing" list, and the status_changed event from perform_transition is
+  skipped (unclaim creates its own "unclaimed" event, but misses the
+  status_changed event).
+
+  Fix both sides:
+  1. Add "todo" to VALID_TRANSITIONS["doing"] in state_machine.py
+  2. Refactor unclaim in views.py to use perform_transition() for the status
+     change, keeping the separate "unclaimed" event creation
+
+files:
+  create: []
+  modify:
+    - src/tasks/state_machine.py
+    - src/tasks/views.py
+  affected:
+    - tests/tasks/test_state_machine.py
+    - tests/tasks/test_lifecycle.py
+    - tests/events/test_auto_logging.py
+
+contracts:
+  modifies:
+    - name: "task-state-machine"
+      description: "Adds doing -> todo as a valid transition"
+  depends_on: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/tasks/state_machine.py — understand VALID_TRANSITIONS dict and perform_transition()
+    - src/tasks/views.py — find the unclaim action (around line 238-269)
+    - tests/tasks/test_state_machine.py — understand existing transition tests
+    - tests/tasks/test_lifecycle.py — understand existing unclaim tests
+
+    Step 1: In src/tasks/state_machine.py, add "todo" to VALID_TRANSITIONS["doing"].
+    Place it after "deferred" (last in the list) with comment "# unclaimed".
+
+    Step 2: In src/tasks/views.py, refactor the unclaim action:
+    - Remove the manual status check (if task.status != "doing")
+    - Remove the direct task.status = "todo" assignment
+    - Call perform_transition(task, "todo", triggered_by=previous_agent or "unclaim")
+      instead. This handles both the status change and the status_changed event.
+    - Keep the existing "unclaimed" event creation after the transition.
+    - Keep the claim field clearing (claimed_by, claimed_at, claim_expires_at).
+    - Wrap in try/except InvalidTransition to return invalid_transition_response().
+    - The save for claim fields should use update_fields=["claimed_by", "claimed_at",
+      "claim_expires_at", "updated_at"] (NOT "status" — perform_transition already saved it).
+
+    Step 3: Update tests:
+    - In test_state_machine.py: add a test that doing -> todo is a valid transition.
+      Follow the existing test pattern (test_valid_transitions_from_doing or similar).
+    - In test_lifecycle.py: verify the unclaim test still passes. If there's a test
+      checking that unclaim bypasses the state machine, update it to verify
+      perform_transition is used instead.
+    - In test_auto_logging.py: if there's a test for unclaim events, verify it expects
+      both a "status_changed" event AND an "unclaimed" event (since perform_transition
+      now creates the status_changed event).
+
+  constraints:
+    - Do NOT remove the "unclaimed" event creation — unclaim should produce BOTH
+      a "status_changed" event (from perform_transition) and an "unclaimed" event
+    - The claim field clearing must still happen after the transition
+    - All existing tests must pass — run the full suite
+  references:
+    - src/tasks/state_machine.py
+    - src/tasks/views.py
+    - tests/tasks/test_state_machine.py
+    - tests/tasks/test_lifecycle.py
+    - tests/events/test_auto_logging.py
+
+acceptance_criteria:
+  - "VALID_TRANSITIONS['doing'] includes 'todo'"
+  - "unclaim action uses perform_transition() instead of direct status assignment"
+  - "unclaim from doing produces both status_changed and unclaimed TaskEvents"
+  - "unclaim from non-doing status returns 422 INVALID_TRANSITION"
+  - "pytest tests/tasks/test_state_machine.py passes"
+  - "pytest tests/tasks/test_lifecycle.py passes"
+  - "pytest tests/ passes (full suite)"
+
+behavioral_spec:
+  id: bs-3.1
+  priority: high
+  behaviors:
+    - "POST /v1/tasks/{id}/unclaim on a doing task returns 200 and sets status to todo"
+    - "POST /v1/tasks/{id}/unclaim on a doing task creates a status_changed event (doing->todo)"
+    - "POST /v1/tasks/{id}/unclaim on a doing task creates an unclaimed event"
+    - "POST /v1/tasks/{id}/unclaim on a non-doing task returns 422 INVALID_TRANSITION"
+    - "doing -> todo is listed in VALID_TRANSITIONS"
+
+test_command: "pytest tests/tasks/test_state_machine.py tests/tasks/test_lifecycle.py tests/events/test_auto_logging.py"

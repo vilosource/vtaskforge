@@ -1,0 +1,112 @@
+id: "3.2"
+name: "Fix claim tag lookup from DB"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  The claim action reads agent tags from request.data.get("tags", []) instead
+  of looking up the agent's registered tags from the Agent model in the database.
+  This means callers must redundantly pass their tags on every claim request,
+  and there's no guarantee the tags match what's registered.
+
+  Fix: look up Agent.objects.get(id=agent_id) and use agent.tags for tag
+  matching. Allow request body tags as an override (if tags are provided in
+  the request body, use those; if not, look up from DB).
+
+  Also update the claimable endpoint to accept an agent_id parameter and look
+  up the agent's tags from DB when tags are not provided in query params.
+
+files:
+  create: []
+  modify:
+    - src/tasks/views.py
+  affected:
+    - tests/tasks/test_claiming.py
+
+contracts:
+  modifies:
+    - name: "task-claim-endpoint"
+      description: "claim now looks up agent tags from DB when not provided in request body"
+  depends_on: []
+
+implementation:
+  approach: |
+    Read these files first:
+    - src/tasks/views.py — find claim action (around line 93) and claimable action (around line 197)
+    - src/agents/models.py — Agent model has tags JSONField
+    - tests/tasks/test_claiming.py — existing claim tests
+
+    Step 1: Modify the claim action in TaskViewSet:
+    - After validating agent_id is present, look up the agent:
+      ```python
+      from agents.models import Agent
+      try:
+          agent = Agent.objects.get(pk=agent_id)
+      except Agent.DoesNotExist:
+          return Response(
+              {"error": {"code": "NOT_FOUND", "message": "Agent not found"}},
+              status=status.HTTP_404_NOT_FOUND,
+          )
+      ```
+    - For tag matching, use request body tags as override, DB tags as default:
+      ```python
+      agent_tags = request.data.get("tags") or agent.tags
+      ```
+    - Move the Agent import to the top of the file (with other imports)
+
+    Step 2: Modify the claimable action:
+    - Accept agent_id as a query param (already exists)
+    - When agent_id is provided and tags are NOT provided, look up agent tags:
+      ```python
+      if agent_id and not tags:
+          try:
+              agent = Agent.objects.get(pk=agent_id)
+              tags = agent.tags
+          except Agent.DoesNotExist:
+              pass
+      ```
+
+    Step 3: Update tests in test_claiming.py:
+    - Add test: claim with agent_id only (no tags in body) — agent has matching
+      tags in DB — should succeed
+    - Add test: claim with agent_id only (no tags in body) — agent has non-matching
+      tags in DB — should return 422
+    - Add test: claim with agent_id + explicit tags in body — body tags override
+      DB tags
+    - Add test: claim with non-existent agent_id — should return 404
+    - Update existing tests if they break (some may pass tags explicitly which
+      should still work)
+    - Use AgentFactory from tests/factories.py to create agents with specific tags
+
+  constraints:
+    - The agent_id must refer to an existing Agent record — return 404 if not found
+    - Request body tags override DB tags (backward compatible)
+    - Do NOT change the tag matching logic itself (issubset check)
+    - All existing tests must pass
+  references:
+    - src/tasks/views.py
+    - src/agents/models.py
+    - tests/tasks/test_claiming.py
+    - tests/factories.py
+
+acceptance_criteria:
+  - "claim with valid agent_id and no body tags uses agent's DB tags for matching"
+  - "claim with valid agent_id and body tags uses body tags (override)"
+  - "claim with non-existent agent_id returns 404 NOT_FOUND"
+  - "claimable endpoint with agent_id and no tags param uses agent's DB tags"
+  - "pytest tests/tasks/test_claiming.py passes"
+  - "pytest tests/ passes (full suite)"
+
+behavioral_spec:
+  id: bs-3.2
+  priority: high
+  behaviors:
+    - "POST /v1/tasks/{id}/claim with agent_id (no tags) looks up agent tags from DB"
+    - "POST /v1/tasks/{id}/claim with agent_id + tags in body uses body tags"
+    - "POST /v1/tasks/{id}/claim with non-existent agent_id returns 404"
+    - "GET /v1/tasks/claimable?agent_id=X uses agent's DB tags when no tags param"
+    - "GET /v1/tasks/claimable?agent_id=X&tags=a,b uses query param tags"
+
+test_command: "pytest tests/tasks/test_claiming.py"
