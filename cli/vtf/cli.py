@@ -61,3 +61,4 @@ def config_show():
 
 cli.add_command(workplan)
 cli.add_command(task)
+cli.add_command(agent)
