@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useWorkplans } from '../api/workplans';
+import { useWorkplans, useWorkplanStats, type Workplan } from '../api/workplans';
+import { usePhases } from '../api/phases';
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'badge-active',
@@ -7,6 +8,42 @@ const STATUS_COLORS: Record<string, string> = {
   archived: 'badge-archived',
   completed: 'badge-completed',
 };
+
+function WorkplanRow({ wp }: { wp: Workplan }) {
+  const { data: stats } = useWorkplanStats(wp.id);
+  const { data: phases } = usePhases(wp.id);
+
+  return (
+    <tr>
+      <td>
+        <Link to={`/workplans/${wp.id}`}>{wp.name}</Link>
+      </td>
+      <td>
+        <span className={`badge ${STATUS_COLORS[wp.status] ?? ''}`}>
+          {wp.status}
+        </span>
+      </td>
+      <td>{phases?.length ?? '\u2014'}</td>
+      <td>{stats?.total_tasks ?? '\u2014'}</td>
+      <td>
+        {stats ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 60, height: 6, background: '#e0e0e0', borderRadius: 3 }}>
+              <div style={{
+                width: `${stats.completed_percentage}%`,
+                height: '100%',
+                background: '#4caf50',
+                borderRadius: 3,
+              }} />
+            </div>
+            <span style={{ fontSize: 12 }}>{stats.completed_percentage}%</span>
+          </div>
+        ) : '\u2014'}
+      </td>
+      <td>{wp.tags.join(', ')}</td>
+    </tr>
+  );
+}
 
 export function WorkplanList() {
   const { data, isLoading, error, refetch } = useWorkplans();
@@ -38,22 +75,15 @@ export function WorkplanList() {
           <tr>
             <th>Name</th>
             <th>Status</th>
+            <th>Phases</th>
+            <th>Tasks</th>
+            <th>Progress</th>
             <th>Tags</th>
           </tr>
         </thead>
         <tbody>
           {workplans.map((wp) => (
-            <tr key={wp.id}>
-              <td>
-                <Link to={`/workplans/${wp.id}`}>{wp.name}</Link>
-              </td>
-              <td>
-                <span className={`badge ${STATUS_COLORS[wp.status] ?? ''}`}>
-                  {wp.status}
-                </span>
-              </td>
-              <td>{wp.tags.join(', ')}</td>
-            </tr>
+            <WorkplanRow key={wp.id} wp={wp} />
           ))}
         </tbody>
       </table>

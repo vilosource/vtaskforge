@@ -28,7 +28,7 @@ export interface TaskEvent {
   id: string;
   event_type: string;
   data: Record<string, unknown>;
-  created_at: string;
+  timestamp: string;
 }
 
 export interface TaskReview {

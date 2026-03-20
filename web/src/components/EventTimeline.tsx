@@ -10,7 +10,9 @@ function formatEventType(eventType: string): string {
 
 function formatTimestamp(ts: string): string {
   try {
-    return new Date(ts).toLocaleString();
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return ts;
+    return date.toLocaleString();
   } catch {
     return ts;
   }
@@ -18,7 +20,7 @@ function formatTimestamp(ts: string): string {
 
 export function EventTimeline({ events }: EventTimelineProps) {
   const sorted = [...events].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
 
   if (sorted.length === 0) {
@@ -29,7 +31,7 @@ export function EventTimeline({ events }: EventTimelineProps) {
     <ol className="event-timeline">
       {sorted.map((event) => (
         <li key={event.id} className="event-timeline-item">
-          <span className="event-timeline-time">{formatTimestamp(event.created_at)}</span>
+          <span className="event-timeline-time">{formatTimestamp(event.timestamp)}</span>
           <span className="event-timeline-type">{formatEventType(event.event_type)}</span>
           {event.event_type === 'status_changed' && (
             <span className="event-timeline-status-change">

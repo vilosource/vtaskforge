@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiGet, apiGetPaginated } from './client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiGetPaginated, apiPost } from './client';
 
 export interface Phase {
   id: string;
@@ -49,5 +49,25 @@ export function usePhaseStats(phaseId: string) {
       return res.json() as Promise<PhaseStats>;
     },
     enabled: !!phaseId,
+  });
+}
+
+export function useActivatePhase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (phaseId: string) => apiPost<Phase>(`/v1/phases/${phaseId}/activate/`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['phases'] });
+    },
+  });
+}
+
+export function useCompletePhase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (phaseId: string) => apiPost<Phase>(`/v1/phases/${phaseId}/complete/`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['phases'] });
+    },
   });
 }
