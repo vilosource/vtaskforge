@@ -19,11 +19,59 @@ export interface Task {
   updated_at: string;
 }
 
+export interface TaskEvent {
+  id: string;
+  event_type: string;
+  data: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface TaskReview {
+  id: string;
+  decision: string;
+  reason: string | null;
+  reviewer_id: string;
+  reviewer_type: string;
+  created_at: string;
+}
+
+export interface TaskNote {
+  id: string;
+  text: string;
+  actor_id: string;
+  created_at: string;
+}
+
+export interface TaskLink {
+  id: string;
+  source_id: string;
+  target_id: string;
+  link_type: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface TaskDetail extends Task {
+  links: TaskLink[];
+  reviews: TaskReview[];
+  events: TaskEvent[];
+  notes: TaskNote[];
+}
+
 export function useTasksByWorkplan(workplanId: string) {
   return useQuery({
     queryKey: ['tasks', 'workplan', workplanId],
     queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?workplan=${workplanId}`),
     enabled: !!workplanId,
+  });
+}
+
+export function useTaskDetail(taskId: string | null) {
+  return useQuery({
+    queryKey: ['task', taskId],
+    queryFn: () =>
+      apiGet<TaskDetail>(`/v1/tasks/${taskId}/?expand=links,reviews,events`),
+    enabled: !!taskId,
   });
 }
 

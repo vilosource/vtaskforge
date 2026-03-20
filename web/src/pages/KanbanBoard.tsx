@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTasksByWorkplan, useWorkplan } from '../api/tasks';
 import type { Task } from '../api/tasks';
@@ -7,6 +6,7 @@ import { KanbanColumn } from '../components/KanbanColumn';
 import type { ColumnConfig } from '../components/KanbanColumn';
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
+import { TaskDetail } from '../components/TaskDetail';
 
 const COLUMNS: ColumnConfig[] = [
   { id: 'draft', label: 'Draft', statuses: ['draft'], color: 'grey' },
@@ -66,7 +66,16 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
   const [showHidden, setShowHidden] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const handleTaskClick = useCallback(
+    (task: Task) => {
+      setSelectedTaskId(task.id);
+      onTaskClick?.(task);
+    },
+    [onTaskClick],
+  );
 
   const handleSSEEvent = useCallback(
     (event: MessageEvent) => {
@@ -150,11 +159,15 @@ export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
               key={col.id}
               column={col}
               tasks={columnTasks.get(col.id) ?? []}
-              onTaskClick={onTaskClick}
+              onTaskClick={handleTaskClick}
             />
           ))}
         </div>
       )}
+      <TaskDetail
+        taskId={selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+      />
     </div>
   );
 }
