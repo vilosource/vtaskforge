@@ -1,6 +1,9 @@
 import click
 from vtf.client import VTFClient, VTFAPIError
 from vtf.config import Config
+from vtf.commands.workplan import workplan
+from vtf.commands.task import task
+from vtf.commands.agent import agent
 
 
 def get_client():
@@ -9,15 +12,18 @@ def get_client():
 
 
 @click.group()
-def cli():
+@click.pass_context
+def cli(ctx):
     """vtf — vtaskforge CLI"""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["client"] = get_client()
 
 
 @cli.command()
-def health():
+@click.pass_context
+def health(ctx):
     """Check API connectivity."""
-    client = get_client()
+    client = ctx.obj["client"]
     try:
         data = client.health()
         click.echo(f"API is healthy: {data}")
@@ -51,3 +57,7 @@ def config_show():
     cfg = Config()
     click.echo(f"api_url: {cfg.api_url}")
     click.echo(f"token: {'***' if cfg.token else 'not set'}")
+
+
+cli.add_command(workplan)
+cli.add_command(task)

@@ -1,0 +1,97 @@
+import click
+from vtf.client import VTFAPIError
+
+
+@click.group()
+def workplan():
+    """Manage workplans."""
+    pass
+
+
+@workplan.command()
+@click.option("--name", required=True, help="Workplan name")
+@click.option("--description", default="", help="Description")
+@click.option("--tags", default="", help="Comma-separated tags")
+@click.pass_context
+def create(ctx, name, description, tags):
+    """Create a new workplan."""
+    client = ctx.obj["client"]
+    data = {"name": name, "description": description}
+    if tags:
+        data["tags"] = [t.strip() for t in tags.split(",")]
+    try:
+        result = client.post("/v1/workplans/", data)
+        click.echo(f"Created workplan {result['id']}: {result['name']}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@workplan.command("list")
+@click.option("--status", default=None, help="Filter by status")
+@click.pass_context
+def list_workplans(ctx, status):
+    """List workplans."""
+    client = ctx.obj["client"]
+    params = {}
+    if status:
+        params["status"] = status
+    try:
+        results = client.get("/v1/workplans/", params=params)
+        if not results:
+            click.echo("No workplans found.")
+            return
+        click.echo(f"{'ID':<36} {'Name':<30} {'Status':<12}")
+        click.echo("-" * 80)
+        for wp in results:
+            click.echo(f"{wp['id']:<36} {wp['name']:<30} {wp['status']:<12}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@workplan.command()
+@click.argument("id")
+@click.pass_context
+def show(ctx, id):
+    """Show workplan details."""
+    client = ctx.obj["client"]
+    try:
+        wp = client.get(f"/v1/workplans/{id}/")
+        click.echo(f"ID:          {wp['id']}")
+        click.echo(f"Name:        {wp['name']}")
+        click.echo(f"Status:      {wp['status']}")
+        click.echo(f"Description: {wp.get('description', '')}")
+        click.echo(f"Tags:        {', '.join(wp.get('tags', []))}")
+        click.echo(f"Created:     {wp['created_at']}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@workplan.command()
+@click.argument("id")
+@click.pass_context
+def archive(ctx, id):
+    """Archive a workplan."""
+    client = ctx.obj["client"]
+    try:
+        client.post(f"/v1/workplans/{id}/archive/")
+        click.echo(f"Archived workplan {id}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@workplan.command()
+@click.argument("id")
+@click.pass_context
+def complete(ctx, id):
+    """Complete a workplan."""
+    client = ctx.obj["client"]
+    try:
+        client.post(f"/v1/workplans/{id}/complete/")
+        click.echo(f"Completed workplan {id}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
