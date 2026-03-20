@@ -66,6 +66,14 @@ export function useTasksByWorkplan(workplanId: string) {
   });
 }
 
+export function useTasksByPhase(phaseId: string) {
+  return useQuery({
+    queryKey: ['tasks', 'phase', phaseId],
+    queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?phase=${phaseId}`),
+    enabled: !!phaseId,
+  });
+}
+
 export function useTaskDetail(taskId: string | null) {
   return useQuery({
     queryKey: ['task', taskId],

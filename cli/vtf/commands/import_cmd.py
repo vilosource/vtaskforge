@@ -84,26 +84,30 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
 
     # Build bulk import payload
     payload = {
-        "workplan": {
-            "name": phase_name,
-            "description": phase_description,
-        },
         "phases": [{
             "ref": phase_ref,
             "name": phase_name,
-            "description": phase_description,
+            "description": "",  # don't dump full PHASE.md as description
             "tasks": phase_tasks,
         }],
         "links": links,
     }
 
     if workplan:
+        # Add phase to existing workplan
         payload["workplan_id"] = workplan
+    else:
+        # Create new workplan named after the phase directory
+        payload["workplan"] = {
+            "name": phase_name,
+            "description": phase_description,
+        }
 
     if dry_run:
         click.echo("Dry run — payload that would be sent:")
         click.echo(yaml.dump(payload, default_flow_style=False))
-        click.echo(f"\nWould create: 1 workplan, 1 phase, {len(phase_tasks)} tasks, {len(links)} links")
+        what = f"add 1 phase to workplan {workplan}" if workplan else "create 1 workplan + 1 phase"
+        click.echo(f"\nWould {what}, {len(phase_tasks)} tasks, {len(links)} links")
         return
 
     try:

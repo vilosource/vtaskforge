@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useTasksByWorkplan, useWorkplan } from '../api/tasks';
+import { useTasksByWorkplan, useTasksByPhase, useWorkplan } from '../api/tasks';
 import type { Task } from '../api/tasks';
 import { KanbanColumn } from '../components/KanbanColumn';
 import type { ColumnConfig } from '../components/KanbanColumn';
@@ -61,10 +61,12 @@ function groupTasksByColumn(tasks: Task[], showHidden: boolean): Map<string, Tas
 
 interface KanbanBoardProps {
   workplanId: string;
+  phaseId?: string;
+  title?: string;
   onTaskClick?: (task: Task) => void;
 }
 
-export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
+export function KanbanBoard({ workplanId, phaseId, title, onTaskClick }: KanbanBoardProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -85,7 +87,7 @@ export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
       } catch {
         // ignore malformed events
       }
-      queryClient.invalidateQueries({ queryKey: ['tasks', 'workplan', workplanId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
       if (data.task_id) {
         queryClient.invalidateQueries({ queryKey: ['task', data.task_id] });
       }
@@ -105,12 +107,10 @@ export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
     error: workplanError,
   } = useWorkplan(workplanId);
 
-  const {
-    data: tasksData,
-    isLoading: tasksLoading,
-    error: tasksError,
-    refetch,
-  } = useTasksByWorkplan(workplanId);
+  const workplanTasks = useTasksByWorkplan(workplanId);
+  const phaseTasks = useTasksByPhase(phaseId ?? '');
+  const tasksQuery = phaseId ? phaseTasks : workplanTasks;
+  const { data: tasksData, isLoading: tasksLoading, error: tasksError, refetch } = tasksQuery;
 
   const isLoading = workplanLoading || tasksLoading;
   const error = workplanError || tasksError;
@@ -135,7 +135,7 @@ export function KanbanBoard({ workplanId, onTaskClick }: KanbanBoardProps) {
     <div className="kanban-board">
       <div className="kanban-board-header">
         <div className="kanban-board-title">
-          <h1>{workplanData?.name ?? workplanId}</h1>
+          <h1>{title || workplanData?.name || workplanId}</h1>
           <LiveIndicator status={sseStatus} />
         </div>
         <div className="kanban-board-controls">

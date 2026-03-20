@@ -35,13 +35,22 @@ def perform_bulk_import(payload):
                 raise ValueError(f"Duplicate ref: {ref}")
             seen.add(ref)
 
-        # 2. Create workplan
-        wp_data = payload["workplan"]
-        workplan = Workplan.objects.create(
-            name=wp_data["name"],
-            description=wp_data.get("description", ""),
-            tags=wp_data.get("tags", []),
-        )
+        # 2. Create or use existing workplan
+        workplan_id = payload.get("workplan_id")
+        if workplan_id:
+            try:
+                workplan = Workplan.objects.get(pk=workplan_id)
+            except Workplan.DoesNotExist:
+                raise ValueError(f"Workplan not found: {workplan_id}")
+        else:
+            wp_data = payload.get("workplan", {})
+            if not wp_data.get("name"):
+                raise ValueError("workplan.name is required when workplan_id is not provided")
+            workplan = Workplan.objects.create(
+                name=wp_data["name"],
+                description=wp_data.get("description", ""),
+                tags=wp_data.get("tags", []),
+            )
         ref_map["workplan"] = workplan.id
         ref_type_map["workplan"] = "workplan"
 

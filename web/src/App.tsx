@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { WorkplanList } from './pages/WorkplanList';
+import { WorkplanDetail } from './pages/WorkplanDetail';
 import { BoardView } from './pages/BoardView';
 import Login from './pages/Login';
 
@@ -76,6 +77,14 @@ export function App() {
             />
             <Route
               path="/workplans/:id"
+              element={
+                <RequireAuth>
+                  <WorkplanDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/workplans/:id/phases/:phaseId"
               element={
                 <RequireAuth>
                   <BoardView />
