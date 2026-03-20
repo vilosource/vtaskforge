@@ -1,0 +1,250 @@
+id: "2.5"
+name: "CLI core — project setup"
+depends_on: ["2.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create the CLI package as a separate Python project in cli/ at the repo
+  root. The CLI uses Click for command groups and subcommands, a thin API
+  client wrapper around requests, and YAML-based config. This task
+  establishes the CLI pattern that all subsequent CLI tasks (2.6-2.9) follow.
+
+files:
+  create:
+    - cli/setup.py
+    - cli/vtf/__init__.py
+    - cli/vtf/cli.py
+    - cli/vtf/client.py
+    - cli/vtf/config.py
+    - cli/tests/__init__.py
+    - cli/tests/test_cli.py
+    - cli/tests/test_client.py
+    - cli/tests/test_config.py
+    - cli/tests/conftest.py
+
+contracts:
+  establishes:
+    - name: "cli-pattern"
+      description: "Click group + subcommands in cli/vtf/cli.py, API client in cli/vtf/client.py, config from ~/.vtf/config.yaml or env vars"
+  depends_on:
+    - name: "auth-token"
+
+implementation:
+  approach: |
+    1. Create cli/setup.py:
+       ```python
+       from setuptools import setup, find_packages
+       setup(
+           name="vtf-cli",
+           version="0.1.0",
+           packages=find_packages(),
+           install_requires=[
+               "click>=8.0",
+               "requests>=2.28",
+               "pyyaml>=6.0",
+           ],
+           extras_require={
+               "dev": ["pytest", "requests-mock"],
+           },
+           entry_points={
+               "console_scripts": [
+                   "vtf=vtf.cli:cli",
+               ],
+           },
+       )
+       ```
+
+    2. Create cli/vtf/config.py:
+       - Config class that reads from ~/.vtf/config.yaml
+       - Falls back to environment variables: VTF_API_URL, VTF_TOKEN
+       - Provides get(key) and set(key, value) methods
+       - set() writes back to ~/.vtf/config.yaml
+       - Default api_url: http://localhost:8000
+       ```python
+       import os
+       import yaml
+       from pathlib import Path
+
+       CONFIG_DIR = Path.home() / ".vtf"
+       CONFIG_FILE = CONFIG_DIR / "config.yaml"
+
+       class Config:
+           def __init__(self):
+               self._data = {}
+               if CONFIG_FILE.exists():
+                   with open(CONFIG_FILE) as f:
+                       self._data = yaml.safe_load(f) or {}
+
+           def get(self, key, default=None):
+               # Env vars take precedence
+               env_key = f"VTF_{key.upper()}"
+               env_val = os.environ.get(env_key)
+               if env_val:
+                   return env_val
+               return self._data.get(key, default)
+
+           def set(self, key, value):
+               self._data[key] = value
+               CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+               with open(CONFIG_FILE, "w") as f:
+                   yaml.dump(self._data, f)
+
+           @property
+           def api_url(self):
+               return self.get("api_url", "http://localhost:8000")
+
+           @property
+           def token(self):
+               return self.get("token")
+       ```
+
+    3. Create cli/vtf/client.py:
+       - VTFClient class wrapping requests
+       - Constructor takes api_url and token (from Config)
+       - Methods: get(path), post(path, data), patch(path, data), delete(path)
+       - All methods handle: JSON serialization, auth header, error formatting
+       - Raises VTFAPIError on non-2xx responses with error code and message
+       ```python
+       import requests
+
+       class VTFAPIError(Exception):
+           def __init__(self, status_code, error_data):
+               self.status_code = status_code
+               self.error_data = error_data
+               msg = error_data.get("error", {}).get("message", str(error_data))
+               super().__init__(msg)
+
+       class VTFClient:
+           def __init__(self, api_url, token=None):
+               self.api_url = api_url.rstrip("/")
+               self.token = token
+
+           def _headers(self):
+               h = {"Content-Type": "application/json"}
+               if self.token:
+                   h["Authorization"] = f"Token {self.token}"
+               return h
+
+           def _request(self, method, path, data=None):
+               url = f"{self.api_url}{path}"
+               resp = requests.request(method, url, json=data, headers=self._headers())
+               if resp.status_code >= 400:
+                   raise VTFAPIError(resp.status_code, resp.json())
+               return resp.json() if resp.content else {}
+
+           def get(self, path):
+               return self._request("GET", path)
+
+           def post(self, path, data=None):
+               return self._request("POST", path, data)
+
+           def patch(self, path, data=None):
+               return self._request("PATCH", path, data)
+
+           def delete(self, path):
+               return self._request("DELETE", path)
+       ```
+
+    4. Create cli/vtf/cli.py:
+       ```python
+       import click
+       from vtf.client import VTFClient, VTFAPIError
+       from vtf.config import Config
+
+       def get_client():
+           cfg = Config()
+           return VTFClient(cfg.api_url, cfg.token)
+
+       @click.group()
+       def cli():
+           """vtf — vtaskforge CLI"""
+           pass
+
+       @cli.command()
+       def health():
+           """Check API connectivity."""
+           client = get_client()
+           try:
+               data = client.get("/v1/health")
+               click.echo(f"API is healthy: {data}")
+           except VTFAPIError as e:
+               click.echo(f"Error: {e}", err=True)
+               raise SystemExit(1)
+           except Exception as e:
+               click.echo(f"Connection failed: {e}", err=True)
+               raise SystemExit(1)
+
+       @cli.group()
+       def config():
+           """Manage CLI configuration."""
+           pass
+
+       @config.command("set")
+       @click.argument("key")
+       @click.argument("value")
+       def config_set(key, value):
+           """Set a config value (api_url, token)."""
+           cfg = Config()
+           cfg.set(key, value)
+           click.echo(f"Set {key}")
+
+       @config.command("show")
+       def config_show():
+           """Show current configuration."""
+           cfg = Config()
+           click.echo(f"api_url: {cfg.api_url}")
+           click.echo(f"token: {'***' if cfg.token else 'not set'}")
+       ```
+
+    5. Create cli/tests/conftest.py with shared fixtures:
+       - config_dir fixture using tmp_path for isolated config
+       - mock_api fixture using requests_mock
+
+    6. Create tests:
+       - cli/tests/test_config.py: test read/write config, env var precedence
+       - cli/tests/test_client.py: test GET/POST/PATCH/DELETE, auth header,
+         error handling (use requests_mock)
+       - cli/tests/test_cli.py: test health command, config commands (use
+         Click's CliRunner + requests_mock)
+
+  constraints:
+    - CLI is a SEPARATE package in cli/ — NOT part of Django src/
+    - Use Click, NOT Typer or argparse
+    - Use requests, NOT httpx or aiohttp
+    - Use PyYAML for config, NOT TOML or INI
+    - Config file location: ~/.vtf/config.yaml
+    - Environment variables: VTF_API_URL, VTF_TOKEN (env vars override config file)
+    - Do NOT import anything from the Django project (src/)
+    - Entry point must be "vtf" command
+  references:
+    - docs/design/vtaskforge-DESIGN.md (UI Architecture section)
+    - docs/design/api-surface-DESIGN.md (Auth section)
+
+acceptance_criteria:
+  - "cli/vtf/cli.py exists with Click group and health + config subcommands"
+  - "cli/vtf/client.py exists with VTFClient class handling auth and errors"
+  - "cli/vtf/config.py exists reading from ~/.vtf/config.yaml and env vars"
+  - "cli/setup.py defines vtf entry point"
+  - "pip install -e cli/ installs the vtf command"
+  - "pytest cli/tests/ passes"
+  - "vtf health with a running API returns healthy status"
+  - "vtf config set api_url http://example.com writes to config"
+  - "vtf config show displays current config"
+
+behavioral_spec:
+  id: bs-2.5
+  priority: high
+  behaviors:
+    - "vtf health against a running API prints healthy status and exits 0"
+    - "vtf health against an unreachable API prints error and exits 1"
+    - "vtf config set api_url http://example.com writes api_url to ~/.vtf/config.yaml"
+    - "vtf config set token abc123 writes token to ~/.vtf/config.yaml"
+    - "vtf config show prints current api_url and masked token"
+    - "VTF_API_URL env var overrides config file api_url"
+    - "VTF_TOKEN env var overrides config file token"
+    - "VTFClient includes Authorization header when token is set"
+    - "VTFClient raises VTFAPIError on 4xx/5xx responses"
+
+test_command: "pytest cli/tests/"

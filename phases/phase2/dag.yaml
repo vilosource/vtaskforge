@@ -1,0 +1,45 @@
+tasks:
+  "2.1":
+    name: "Test factory infrastructure"
+    depends_on: []
+
+  "2.2":
+    name: "Claim expiry (Celery periodic task)"
+    depends_on: ["2.1"]
+
+  "2.3":
+    name: "Authentication (DRF TokenAuthentication)"
+    depends_on: ["2.1"]
+
+  "2.4":
+    name: "Bulk import endpoint"
+    depends_on: ["2.3"]
+
+  "2.5":
+    name: "CLI core — project setup"
+    depends_on: ["2.3"]
+
+  "2.6":
+    name: "CLI — workplan commands"
+    depends_on: ["2.5"]
+
+  "2.7":
+    name: "CLI — task commands"
+    depends_on: ["2.5"]
+
+  "2.8":
+    name: "CLI — agent commands"
+    depends_on: ["2.5"]
+
+  "2.9":
+    name: "CLI — import command"
+    depends_on: ["2.4", "2.5"]
+
+  "2.10":
+    name: "Black-box test suite"
+    depends_on: ["2.9"]
+
+# Parallel groups (tasks that can execute simultaneously):
+#   Group A: [2.2, 2.3]       — after 2.1, different concerns/files
+#   Group B: [2.4, 2.5]       — after 2.3, server vs CLI
+#   Group C: [2.6, 2.7, 2.8]  — after 2.5, different CLI command files

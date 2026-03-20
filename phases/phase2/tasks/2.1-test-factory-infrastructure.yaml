@@ -1,0 +1,132 @@
+id: "2.1"
+name: "Test factory infrastructure"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create shared test infrastructure using factory_boy and pytest fixtures.
+  This task establishes the test-factory-pattern that ALL subsequent tasks
+  must follow. It creates tests/conftest.py with shared fixtures and
+  tests/factories.py with factory_boy factories for every model, then
+  migrates ALL existing test files to use the new factories/fixtures
+  instead of inline object creation.
+
+  This is a process improvement task — it touches every test file in the
+  project. After this task, no test should create model instances directly;
+  they should use factories or conftest fixtures.
+
+files:
+  create:
+    - tests/conftest.py
+    - tests/factories.py
+  modify:
+    - tests/test_mixins.py
+    - tests/test_health.py
+    - tests/test_celery.py
+    - tests/workplans/test_models.py
+    - tests/workplans/test_api.py
+    - tests/workplans/test_phase_models.py
+    - tests/workplans/test_phase_api.py
+    - tests/agents/test_models.py
+    - tests/agents/test_api.py
+    - tests/tasks/test_models.py
+    - tests/tasks/test_state_machine.py
+    - tests/tasks/test_api.py
+    - tests/tasks/test_notes.py
+    - tests/tasks/test_review_policy.py
+    - tests/tasks/test_review_cascading.py
+    - tests/tasks/test_lifecycle.py
+    - tests/tasks/test_claiming.py
+    - tests/links/test_models.py
+    - tests/links/test_api.py
+    - tests/reviews/test_models.py
+    - tests/reviews/test_api.py
+    - tests/events/test_models.py
+    - tests/events/test_api.py
+    - tests/events/test_auto_logging.py
+
+contracts:
+  establishes:
+    - name: "test-factory-pattern"
+      description: "All tests use conftest fixtures (api_client, workplan, phase, task, todo_task, doing_task) and factory_boy factories from tests/factories.py instead of inline model creation"
+
+implementation:
+  approach: |
+    1. Install factory_boy — add it to requirements/dev.txt (or requirements.txt).
+
+    2. Create tests/factories.py with factories for ALL models:
+       - WorkplanFactory (name via factory.Sequence, status="active")
+       - PhaseFactory (workplan via factory.SubFactory(WorkplanFactory), status="pending")
+       - TaskFactory (phase via SubFactory(PhaseFactory), workplan via LazyAttribute from phase.workplan, status="draft")
+       - AgentFactory (name via Sequence, status="online")
+       - LinkFactory (source_type, source_id, target_id, link_type)
+       - NoteFactory (task via SubFactory(TaskFactory), text, actor_id)
+       - ReviewFactory (task via SubFactory(TaskFactory), decision, reviewer_id, reviewer_type)
+       - TaskEventFactory (task via SubFactory(TaskFactory), event_type, data={})
+
+       Each factory must use NanoIDMixin's auto-generated ID — do NOT set id
+       explicitly. Use factory.LazyFunction for any fields that need dynamic
+       defaults.
+
+    3. Create tests/conftest.py with pytest fixtures:
+       - api_client: returns rest_framework.test.APIClient()
+       - workplan: creates a Workplan via WorkplanFactory
+       - phase: creates a Phase via PhaseFactory (uses workplan fixture)
+       - task: creates a Task via TaskFactory with status="draft" (uses phase fixture)
+       - todo_task: creates a Task via TaskFactory with status="todo"
+       - doing_task: creates a Task via TaskFactory with status="doing",
+         claimed_by="agent-1", claimed_at=now, claim_expires_at=now+30min
+       - agent: creates an Agent via AgentFactory
+
+    4. Update ALL existing test files to use the new fixtures/factories:
+       - Replace direct Model.objects.create() calls with factory calls
+       - Replace inline APIClient() creation with the api_client fixture
+       - Replace repeated workplan/phase/task setup with fixtures
+       - Tests that need specific field values should use factory overrides:
+         TaskFactory(status="todo", title="specific title")
+
+    5. Run the full test suite after conversion to verify nothing broke.
+
+  pattern: "test-fixtures"
+  constraints:
+    - Every existing test must still pass after conversion
+    - No test file should call Model.objects.create() for Workplan, Phase, Task,
+      Agent, Link, Note, Review, or TaskEvent — use factories instead
+    - Fixtures must be session-independent (each test gets fresh objects)
+    - Do NOT change test assertions or behavior — only change object creation
+    - conftest.py fixtures should use function scope (default)
+  references:
+    - tests/workplans/test_api.py
+    - tests/tasks/test_claiming.py
+    - tests/agents/test_api.py
+    - src/workplans/models.py
+    - src/tasks/models.py
+    - src/agents/models.py
+    - src/links/models.py
+    - src/reviews/models.py
+    - src/events/models.py
+
+acceptance_criteria:
+  - "tests/conftest.py exists with api_client, workplan, phase, task, todo_task, doing_task fixtures"
+  - "tests/factories.py exists with factories for all 8 model types"
+  - "No test file contains direct Model.objects.create() for domain models"
+  - "pytest tests/ passes with all existing tests green"
+  - "factory_boy is in the project dependencies"
+
+behavioral_spec:
+  id: bs-2.1
+  priority: high
+  behaviors:
+    - "conftest.py api_client fixture returns a DRF APIClient instance"
+    - "conftest.py workplan fixture creates a Workplan with status=active"
+    - "conftest.py phase fixture creates a Phase linked to a workplan"
+    - "conftest.py task fixture creates a draft Task linked to a phase"
+    - "conftest.py todo_task fixture creates a Task with status=todo"
+    - "conftest.py doing_task fixture creates a claimed Task with status=doing and claim_expires_at set"
+    - "WorkplanFactory() creates a valid Workplan with unique name"
+    - "TaskFactory(status='todo') creates a Task with status=todo"
+    - "All existing tests pass after migration to factories"
+
+test_command: "pytest tests/"

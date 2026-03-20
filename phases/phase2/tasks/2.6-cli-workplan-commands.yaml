@@ -1,0 +1,149 @@
+id: "2.6"
+name: "CLI — workplan commands"
+depends_on: ["2.5"]
+agent_model: sonnet
+isolation: worktree
+judge: false
+
+description: |
+  Add workplan CRUD commands to the CLI. This is a pattern-repeat of the
+  CLI core established in 2.5 — same Click group structure, same API client
+  usage, same test approach with CliRunner + requests_mock.
+
+files:
+  create:
+    - cli/vtf/commands/workplan.py
+    - cli/vtf/commands/__init__.py
+    - cli/tests/test_workplan_commands.py
+  modify:
+    - cli/vtf/cli.py
+
+contracts:
+  depends_on:
+    - name: "cli-pattern"
+
+implementation:
+  approach: |
+    1. Create cli/vtf/commands/__init__.py (empty).
+
+    2. Create cli/vtf/commands/workplan.py:
+       ```python
+       import click
+       from vtf.client import VTFAPIError
+
+       @click.group()
+       def workplan():
+           """Manage workplans."""
+           pass
+
+       @workplan.command()
+       @click.option("--name", required=True, help="Workplan name")
+       @click.option("--description", default="", help="Description")
+       @click.option("--tags", default="", help="Comma-separated tags")
+       @click.pass_context
+       def create(ctx, name, description, tags):
+           """Create a new workplan."""
+           client = ctx.obj["client"]
+           data = {"name": name, "description": description}
+           if tags:
+               data["tags"] = [t.strip() for t in tags.split(",")]
+           result = client.post("/v1/workplans/", data)
+           click.echo(f"Created workplan {result['id']}: {result['name']}")
+
+       @workplan.command("list")
+       @click.option("--status", default=None, help="Filter by status")
+       @click.pass_context
+       def list_workplans(ctx, status):
+           """List workplans."""
+           client = ctx.obj["client"]
+           params = ""
+           if status:
+               params = f"?status={status}"
+           results = client.get(f"/v1/workplans/{params}")
+           # Format as table
+           if not results:
+               click.echo("No workplans found.")
+               return
+           click.echo(f"{'ID':<25} {'Name':<30} {'Status':<12}")
+           click.echo("-" * 67)
+           for wp in results:
+               click.echo(f"{wp['id']:<25} {wp['name']:<30} {wp['status']:<12}")
+
+       @workplan.command()
+       @click.argument("id")
+       @click.pass_context
+       def show(ctx, id):
+           """Show workplan details."""
+           client = ctx.obj["client"]
+           wp = client.get(f"/v1/workplans/{id}/")
+           click.echo(f"ID:          {wp['id']}")
+           click.echo(f"Name:        {wp['name']}")
+           click.echo(f"Status:      {wp['status']}")
+           click.echo(f"Description: {wp.get('description', '')}")
+           click.echo(f"Tags:        {', '.join(wp.get('tags', []))}")
+           click.echo(f"Created:     {wp['created_at']}")
+
+       @workplan.command()
+       @click.argument("id")
+       @click.pass_context
+       def archive(ctx, id):
+           """Archive a workplan."""
+           client = ctx.obj["client"]
+           client.post(f"/v1/workplans/{id}/archive/")
+           click.echo(f"Archived workplan {id}")
+
+       @workplan.command()
+       @click.argument("id")
+       @click.pass_context
+       def complete(ctx, id):
+           """Complete a workplan."""
+           client = ctx.obj["client"]
+           client.post(f"/v1/workplans/{id}/complete/")
+           click.echo(f"Completed workplan {id}")
+       ```
+
+    3. Register the workplan group in cli/vtf/cli.py:
+       - Import workplan group from commands.workplan
+       - Add cli.add_command(workplan)
+       - Update the cli group to use @click.pass_context and set ctx.obj["client"]
+
+    4. Create cli/tests/test_workplan_commands.py:
+       - Use CliRunner + requests_mock
+       - Test create command: verify POST is called with correct data
+       - Test list command: verify output table format
+       - Test show command: verify detail output
+       - Test archive command: verify POST to archive endpoint
+       - Test complete command: verify POST to complete endpoint
+       - Test error handling: API error displays error message
+
+  constraints:
+    - Use click.pass_context to share the client across subcommands
+    - Output format: simple formatted text with click.echo, no heavy table lib
+    - All commands must handle VTFAPIError gracefully
+    - Do NOT import from Django src/
+  references:
+    - cli/vtf/cli.py
+    - cli/vtf/client.py
+    - docs/design/api-surface-DESIGN.md (Workplans section)
+
+acceptance_criteria:
+  - "vtf workplan create --name 'Test' creates a workplan"
+  - "vtf workplan list displays workplans in table format"
+  - "vtf workplan show <id> displays workplan details"
+  - "vtf workplan archive <id> archives the workplan"
+  - "vtf workplan complete <id> completes the workplan"
+  - "pytest cli/tests/test_workplan_commands.py passes"
+
+behavioral_spec:
+  id: bs-2.6
+  priority: medium
+  behaviors:
+    - "vtf workplan create --name 'Test' --tags 'a,b' sends POST /v1/workplans/ with correct JSON and prints created ID"
+    - "vtf workplan list prints a table with ID, Name, Status columns"
+    - "vtf workplan list --status active sends ?status=active query parameter"
+    - "vtf workplan show <id> prints workplan ID, name, status, description, tags, created_at"
+    - "vtf workplan archive <id> sends POST /v1/workplans/<id>/archive/ and prints confirmation"
+    - "vtf workplan complete <id> sends POST /v1/workplans/<id>/complete/ and prints confirmation"
+    - "API errors are displayed to the user with error message"
+
+test_command: "pytest cli/tests/test_workplan_commands.py"

@@ -1,0 +1,187 @@
+id: "2.7"
+name: "CLI — task commands"
+depends_on: ["2.5"]
+agent_model: sonnet
+isolation: worktree
+judge: false
+
+description: |
+  Add task management commands to the CLI. Pattern-repeat of CLI core (2.5)
+  for the task domain — list, show, lifecycle actions (submit, claim,
+  complete, fail), and the claimable convenience endpoint.
+
+files:
+  create:
+    - cli/vtf/commands/task.py
+    - cli/tests/test_task_commands.py
+  modify:
+    - cli/vtf/cli.py
+
+contracts:
+  depends_on:
+    - name: "cli-pattern"
+
+implementation:
+  approach: |
+    1. Create cli/vtf/commands/task.py:
+       ```python
+       import click
+       from vtf.client import VTFAPIError
+
+       @click.group()
+       def task():
+           """Manage tasks."""
+           pass
+
+       @task.command("list")
+       @click.option("--status", default=None, help="Filter by status")
+       @click.option("--workplan", default=None, help="Filter by workplan ID")
+       @click.option("--phase", default=None, help="Filter by phase ID")
+       @click.pass_context
+       def list_tasks(ctx, status, workplan, phase):
+           """List tasks."""
+           client = ctx.obj["client"]
+           params = []
+           if status:
+               params.append(f"status={status}")
+           if workplan:
+               params.append(f"workplan={workplan}")
+           if phase:
+               params.append(f"phase={phase}")
+           query = f"?{'&'.join(params)}" if params else ""
+           results = client.get(f"/v1/tasks/{query}")
+           if not results:
+               click.echo("No tasks found.")
+               return
+           click.echo(f"{'ID':<25} {'Title':<35} {'Status':<15}")
+           click.echo("-" * 75)
+           for t in results:
+               title = t['title'][:33] + '..' if len(t['title']) > 35 else t['title']
+               click.echo(f"{t['id']:<25} {title:<35} {t['status']:<15}")
+
+       @task.command()
+       @click.argument("id")
+       @click.pass_context
+       def show(ctx, id):
+           """Show task details."""
+           client = ctx.obj["client"]
+           t = client.get(f"/v1/tasks/{id}/")
+           click.echo(f"ID:          {t['id']}")
+           click.echo(f"Title:       {t['title']}")
+           click.echo(f"Status:      {t['status']}")
+           click.echo(f"Phase:       {t.get('phase', '')}")
+           click.echo(f"Workplan:    {t.get('workplan', '')}")
+           click.echo(f"Claimed by:  {t.get('claimed_by', 'none')}")
+           click.echo(f"Requires:    {', '.join(t.get('requires', []))}")
+           if t.get('description'):
+               click.echo(f"\nDescription:\n{t['description']}")
+
+       @task.command()
+       @click.argument("id")
+       @click.pass_context
+       def submit(ctx, id):
+           """Submit a draft task for execution."""
+           client = ctx.obj["client"]
+           result = client.post(f"/v1/tasks/{id}/submit/")
+           click.echo(f"Submitted task {id} -> {result['status']}")
+
+       @task.command()
+       @click.argument("id")
+       @click.option("--agent", required=True, help="Agent ID")
+       @click.option("--tags", default="", help="Comma-separated agent tags")
+       @click.pass_context
+       def claim(ctx, id, agent, tags):
+           """Claim a task for an agent."""
+           client = ctx.obj["client"]
+           data = {"agent_id": agent}
+           if tags:
+               data["tags"] = [t.strip() for t in tags.split(",")]
+           result = client.post(f"/v1/tasks/{id}/claim/", data)
+           click.echo(f"Claimed task {id} by {agent} -> {result['status']}")
+
+       @task.command()
+       @click.argument("id")
+       @click.pass_context
+       def complete(ctx, id):
+           """Mark a task as complete."""
+           client = ctx.obj["client"]
+           result = client.post(f"/v1/tasks/{id}/complete/")
+           click.echo(f"Completed task {id} -> {result['status']}")
+
+       @task.command()
+       @click.argument("id")
+       @click.pass_context
+       def fail(ctx, id):
+           """Mark a task as failed (needs attention)."""
+           client = ctx.obj["client"]
+           result = client.post(f"/v1/tasks/{id}/fail/")
+           click.echo(f"Failed task {id} -> {result['status']}")
+
+       @task.command()
+       @click.option("--tags", default="", help="Comma-separated agent tags")
+       @click.pass_context
+       def claimable(ctx, tags):
+           """List tasks claimable by an agent with given tags."""
+           client = ctx.obj["client"]
+           query = f"?tags={tags}" if tags else ""
+           results = client.get(f"/v1/tasks/claimable/{query}")
+           if not results:
+               click.echo("No claimable tasks.")
+               return
+           click.echo(f"{'ID':<25} {'Title':<35} {'Requires':<15}")
+           click.echo("-" * 75)
+           for t in results:
+               title = t['title'][:33] + '..' if len(t['title']) > 35 else t['title']
+               requires = ', '.join(t.get('requires', []))
+               click.echo(f"{t['id']:<25} {title:<35} {requires:<15}")
+       ```
+
+    2. Register the task group in cli/vtf/cli.py:
+       - Import task group from commands.task
+       - Add cli.add_command(task)
+
+    3. Create cli/tests/test_task_commands.py:
+       - Use CliRunner + requests_mock
+       - Test list with filters (status, workplan, phase)
+       - Test show displays task details
+       - Test submit sends POST to submit endpoint
+       - Test claim sends POST with agent_id and tags
+       - Test complete sends POST to complete endpoint
+       - Test fail sends POST to fail endpoint
+       - Test claimable displays claimable tasks
+
+  constraints:
+    - Use click.pass_context to receive client from parent group
+    - Truncate long titles in list output to fit table
+    - All commands must handle VTFAPIError gracefully
+    - Do NOT import from Django src/
+  references:
+    - cli/vtf/cli.py
+    - cli/vtf/client.py
+    - docs/design/api-surface-DESIGN.md (Tasks section)
+
+acceptance_criteria:
+  - "vtf task list displays tasks in table format"
+  - "vtf task show <id> displays task details"
+  - "vtf task submit <id> submits a task"
+  - "vtf task claim <id> --agent <agent_id> claims a task"
+  - "vtf task complete <id> completes a task"
+  - "vtf task fail <id> fails a task"
+  - "vtf task claimable displays claimable tasks"
+  - "pytest cli/tests/test_task_commands.py passes"
+
+behavioral_spec:
+  id: bs-2.7
+  priority: medium
+  behaviors:
+    - "vtf task list prints a table with ID, Title, Status columns"
+    - "vtf task list --status doing sends ?status=doing query parameter"
+    - "vtf task list --workplan <id> sends ?workplan=<id> query parameter"
+    - "vtf task show <id> prints task ID, title, status, phase, workplan, claimed_by, requires"
+    - "vtf task submit <id> sends POST /v1/tasks/<id>/submit/ and prints new status"
+    - "vtf task claim <id> --agent a1 --tags 'x,y' sends POST with agent_id and tags array"
+    - "vtf task complete <id> sends POST /v1/tasks/<id>/complete/ and prints confirmation"
+    - "vtf task fail <id> sends POST /v1/tasks/<id>/fail/ and prints confirmation"
+    - "vtf task claimable --tags 'x,y' sends GET /v1/tasks/claimable/?tags=x,y"
+
+test_command: "pytest cli/tests/test_task_commands.py"

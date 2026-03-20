@@ -1,0 +1,197 @@
+id: "2.4"
+name: "Bulk import endpoint"
+depends_on: ["2.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create a POST /v1/bulk/import endpoint that accepts a workplan structure
+  (workplan + phases with nested tasks + links) and creates all entities
+  atomically in a single database transaction. Uses temporary "ref" fields
+  for cross-referencing between entities. Returns a mapping of refs to
+  created nanoid IDs. On any validation error, the entire transaction is
+  rolled back.
+
+files:
+  create:
+    - src/core/bulk_import.py
+    - tests/core/test_bulk_import.py
+    - tests/core/__init__.py
+  modify:
+    - src/core/views.py
+    - src/vtaskforge/urls.py
+
+contracts:
+  establishes:
+    - name: "bulk-import"
+      description: "POST /v1/bulk/import creates workplan + phases + tasks + links atomically, returns ref-to-id mapping"
+  depends_on:
+    - name: "auth-token"
+    - name: "test-factory-pattern"
+
+implementation:
+  approach: |
+    1. Create src/core/bulk_import.py with the import logic:
+
+       The function receives a validated payload dict and creates entities:
+       ```python
+       from django.db import transaction
+       from workplans.models import Workplan, Phase
+       from tasks.models import Task
+       from links.models import Link
+
+       def perform_bulk_import(payload):
+           """
+           Create workplan structure atomically.
+           Returns dict mapping refs to created nanoid IDs.
+           """
+           ref_map = {}
+
+           with transaction.atomic():
+               # 1. Create workplan
+               wp_data = payload["workplan"]
+               workplan = Workplan.objects.create(
+                   name=wp_data["name"],
+                   description=wp_data.get("description", ""),
+                   tags=wp_data.get("tags", []),
+               )
+               ref_map["workplan"] = workplan.id
+
+               # 2. Create phases and their nested tasks
+               for phase_data in payload.get("phases", []):
+                   ref = phase_data["ref"]
+                   phase = Phase.objects.create(
+                       workplan=workplan,
+                       name=phase_data["name"],
+                       description=phase_data.get("description", ""),
+                   )
+                   ref_map[ref] = phase.id
+
+                   for task_data in phase_data.get("tasks", []):
+                       task_ref = task_data["ref"]
+                       task = Task.objects.create(
+                           phase=phase,
+                           workplan=workplan,
+                           title=task_data["title"],
+                           description=task_data.get("description", ""),
+                           acceptance_criteria=task_data.get("acceptance_criteria", []),
+                           requires=task_data.get("requires", []),
+                       )
+                       ref_map[task_ref] = task.id
+
+               # 3. Validate all link refs resolve
+               for link_data in payload.get("links", []):
+                   source_ref = link_data["source_ref"]
+                   target_ref = link_data["target_ref"]
+                   if source_ref not in ref_map:
+                       raise ValueError(f"Unresolved source_ref: {source_ref}")
+                   if target_ref not in ref_map:
+                       raise ValueError(f"Unresolved target_ref: {target_ref}")
+
+               # 4. Create links
+               for link_data in payload.get("links", []):
+                   Link.objects.create(
+                       source_type="task",  # infer from ref context
+                       source_id=ref_map[link_data["source_ref"]],
+                       target_id=ref_map[link_data["target_ref"]],
+                       link_type=link_data.get("type", "depends_on"),
+                   )
+
+           return ref_map
+       ```
+
+    2. Create the endpoint in src/core/views.py (alongside HealthView):
+       ```python
+       class BulkImportView(APIView):
+           def post(self, request):
+               # Validate required fields
+               payload = request.data
+               if "workplan" not in payload:
+                   return Response(
+                       {"error": {"code": "VALIDATION_ERROR", "message": "workplan is required"}},
+                       status=400,
+                   )
+               if "name" not in payload["workplan"]:
+                   return Response(
+                       {"error": {"code": "VALIDATION_ERROR", "message": "workplan.name is required"}},
+                       status=400,
+                   )
+               # Validate phases have refs
+               for phase in payload.get("phases", []):
+                   if "ref" not in phase:
+                       return Response(...)
+                   for task in phase.get("tasks", []):
+                       if "ref" not in task or "title" not in task:
+                           return Response(...)
+
+               try:
+                   ref_map = perform_bulk_import(payload)
+               except ValueError as e:
+                   return Response(
+                       {"error": {"code": "VALIDATION_ERROR", "message": str(e)}},
+                       status=400,
+                   )
+               return Response({"ref_map": ref_map}, status=201)
+       ```
+
+    3. Wire the URL in src/vtaskforge/urls.py:
+       Add path("v1/bulk/import", BulkImportView.as_view(), name="bulk-import")
+
+    4. Create tests/core/__init__.py (empty).
+
+    5. Create tests/core/test_bulk_import.py with:
+       - Test: POST with valid workplan + phases + tasks returns 201 with ref_map
+       - Test: ref_map contains all refs mapped to nanoid IDs
+       - Test: created workplan has correct name, description, tags
+       - Test: created phases are linked to the workplan
+       - Test: created tasks are linked to correct phases and workplan
+       - Test: links are created with resolved refs
+       - Test: unresolved source_ref returns 400 VALIDATION_ERROR
+       - Test: unresolved target_ref returns 400 VALIDATION_ERROR
+       - Test: on validation error, no entities are created (transaction rollback)
+       - Test: missing workplan field returns 400
+       - Test: missing workplan.name returns 400
+       - Test: missing phase ref returns 400
+       - Test: missing task ref or title returns 400
+       - Test: empty phases list is valid (workplan-only import)
+       - Test: endpoint requires authentication (401 without token)
+
+  constraints:
+    - All creation must happen inside a single transaction.atomic() block
+    - On ANY validation error, the entire transaction must roll back
+    - Refs are arbitrary strings chosen by the caller — they are NOT stored
+    - The endpoint must require authentication (inherits from DRF defaults)
+    - Use the standard error model format for validation errors
+    - Do NOT create a separate Django app for bulk import — add to core
+  references:
+    - docs/design/api-surface-DESIGN.md (Bulk Operations section)
+    - src/core/views.py
+    - src/workplans/models.py
+    - src/tasks/models.py
+    - src/links/models.py
+    - src/vtaskforge/urls.py
+
+acceptance_criteria:
+  - "POST /v1/bulk/import with valid payload returns 201 with ref_map"
+  - "Workplan, phases, tasks, and links are all created in one transaction"
+  - "Unresolved refs return 400 and no entities are created"
+  - "Missing required fields return 400 VALIDATION_ERROR"
+  - "pytest tests/core/test_bulk_import.py passes"
+  - "pytest tests/ passes (full suite, no regressions)"
+
+behavioral_spec:
+  id: bs-2.4
+  priority: high
+  behaviors:
+    - "POST /v1/bulk/import with workplan, phases, tasks, and links returns 201 with ref_map mapping all refs to nanoid IDs"
+    - "Created workplan has correct name, description, and tags"
+    - "Created phases are linked to the created workplan"
+    - "Created tasks are linked to their parent phase and workplan"
+    - "Links are created with source_id and target_id resolved from ref_map"
+    - "POST /v1/bulk/import with unresolved source_ref returns 400 and creates nothing"
+    - "POST /v1/bulk/import with unresolved target_ref returns 400 and creates nothing"
+    - "POST /v1/bulk/import without workplan field returns 400"
+    - "POST /v1/bulk/import without token returns 401"
+
+test_command: "pytest tests/core/test_bulk_import.py"

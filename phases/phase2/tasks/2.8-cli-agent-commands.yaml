@@ -1,0 +1,145 @@
+id: "2.8"
+name: "CLI — agent commands"
+depends_on: ["2.5"]
+agent_model: sonnet
+isolation: worktree
+judge: false
+
+description: |
+  Add agent management commands to the CLI. Pattern-repeat of CLI core (2.5)
+  for the agent domain. The register command is special — it calls the
+  unauthenticated POST /v1/agents/ endpoint and saves the returned token
+  to the CLI config automatically.
+
+files:
+  create:
+    - cli/vtf/commands/agent.py
+    - cli/tests/test_agent_commands.py
+  modify:
+    - cli/vtf/cli.py
+
+contracts:
+  depends_on:
+    - name: "cli-pattern"
+    - name: "auth-token"
+
+implementation:
+  approach: |
+    1. Create cli/vtf/commands/agent.py:
+       ```python
+       import click
+       from vtf.client import VTFAPIError
+       from vtf.config import Config
+
+       @click.group()
+       def agent():
+           """Manage agents."""
+           pass
+
+       @agent.command()
+       @click.option("--name", required=True, help="Agent name")
+       @click.option("--tags", default="", help="Comma-separated tags")
+       @click.pass_context
+       def register(ctx, name, tags):
+           """Register a new agent and save token to config."""
+           client = ctx.obj["client"]
+           data = {"name": name}
+           if tags:
+               data["tags"] = [t.strip() for t in tags.split(",")]
+           result = client.post("/v1/agents/", data)
+           # Save the returned token to config
+           token = result.get("token")
+           if token:
+               cfg = Config()
+               cfg.set("token", token)
+               click.echo(f"Registered agent {result['id']}: {result['name']}")
+               click.echo(f"Token saved to config.")
+           else:
+               click.echo(f"Registered agent {result['id']} (no token in response)")
+
+       @agent.command("list")
+       @click.option("--status", default=None, help="Filter by status")
+       @click.pass_context
+       def list_agents(ctx, status):
+           """List registered agents."""
+           client = ctx.obj["client"]
+           query = f"?status={status}" if status else ""
+           results = client.get(f"/v1/agents/{query}")
+           if not results:
+               click.echo("No agents found.")
+               return
+           click.echo(f"{'ID':<25} {'Name':<25} {'Status':<10} {'Tags'}")
+           click.echo("-" * 75)
+           for a in results:
+               tags = ', '.join(a.get('tags', []))
+               click.echo(f"{a['id']:<25} {a['name']:<25} {a['status']:<10} {tags}")
+
+       @agent.command()
+       @click.argument("id")
+       @click.pass_context
+       def show(ctx, id):
+           """Show agent details."""
+           client = ctx.obj["client"]
+           a = client.get(f"/v1/agents/{id}/")
+           click.echo(f"ID:            {a['id']}")
+           click.echo(f"Name:          {a['name']}")
+           click.echo(f"Status:        {a['status']}")
+           click.echo(f"Tags:          {', '.join(a.get('tags', []))}")
+           click.echo(f"Registered:    {a['registered_at']}")
+           click.echo(f"Last heartbeat: {a.get('last_heartbeat', 'never')}")
+
+       @agent.command()
+       @click.argument("id")
+       @click.option("--set", "new_status", required=True,
+                      type=click.Choice(["online", "busy", "offline"]),
+                      help="New status")
+       @click.pass_context
+       def status(ctx, id, new_status):
+           """Update agent status."""
+           client = ctx.obj["client"]
+           result = client.patch(f"/v1/agents/{id}/", {"status": new_status})
+           click.echo(f"Agent {id} status set to {result['status']}")
+       ```
+
+    2. Register the agent group in cli/vtf/cli.py:
+       - Import agent group from commands.agent
+       - Add cli.add_command(agent)
+
+    3. Create cli/tests/test_agent_commands.py:
+       - Use CliRunner + requests_mock
+       - Test register: verify POST is called, token is saved to config
+       - Test list: verify table output format
+       - Test show: verify detail output
+       - Test status: verify PATCH with correct status value
+       - Test register saves token to config file
+
+  constraints:
+    - register command must NOT require a token (registration is unauthenticated)
+    - register command must save the returned token to ~/.vtf/config.yaml
+    - Use click.pass_context to receive client from parent group
+    - Do NOT import from Django src/
+  references:
+    - cli/vtf/cli.py
+    - cli/vtf/client.py
+    - cli/vtf/config.py
+    - docs/design/api-surface-DESIGN.md (Agents section)
+
+acceptance_criteria:
+  - "vtf agent register --name 'Test Agent' registers agent and saves token"
+  - "vtf agent list displays agents in table format"
+  - "vtf agent show <id> displays agent details"
+  - "vtf agent status <id> --set busy updates agent status"
+  - "pytest cli/tests/test_agent_commands.py passes"
+
+behavioral_spec:
+  id: bs-2.8
+  priority: medium
+  behaviors:
+    - "vtf agent register --name 'Test' --tags 'x,y' sends POST /v1/agents/ and saves returned token to config"
+    - "vtf agent register prints registered agent ID and confirmation of token save"
+    - "vtf agent list prints a table with ID, Name, Status, Tags columns"
+    - "vtf agent list --status online sends ?status=online query parameter"
+    - "vtf agent show <id> prints agent ID, name, status, tags, registered_at, last_heartbeat"
+    - "vtf agent status <id> --set busy sends PATCH /v1/agents/<id>/ with {status: busy}"
+
+test_command: "pytest cli/tests/test_agent_commands.py"

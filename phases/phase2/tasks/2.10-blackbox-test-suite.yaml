@@ -1,0 +1,109 @@
+id: "2.10"
+name: "Black-box test suite"
+depends_on: ["2.9"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Run ALL 4 built-in scenarios from the vtf-blackbox-tester agent against
+  the running API. This is NOT a code task — it is an execution and
+  verification task. The agent starts the API server, registers an agent
+  (to get a token), and runs the scenarios: full-lifecycle, unhappy-paths,
+  review-rejection, agent-tag-matching.
+
+  All scenarios must account for authentication — register an agent first
+  to get a token, then use that token for all subsequent API calls.
+
+  The agent reports pass/fail for each scenario with details on any failures.
+
+files:
+  create: []
+  modify: []
+  affected:
+    - src/tasks/views.py
+    - src/agents/views.py
+    - src/core/views.py
+    - src/reviews/views.py
+    - src/links/views.py
+
+contracts:
+  depends_on:
+    - name: "auth-token"
+    - name: "claim-expiry"
+    - name: "bulk-import"
+    - name: "task-claim-endpoint"
+    - name: "task-state-machine"
+
+implementation:
+  approach: |
+    This is a verification task, not an implementation task.
+
+    1. Ensure the API server is running (docker compose up or manage.py runserver)
+    2. Ensure the database is migrated
+
+    3. Run the vtf-blackbox-tester agent with each scenario:
+
+       **Scenario 1: full-lifecycle**
+       - Register agent (get token)
+       - Create workplan -> create phase -> create task
+       - Submit task (draft -> todo)
+       - Claim task (todo -> doing)
+       - Send heartbeat
+       - Complete task (doing -> done)
+       - Verify each step returns expected status codes and data
+
+       **Scenario 2: unhappy-paths**
+       - Claim a non-todo task -> expect 409 ALREADY_CLAIMED
+       - Claim with missing agent_id -> expect 400 VALIDATION_ERROR
+       - Complete a draft task -> expect 422 INVALID_TRANSITION
+       - Heartbeat a non-doing task -> expect 400
+       - Access endpoint without token -> expect 401
+       - Access endpoint with invalid token -> expect 401
+
+       **Scenario 3: review-rejection**
+       - Create task with needs_review_on_completion=true
+       - Submit -> claim -> complete -> verify pending_completion_review
+       - Submit review with decision=changes_requested
+       - Verify task in changes_requested status
+       - Resubmit -> verify returns to pending_completion_review
+
+       **Scenario 4: agent-tag-matching**
+       - Create task with requires=["opus"]
+       - Claim with tags=["sonnet"] -> expect 422 (tag mismatch)
+       - Claim with tags=["opus", "executor"] -> expect success
+       - Create task with assigned_to=agent-1
+       - Claim with agent-2 -> expect 403
+
+    4. Report results: pass/fail for each scenario, details on any failures.
+
+  constraints:
+    - This is an EXECUTION task — the agent runs scenarios, does not write code
+    - All API calls must include authentication (register agent first)
+    - Use the vtf CLI or direct HTTP calls (curl/requests)
+    - The server must be running before scenarios execute
+    - Report MUST include pass/fail status for each scenario
+    - If any scenario fails, document the failure details and expected vs actual
+  references:
+    - docs/design/api-surface-DESIGN.md
+    - src/tasks/views.py
+    - src/agents/views.py
+
+acceptance_criteria:
+  - "full-lifecycle scenario passes"
+  - "unhappy-paths scenario passes"
+  - "review-rejection scenario passes"
+  - "agent-tag-matching scenario passes"
+  - "All scenarios use authenticated requests (agent registration token)"
+  - "Report includes pass/fail for each scenario"
+
+behavioral_spec:
+  id: bs-2.10
+  priority: high
+  behaviors:
+    - "full-lifecycle: workplan -> phase -> task -> submit -> claim -> heartbeat -> complete succeeds end-to-end"
+    - "unhappy-paths: invalid operations return correct error codes (409, 400, 422, 401)"
+    - "review-rejection: review gates route tasks through changes_requested correctly"
+    - "agent-tag-matching: tag-mismatched claims are rejected, matching claims succeed"
+
+test_command: "echo 'Manual execution — see scenario results'"

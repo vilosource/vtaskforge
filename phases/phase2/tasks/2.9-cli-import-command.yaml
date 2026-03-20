@@ -1,0 +1,194 @@
+id: "2.9"
+name: "CLI — import command"
+depends_on: ["2.4", "2.5"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Add the import command that reads a phase directory (containing PHASE.md,
+  dag.yaml, and tasks/*.yaml) and converts it into the bulk import JSON
+  format, then calls POST /v1/bulk/import. This bridges the file-based
+  phase specs with the vtaskforge API.
+
+files:
+  create:
+    - cli/vtf/commands/import_cmd.py
+    - cli/tests/test_import_command.py
+    - cli/tests/fixtures/sample-phase/PHASE.md
+    - cli/tests/fixtures/sample-phase/dag.yaml
+    - cli/tests/fixtures/sample-phase/tasks/1.1-example-task.yaml
+    - cli/tests/fixtures/sample-phase/tasks/1.2-another-task.yaml
+  modify:
+    - cli/vtf/cli.py
+
+contracts:
+  depends_on:
+    - name: "cli-pattern"
+    - name: "bulk-import"
+
+implementation:
+  approach: |
+    1. Create cli/vtf/commands/import_cmd.py:
+       ```python
+       import os
+       import yaml
+       import click
+       from pathlib import Path
+       from vtf.client import VTFAPIError
+
+       @click.command("import")
+       @click.argument("phase_dir", type=click.Path(exists=True))
+       @click.option("--workplan", default=None, help="Import into existing workplan ID")
+       @click.option("--dry-run", is_flag=True, help="Validate without creating")
+       @click.pass_context
+       def import_cmd(ctx, phase_dir, workplan, dry_run):
+           """Import a phase directory into vtaskforge."""
+           phase_path = Path(phase_dir)
+           client = ctx.obj["client"]
+
+           # Read PHASE.md for metadata (extract name from first heading)
+           phase_md = phase_path / "PHASE.md"
+           phase_name = phase_path.name
+           phase_description = ""
+           if phase_md.exists():
+               content = phase_md.read_text()
+               lines = content.strip().split("\n")
+               for line in lines:
+                   if line.startswith("# "):
+                       phase_name = line[2:].strip()
+                       break
+               phase_description = content
+
+           # Read dag.yaml for dependencies
+           dag_file = phase_path / "dag.yaml"
+           dag = {}
+           if dag_file.exists():
+               with open(dag_file) as f:
+                   dag = yaml.safe_load(f) or {}
+
+           # Read task YAML files
+           tasks_dir = phase_path / "tasks"
+           task_specs = []
+           if tasks_dir.exists():
+               for yaml_file in sorted(tasks_dir.glob("*.yaml")):
+                   with open(yaml_file) as f:
+                       spec = yaml.safe_load(f)
+                       task_specs.append(spec)
+
+           # Build bulk import payload
+           phase_ref = "phase-1"
+           task_refs = {}
+           phase_tasks = []
+           links = []
+
+           for spec in task_specs:
+               ref = f"task-{spec['id']}"
+               task_refs[spec["id"]] = ref
+               phase_tasks.append({
+                   "ref": ref,
+                   "title": spec["name"],
+                   "description": spec.get("description", ""),
+                   "acceptance_criteria": spec.get("acceptance_criteria", []),
+                   "requires": spec.get("requires", []),
+               })
+
+           # Build dependency links from depends_on fields
+           for spec in task_specs:
+               for dep_id in spec.get("depends_on", []):
+                   if dep_id in task_refs:
+                       links.append({
+                           "source_ref": task_refs[spec["id"]],
+                           "target_ref": task_refs[dep_id],
+                           "type": "depends_on",
+                       })
+
+           payload = {
+               "workplan": {
+                   "name": phase_name,
+                   "description": phase_description,
+               },
+               "phases": [{
+                   "ref": phase_ref,
+                   "name": phase_name,
+                   "description": phase_description,
+                   "tasks": phase_tasks,
+               }],
+               "links": links,
+           }
+
+           if dry_run:
+               click.echo("Dry run — payload that would be sent:")
+               click.echo(yaml.dump(payload, default_flow_style=False))
+               click.echo(f"\nWould create: 1 workplan, 1 phase, {len(phase_tasks)} tasks, {len(links)} links")
+               return
+
+           try:
+               result = client.post("/v1/bulk/import", payload)
+               ref_map = result.get("ref_map", {})
+               click.echo(f"Import successful!")
+               click.echo(f"Workplan: {ref_map.get('workplan', 'N/A')}")
+               click.echo(f"Phase:    {ref_map.get(phase_ref, 'N/A')}")
+               click.echo(f"\nTasks:")
+               for spec in task_specs:
+                   ref = task_refs[spec["id"]]
+                   task_id = ref_map.get(ref, "N/A")
+                   click.echo(f"  {spec['id']} ({spec['name']}): {task_id}")
+           except VTFAPIError as e:
+               click.echo(f"Import failed: {e}", err=True)
+               raise SystemExit(1)
+       ```
+
+    2. Register in cli/vtf/cli.py:
+       - Import import_cmd from commands.import_cmd
+       - Add cli.add_command(import_cmd)
+       - Note: the command is named "import" in Click but the module is
+         "import_cmd" to avoid Python reserved word conflict
+
+    3. Create test fixture files under cli/tests/fixtures/sample-phase/:
+       - PHASE.md: minimal phase doc with "# Test Phase" heading
+       - dag.yaml: simple dependency graph
+       - tasks/1.1-example-task.yaml: minimal task spec
+       - tasks/1.2-another-task.yaml: task depending on 1.1
+
+    4. Create cli/tests/test_import_command.py:
+       - Test: import with valid phase dir calls POST /v1/bulk/import
+       - Test: payload contains workplan, phase, tasks from YAML files
+       - Test: depends_on fields are converted to links
+       - Test: --dry-run prints payload without calling API
+       - Test: phase name extracted from PHASE.md heading
+       - Test: error from API is displayed
+       - Test: missing tasks dir is handled gracefully (empty tasks list)
+
+  constraints:
+    - Module name must be import_cmd.py (not import.py) to avoid Python keyword conflict
+    - Use yaml.safe_load for all YAML parsing
+    - Task refs must be deterministic (based on task ID from spec)
+    - Do NOT import from Django src/
+    - The --workplan option is for future use (import into existing workplan)
+  references:
+    - cli/vtf/cli.py
+    - cli/vtf/client.py
+    - phases/phase1/tasks/1.1-workplan-model-crud.yaml
+    - docs/design/api-surface-DESIGN.md (Bulk Operations section)
+
+acceptance_criteria:
+  - "vtf import <phase-dir> reads PHASE.md, dag.yaml, and tasks/*.yaml"
+  - "vtf import <phase-dir> calls POST /v1/bulk/import with correct payload"
+  - "vtf import <phase-dir> prints created entity IDs"
+  - "vtf import <phase-dir> --dry-run prints payload without calling API"
+  - "Dependency links are created from depends_on fields in task specs"
+  - "pytest cli/tests/test_import_command.py passes"
+
+behavioral_spec:
+  id: bs-2.9
+  priority: medium
+  behaviors:
+    - "vtf import <dir> reads all *.yaml files from <dir>/tasks/ and includes them as tasks"
+    - "vtf import <dir> extracts phase name from the first # heading in PHASE.md"
+    - "vtf import <dir> converts depends_on fields to link entries in the payload"
+    - "vtf import <dir> sends POST /v1/bulk/import and prints workplan, phase, and task IDs"
+    - "vtf import <dir> --dry-run prints the payload YAML and does NOT call the API"
+    - "vtf import <dir> with API error prints error message and exits 1"
+
+test_command: "pytest cli/tests/test_import_command.py"

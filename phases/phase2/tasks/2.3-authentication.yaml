@@ -1,0 +1,199 @@
+id: "2.3"
+name: "Authentication (DRF TokenAuthentication)"
+depends_on: ["2.1"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add DRF TokenAuthentication to the API. All endpoints require a Bearer
+  token except GET /v1/health (liveness) and POST /v1/agents/ (registration).
+  Agent registration is modified to generate and return a DRF auth token in
+  the response. All existing tests must be updated to authenticate.
+
+  This is a security-critical task that touches every test file and modifies
+  the agent registration contract.
+
+files:
+  create:
+    - tests/test_auth.py
+  modify:
+    - src/vtaskforge/settings/base.py
+    - src/agents/views.py
+    - src/agents/serializers.py
+    - src/core/views.py
+    - tests/conftest.py
+    - tests/test_health.py
+    - tests/test_celery.py
+    - tests/workplans/test_models.py
+    - tests/workplans/test_api.py
+    - tests/workplans/test_phase_models.py
+    - tests/workplans/test_phase_api.py
+    - tests/agents/test_models.py
+    - tests/agents/test_api.py
+    - tests/tasks/test_models.py
+    - tests/tasks/test_state_machine.py
+    - tests/tasks/test_api.py
+    - tests/tasks/test_notes.py
+    - tests/tasks/test_review_policy.py
+    - tests/tasks/test_review_cascading.py
+    - tests/tasks/test_lifecycle.py
+    - tests/tasks/test_claiming.py
+    - tests/tasks/test_claim_expiry.py
+    - tests/links/test_models.py
+    - tests/links/test_api.py
+    - tests/reviews/test_models.py
+    - tests/reviews/test_api.py
+    - tests/events/test_models.py
+    - tests/events/test_api.py
+    - tests/events/test_auto_logging.py
+  affected:
+    - tests/factories.py
+
+contracts:
+  establishes:
+    - name: "auth-token"
+      description: "All endpoints require Bearer token in Authorization header except GET /v1/health and POST /v1/agents/"
+  modifies:
+    - name: "agent-registration"
+      description: "POST /v1/agents/ now returns a 'token' field in the response body alongside the agent data"
+  depends_on:
+    - name: "test-factory-pattern"
+
+implementation:
+  approach: |
+    1. Add rest_framework.authtoken to INSTALLED_APPS in settings/base.py:
+       Add 'rest_framework.authtoken' to THIRD_PARTY_APPS list.
+
+    2. Add authentication and permission defaults to REST_FRAMEWORK in settings/base.py:
+       ```python
+       REST_FRAMEWORK = {
+           'DEFAULT_RENDERER_CLASSES': [
+               'rest_framework.renderers.JSONRenderer',
+           ],
+           'DEFAULT_PARSER_CLASSES': [
+               'rest_framework.parsers.JSONParser',
+           ],
+           'DEFAULT_AUTHENTICATION_CLASSES': [
+               'rest_framework.authentication.TokenAuthentication',
+           ],
+           'DEFAULT_PERMISSION_CLASSES': [
+               'rest_framework.permissions.IsAuthenticated',
+           ],
+       }
+       ```
+
+    3. Exempt health endpoint: In src/core/views.py, add to HealthView:
+       ```python
+       from rest_framework.permissions import AllowAny
+       permission_classes = [AllowAny]
+       authentication_classes = []
+       ```
+
+    4. Modify agent registration in src/agents/views.py:
+       - Add AllowAny permission to the create action only (override get_permissions)
+       - Override perform_create to:
+         a. Save the agent
+         b. Create a Django User with username=agent.id (needed for Token model)
+         c. Create a DRF Token for that user
+         d. Store the token on the response
+       - Override create() to include the token in the response data
+
+       ```python
+       from django.contrib.auth.models import User
+       from rest_framework.authtoken.models import Token
+       from rest_framework.permissions import AllowAny, IsAuthenticated
+
+       class AgentViewSet(ModelViewSet):
+           ...
+           def get_permissions(self):
+               if self.action == 'create':
+                   return [AllowAny()]
+               return [IsAuthenticated()]
+
+           def create(self, request, *args, **kwargs):
+               response = super().create(request, *args, **kwargs)
+               # Token was attached in perform_create
+               agent = Agent.objects.get(pk=response.data['id'])
+               user = User.objects.get(username=agent.id)
+               token = Token.objects.get(user=user)
+               response.data['token'] = token.key
+               return response
+
+           def perform_create(self, serializer):
+               agent = serializer.save(status="online")
+               user = User.objects.create_user(username=agent.id)
+               Token.objects.create(user=user)
+       ```
+
+    5. Update tests/conftest.py:
+       - Add an authenticated_client fixture that creates a User + Token and
+         sets credentials on the APIClient:
+         ```python
+         @pytest.fixture
+         def authenticated_client(api_client):
+             user = User.objects.create_user(username='testuser', password='testpass')
+             token = Token.objects.create(user=user)
+             api_client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+             return api_client
+         ```
+       - Consider renaming the existing api_client to unauthenticated_client,
+         or making api_client always authenticated. The simpler approach:
+         make api_client authenticated by default (most tests need auth).
+         Keep a separate unauthenticated_client for testing 401 responses.
+
+    6. Update ALL existing test files:
+       - Replace api_client fixture usage with authenticated_client (or update
+         api_client to be authenticated by default)
+       - The simplest approach: modify the api_client fixture in conftest.py
+         to always be authenticated. Add a separate unauthenticated_client fixture.
+       - Tests that test health endpoint can use unauthenticated_client.
+
+    7. Create tests/test_auth.py with:
+       - Test: GET /v1/health without token returns 200 (exempt)
+       - Test: POST /v1/agents/ without token returns 201 and includes token field
+       - Test: GET /v1/workplans/ without token returns 401
+       - Test: GET /v1/workplans/ with valid token returns 200
+       - Test: GET /v1/tasks/ with invalid token returns 401
+       - Test: registered agent token works for subsequent API calls
+
+    8. Run makemigrations for authtoken app, then run full test suite.
+
+  constraints:
+    - Use DRF TokenAuthentication, NOT JWT or session auth
+    - Health endpoint must be completely exempt (no auth classes, AllowAny permission)
+    - Agent registration must be exempt and must return the token
+    - All other endpoints require valid token
+    - Token format in Authorization header: "Token <key>" (DRF convention)
+    - Do NOT change any business logic — only add auth layer
+    - Every existing test must pass after adding authentication
+  references:
+    - src/vtaskforge/settings/base.py
+    - src/agents/views.py
+    - src/agents/serializers.py
+    - src/core/views.py
+    - tests/conftest.py
+
+acceptance_criteria:
+  - "rest_framework.authtoken is in INSTALLED_APPS"
+  - "DEFAULT_AUTHENTICATION_CLASSES includes TokenAuthentication"
+  - "DEFAULT_PERMISSION_CLASSES includes IsAuthenticated"
+  - "GET /v1/health without token returns 200"
+  - "POST /v1/agents/ without token returns 201 with token field in response"
+  - "GET /v1/workplans/ without token returns 401"
+  - "GET /v1/workplans/ with valid token returns 200"
+  - "pytest tests/ passes (full suite, all existing tests updated for auth)"
+
+behavioral_spec:
+  id: bs-2.3
+  priority: high
+  behaviors:
+    - "GET /v1/health without Authorization header returns 200"
+    - "POST /v1/agents/ without Authorization header creates agent and returns 201 with token field"
+    - "GET /v1/workplans/ without Authorization header returns 401 UNAUTHORIZED"
+    - "GET /v1/workplans/ with valid Bearer token returns 200"
+    - "GET /v1/tasks/ with invalid Bearer token returns 401 UNAUTHORIZED"
+    - "Token returned from agent registration can be used to authenticate subsequent requests"
+    - "All CRUD endpoints except health and agent-create require authentication"
+
+test_command: "pytest tests/test_auth.py"

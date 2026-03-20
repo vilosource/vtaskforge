@@ -31,5 +31,6 @@ Key decisions:
 | Phase | Directory | Status | Goal |
 |-------|-----------|--------|------|
 | Phase 0 — Project Setup | [phases/phase0/](phases/phase0/) | Complete | Django skeleton boots in Docker with health endpoint and Celery connected |
-| Phase 1 — Core Models & CRUD | [phases/phase1/](phases/phase1/) | Planning | All domain models, migrations, DRF endpoints, task state machine |
-| Phase 2+ | TBD | Not planned | TBD |
+| Phase 1 — Core Models & CRUD | [phases/phase1/](phases/phase1/) | Complete | All domain models, migrations, DRF endpoints, task state machine |
+| Phase 2 — Auth, Claim Expiry, Bulk Import, CLI | [phases/phase2/](phases/phase2/) | Planning | Authentication, claim expiry, bulk import, CLI (`vtf`), test factories |
+| Phase 3+ | TBD | Not planned | TBD |

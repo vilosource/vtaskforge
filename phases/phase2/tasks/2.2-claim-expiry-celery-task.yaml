@@ -1,0 +1,126 @@
+id: "2.2"
+name: "Claim expiry (Celery periodic task)"
+depends_on: ["2.1"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the claim expiry safety mechanism as a Celery periodic task.
+  When an agent dies or becomes unresponsive, its claimed tasks must not
+  stay stuck in "doing" forever. This task creates a periodic Celery task
+  that runs every 60 seconds, finds tasks with expired claims, moves them
+  to "needs_attention", clears claim fields, and records a "claim_expired"
+  TaskEvent.
+
+files:
+  create:
+    - src/tasks/celery_tasks.py
+    - tests/tasks/test_claim_expiry.py
+  modify:
+    - src/vtaskforge/settings/base.py
+  affected:
+    - src/tasks/views.py
+    - tests/tasks/test_claiming.py
+
+contracts:
+  establishes:
+    - name: "claim-expiry"
+      description: "Tasks in doing status with claim_expires_at < now() are moved to needs_attention, claim fields cleared, and a claim_expired TaskEvent is created"
+  depends_on:
+    - name: "test-factory-pattern"
+
+implementation:
+  approach: |
+    1. Create src/tasks/celery_tasks.py:
+       ```python
+       from celery import shared_task
+       from django.utils import timezone
+       from tasks.models import Task
+
+       @shared_task
+       def expire_stale_claims():
+           """Find tasks with expired claims and move to needs_attention."""
+           expired = Task.objects.filter(
+               status="doing",
+               claim_expires_at__lt=timezone.now(),
+           )
+           count = 0
+           for task in expired:
+               previous_agent = task.claimed_by
+               task.status = "needs_attention"
+               task.claimed_by = None
+               task.claimed_at = None
+               task.claim_expires_at = None
+               task.save(update_fields=[
+                   "status", "claimed_by", "claimed_at",
+                   "claim_expires_at", "updated_at",
+               ])
+               # Record event
+               from events.models import TaskEvent
+               TaskEvent.objects.create(
+                   task=task,
+                   event_type="claim_expired",
+                   data={"previous_agent": previous_agent or ""},
+                   triggered_by="system",
+               )
+               count += 1
+           return count
+       ```
+
+    2. Register the periodic task in settings/base.py by adding CELERY_BEAT_SCHEDULE:
+       ```python
+       from datetime import timedelta
+       CELERY_BEAT_SCHEDULE = {
+           'expire-stale-claims': {
+               'task': 'tasks.celery_tasks.expire_stale_claims',
+               'schedule': timedelta(seconds=60),
+           },
+       }
+       ```
+
+    3. Create tests/tasks/test_claim_expiry.py:
+       - Use factories from tests/factories.py (depends on 2.1)
+       - Test: task with expired claim_expires_at gets moved to needs_attention
+       - Test: task with future claim_expires_at is NOT affected
+       - Test: task in doing status without claim_expires_at is NOT affected
+       - Test: claim fields (claimed_by, claimed_at, claim_expires_at) are cleared
+       - Test: a TaskEvent with event_type="claim_expired" is created
+       - Test: function returns count of expired tasks
+       - Mock timezone.now() to control time rather than using sleep()
+       - Call expire_stale_claims() directly (test the function, not the scheduler)
+
+  constraints:
+    - Use @shared_task, NOT @app.task (shared_task is the Django convention)
+    - Test the expiry function directly — do NOT test Celery Beat scheduling
+    - Use freezegun or manual timezone mocking to control time in tests
+    - Do NOT modify the claim action in views.py — it already sets claim_expires_at
+    - The periodic task must be idempotent (safe to run multiple times)
+  references:
+    - src/vtaskforge/celery.py
+    - src/core/tasks.py
+    - src/tasks/views.py (claim action, lines 93-195)
+    - src/tasks/state_machine.py
+    - src/vtaskforge/settings/base.py
+
+acceptance_criteria:
+  - "src/tasks/celery_tasks.py exists with expire_stale_claims shared_task"
+  - "CELERY_BEAT_SCHEDULE in settings/base.py registers the task at 60-second interval"
+  - "pytest tests/tasks/test_claim_expiry.py passes"
+  - "pytest tests/ passes (full suite, no regressions)"
+  - "Expired doing tasks move to needs_attention with claim fields cleared"
+  - "A claim_expired TaskEvent is created for each expired task"
+
+behavioral_spec:
+  id: bs-2.2
+  priority: high
+  behaviors:
+    - "expire_stale_claims() moves doing tasks with claim_expires_at < now to needs_attention"
+    - "expire_stale_claims() clears claimed_by, claimed_at, and claim_expires_at on expired tasks"
+    - "expire_stale_claims() creates a TaskEvent with event_type=claim_expired for each expired task"
+    - "expire_stale_claims() returns the count of expired tasks"
+    - "expire_stale_claims() does not affect doing tasks with future claim_expires_at"
+    - "expire_stale_claims() does not affect tasks in other statuses"
+    - "CELERY_BEAT_SCHEDULE contains expire-stale-claims entry with 60-second schedule"
+
+test_command: "pytest tests/tasks/test_claim_expiry.py"
