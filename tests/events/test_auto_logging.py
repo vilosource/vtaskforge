@@ -150,6 +150,25 @@ class TestUnclaimAutoLogging:
         event = TaskEvent.objects.get(task=task, event_type="unclaimed")
         assert event.data["agent_id"] == "agent-99"
 
+    def test_unclaim_also_creates_status_changed_event(self, api_client, task):
+        """Unclaim produces both status_changed (from state machine) and unclaimed events."""
+        task.status = "doing"
+        task.claimed_by = "agent-1"
+        task.save(update_fields=["status", "claimed_by", "updated_at"])
+        api_client.post(f"/v1/tasks/{task.id}/unclaim/")
+        assert TaskEvent.objects.filter(task=task, event_type="status_changed").count() == 1
+        assert TaskEvent.objects.filter(task=task, event_type="unclaimed").count() == 1
+
+    def test_unclaim_status_changed_event_has_correct_from_to(self, api_client, task):
+        """The status_changed event from unclaim should reflect doing -> todo."""
+        task.status = "doing"
+        task.claimed_by = "agent-1"
+        task.save(update_fields=["status", "claimed_by", "updated_at"])
+        api_client.post(f"/v1/tasks/{task.id}/unclaim/")
+        event = TaskEvent.objects.get(task=task, event_type="status_changed")
+        assert event.data["from"] == "doing"
+        assert event.data["to"] == "todo"
+
     def test_unclaim_invalid_status_no_event(self, api_client, task):
         """Unclaiming a task not in 'doing' should fail and create no event."""
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")

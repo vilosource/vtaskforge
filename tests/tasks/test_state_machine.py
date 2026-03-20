@@ -82,6 +82,7 @@ class TestGetValidTransitions:
     def test_doing_transitions(self):
         result = get_valid_transitions("doing")
         assert set(result) == {
+            "todo",
             "pending_completion_review", "done", "needs_attention",
             "blocked", "cancelled", "deferred",
         }
@@ -174,6 +175,10 @@ class TestValidateTransition:
     def test_todo_to_deferred(self):
         task = make_task("todo")
         validate_transition(task, "deferred")
+
+    def test_doing_to_todo(self):
+        task = make_task("doing")
+        validate_transition(task, "todo")  # unclaim path
 
     def test_doing_to_pending_completion_review(self):
         task = make_task("doing")

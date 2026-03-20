@@ -28,6 +28,7 @@ VALID_TRANSITIONS = {
         "deferred",
     ],
     "doing": [
+        "todo",                       # unclaimed / released back to queue
         "pending_completion_review",  # needs_review_on_completion = true
         "done",                       # needs_review_on_completion = false
         "needs_attention",            # agent gave up

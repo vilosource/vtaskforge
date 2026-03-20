@@ -14,7 +14,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskSerializer
-from .state_machine import perform_transition
+from .state_machine import get_valid_transitions, perform_transition
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
 
@@ -239,20 +239,24 @@ class TaskViewSet(ModelViewSet):
     def unclaim(self, request, pk=None):
         """doing -> todo. Clears claim fields.
 
-        This is an administrative release action that directly sets status to todo
-        and clears claim fields. Only valid when the task is in 'doing' status.
+        Uses the state machine for the status transition, then creates a
+        separate 'unclaimed' event. Produces both status_changed and unclaimed events.
+        Only valid when the task is in 'doing' status.
         """
         task = self.get_object()
+        previous_agent = task.claimed_by
         if task.status != "doing":
-            exc = InvalidTransition(task.status, "todo", [])
+            exc = InvalidTransition(task.status, "todo", get_valid_transitions(task.status))
+            return invalid_transition_response(exc)
+        try:
+            perform_transition(task, "todo", triggered_by=previous_agent or "unclaim")
+        except InvalidTransition as exc:
             return invalid_transition_response(exc)
 
-        previous_agent = task.claimed_by
-        task.status = "todo"
         task.claimed_by = None
         task.claimed_at = None
         task.claim_expires_at = None
-        task.save(update_fields=["status", "claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
+        task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
 
         try:
             from events.models import TaskEvent
