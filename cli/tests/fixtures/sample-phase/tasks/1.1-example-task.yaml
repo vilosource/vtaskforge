@@ -1,0 +1,10 @@
+id: "1.1"
+name: "Example task"
+depends_on: []
+
+description: |
+  This is the first example task with no dependencies.
+
+acceptance_criteria:
+  - "The task completes successfully"
+  - "Output is produced"

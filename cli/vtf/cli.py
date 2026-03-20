@@ -4,6 +4,7 @@ from vtf.config import Config
 from vtf.commands.workplan import workplan
 from vtf.commands.task import task
 from vtf.commands.agent import agent
+from vtf.commands.import_cmd import import_cmd
 
 
 def get_client():
@@ -62,3 +63,4 @@ def config_show():
 cli.add_command(workplan)
 cli.add_command(task)
 cli.add_command(agent)
+cli.add_command(import_cmd, "import")

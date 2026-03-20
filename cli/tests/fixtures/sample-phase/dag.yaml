@@ -1,0 +1,7 @@
+tasks:
+  - id: "1.1"
+    name: "Example task"
+    depends_on: []
+  - id: "1.2"
+    name: "Another task"
+    depends_on: ["1.1"]
