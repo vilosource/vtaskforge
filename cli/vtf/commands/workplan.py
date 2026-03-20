@@ -37,7 +37,8 @@ def list_workplans(ctx, status):
     if status:
         params["status"] = status
     try:
-        results = client.get("/v1/workplans/", params=params)
+        from vtf.client import unwrap_list
+        results = unwrap_list(client.get("/v1/workplans/", params=params))
         if not results:
             click.echo("No workplans found.")
             return

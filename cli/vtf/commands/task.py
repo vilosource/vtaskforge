@@ -1,6 +1,6 @@
 import json
 import click
-from vtf.client import VTFAPIError
+from vtf.client import VTFAPIError, unwrap_list
 
 
 @click.group()
@@ -25,7 +25,7 @@ def list_tasks(ctx, status, workplan, phase):
     if phase:
         params["phase"] = phase
     try:
-        results = client.get("/v1/tasks/", params=params if params else None)
+        results = unwrap_list(client.get("/v1/tasks/", params=params if params else None))
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
@@ -129,11 +129,10 @@ def events(ctx, id):
     """Display event timeline for a task."""
     client = ctx.obj["client"]
     try:
-        data = client.get(f"/v1/tasks/{id}/events/")
+        results = unwrap_list(client.get(f"/v1/tasks/{id}/events/"))
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    results = data.get("results", data) if isinstance(data, dict) else data
     if not results:
         click.echo("No events found.")
         return
@@ -149,7 +148,7 @@ def claimable(ctx, tags):
     client = ctx.obj["client"]
     params = {"tags": tags} if tags else None
     try:
-        results = client.get("/v1/tasks/claimable/", params=params)
+        results = unwrap_list(client.get("/v1/tasks/claimable/", params=params))
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)

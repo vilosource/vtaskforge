@@ -42,7 +42,8 @@ def list_agents(ctx, status):
     client = ctx.obj["client"]
     params = {"status": status} if status else None
     try:
-        results = client.get("/v1/agents/", params=params)
+        from vtf.client import unwrap_list
+        results = unwrap_list(client.get("/v1/agents/", params=params))
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)

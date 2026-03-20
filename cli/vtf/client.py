@@ -48,5 +48,19 @@ class VTFClient:
     def delete(self, path):
         return self._request("DELETE", path)
 
+    def get_list(self, path, params=None):
+        """GET a list endpoint, handling both paginated and flat responses."""
+        data = self.get(path, params=params)
+        return unwrap_list(data)
+
     def health(self):
         return self.get("/v1/health")
+
+
+def unwrap_list(data):
+    """Extract list from paginated or flat response."""
+    if isinstance(data, dict) and "results" in data:
+        return data["results"]
+    if isinstance(data, list):
+        return data
+    return []
