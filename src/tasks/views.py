@@ -15,7 +15,7 @@ from workplans.models import Phase
 from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
-from .serializers import NoteSerializer, TaskSerializer
+from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
 from .state_machine import get_valid_transitions, perform_transition
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
@@ -44,13 +44,27 @@ class TaskViewSet(ModelViewSet):
     serializer_class = TaskSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
+    def get_serializer_class(self):
+        """Use TaskDetailSerializer on retrieve when ?expand= is present."""
+        if self.action == "retrieve" and self.request.query_params.get("expand"):
+            return TaskDetailSerializer
+        return TaskSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        expand_param = self.request.query_params.get("expand", "")
+        expand = [f.strip() for f in expand_param.split(",") if f.strip()]
+        context["expand"] = expand
+        return context
+
     def get_queryset(self):
         qs = Task.objects.select_related("phase", "workplan").all()
         params = self.request.query_params
 
         task_status = params.get("status")
         if task_status:
-            qs = qs.filter(status=task_status)
+            statuses = [s.strip() for s in task_status.split(",") if s.strip()]
+            qs = qs.filter(status__in=statuses)
 
         phase = params.get("phase")
         if phase:

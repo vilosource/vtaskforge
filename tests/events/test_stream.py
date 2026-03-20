@@ -310,3 +310,20 @@ class TestStreamAuthentication:
     def test_auth_required_returns_401(self, unauthenticated_client):
         response = unauthenticated_client.get("/v1/events/stream/")
         assert response.status_code == 401
+
+    def test_session_auth_can_access_stream(self, db):
+        """Session (cookie) auth should be accepted by the SSE endpoint."""
+        user = User.objects.create_user(username="sseuser", password="ssepass")
+        client = APIClient()
+        client.login(username="sseuser", password="ssepass")
+        response = client.get("/v1/events/stream/")
+        assert response.status_code == 200
+        assert "text/event-stream" in response.get("Content-Type", "")
+
+    def test_token_auth_still_works_on_stream(self, auth_user):
+        """Token auth should remain functional alongside session auth."""
+        _, token = auth_user
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = client.get("/v1/events/stream/")
+        assert response.status_code == 200

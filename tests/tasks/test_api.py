@@ -2,10 +2,13 @@
 Tests for Task CRUD API endpoints.
 """
 import pytest
+from django.contrib.auth.models import User
 from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.test import APIClient
 
 from tasks.models import Task
-from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import LinkFactory, PhaseFactory, ReviewFactory, TaskEventFactory, TaskFactory, WorkplanFactory
 from workplans.models import Phase
 
 
@@ -339,3 +342,154 @@ class TestPhaseTasksNested:
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["id"] == task.id
+
+
+# ---------------------------------------------------------------------------
+# Session authentication
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestSessionAuthentication:
+    """Verify that session-based (cookie) auth works alongside token auth."""
+
+    def test_session_auth_can_access_task_list(self, db):
+        user = User.objects.create_user(username="sessionuser", password="sessionpass")
+        client = APIClient()
+        # Log in via Django session
+        client.login(username="sessionuser", password="sessionpass")
+        # Must enforce CSRF for session auth; use enforce_csrf_checks=False in test client
+        response = client.get("/v1/tasks/")
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_unauthenticated_returns_401(self, db):
+        client = APIClient()
+        response = client.get("/v1/tasks/")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_token_auth_still_works(self, db):
+        user = User.objects.create_user(username="tokenuser2", password="pass")
+        token = Token.objects.create(user=user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = client.get("/v1/tasks/")
+        assert response.status_code == status.HTTP_200_OK
+
+
+# ---------------------------------------------------------------------------
+# Expand parameter: GET /v1/tasks/:id?expand=links,reviews,events
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestTaskDetailExpand:
+    """Verify ?expand= parameter on retrieve endpoint."""
+
+    def test_no_expand_returns_null_fields(self, api_client, task):
+        response = api_client.get(f"/v1/tasks/{task.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        # Without expand, extra fields are NOT present (uses TaskSerializer)
+        assert "links" not in response.data
+        assert "reviews" not in response.data
+        assert "events" not in response.data
+
+    def test_expand_links_returns_list(self, api_client, task):
+        LinkFactory(source_type="task", source_id=task.id, link_type="relates_to")
+        response = api_client.get(f"/v1/tasks/{task.id}/?expand=links")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["links"] is not None
+        assert isinstance(response.data["links"], list)
+        assert len(response.data["links"]) == 1
+
+    def test_expand_reviews_returns_list(self, api_client, task):
+        ReviewFactory(task=task)
+        response = api_client.get(f"/v1/tasks/{task.id}/?expand=reviews")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["reviews"] is not None
+        assert isinstance(response.data["reviews"], list)
+        assert len(response.data["reviews"]) == 1
+
+    def test_expand_events_returns_list(self, api_client, task):
+        TaskEventFactory(task=task, event_type="status_changed", data={})
+        response = api_client.get(f"/v1/tasks/{task.id}/?expand=events")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["events"] is not None
+        assert isinstance(response.data["events"], list)
+        assert len(response.data["events"]) == 1
+
+    def test_expand_all_three(self, api_client, task):
+        LinkFactory(source_type="task", source_id=task.id, link_type="relates_to")
+        ReviewFactory(task=task)
+        TaskEventFactory(task=task, event_type="claimed", data={})
+        response = api_client.get(f"/v1/tasks/{task.id}/?expand=links,reviews,events")
+        assert response.status_code == status.HTTP_200_OK
+        assert isinstance(response.data["links"], list)
+        assert isinstance(response.data["reviews"], list)
+        assert isinstance(response.data["events"], list)
+
+    def test_expand_non_requested_field_is_null(self, api_client, task):
+        """When only links is expanded, reviews and events must be None."""
+        response = api_client.get(f"/v1/tasks/{task.id}/?expand=links")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["reviews"] is None
+        assert response.data["events"] is None
+
+    def test_expand_only_on_detail_not_list(self, api_client, task):
+        """The list endpoint should not include expand fields."""
+        response = api_client.get("/v1/tasks/?expand=links,reviews,events")
+        assert response.status_code == status.HTTP_200_OK
+        result = response.data["results"][0]
+        assert "links" not in result
+        assert "reviews" not in result
+        assert "events" not in result
+
+    def test_expand_empty_relations_return_empty_list(self, api_client, task):
+        """Expanded fields with no related objects return [] not None."""
+        response = api_client.get(f"/v1/tasks/{task.id}/?expand=links,reviews,events")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["links"] == []
+        assert response.data["reviews"] == []
+        assert response.data["events"] == []
+
+
+# ---------------------------------------------------------------------------
+# Multi-status filter: ?status=doing,blocked
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestMultiStatusFilter:
+    """Verify comma-separated ?status= filter."""
+
+    def test_single_status_filter_works(self, api_client, phase, workplan):
+        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        response = api_client.get("/v1/tasks/?status=doing")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["status"] == "doing"
+
+    def test_multi_status_filter_returns_all_matching(self, api_client, phase, workplan):
+        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Blocked Task", phase=phase, workplan=workplan, status="blocked")
+        response = api_client.get("/v1/tasks/?status=doing,blocked")
+        assert response.status_code == status.HTTP_200_OK
+        statuses = {t["status"] for t in response.data["results"]}
+        assert statuses == {"doing", "blocked"}
+        assert len(response.data["results"]) == 2
+
+    def test_multi_status_excludes_non_matching(self, api_client, phase, workplan):
+        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        response = api_client.get("/v1/tasks/?status=doing,blocked")
+        assert response.status_code == status.HTTP_200_OK
+        assert all(t["status"] != "draft" for t in response.data["results"])
+
+    def test_multi_status_three_values(self, api_client, phase, workplan):
+        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Blocked Task", phase=phase, workplan=workplan, status="blocked")
+        TaskFactory(title="Done Task", phase=phase, workplan=workplan, status="done")
+        response = api_client.get("/v1/tasks/?status=draft,doing,blocked")
+        assert response.status_code == status.HTTP_200_OK
+        statuses = {t["status"] for t in response.data["results"]}
+        assert "done" not in statuses
+        assert len(response.data["results"]) == 3
