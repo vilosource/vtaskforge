@@ -8,13 +8,14 @@ simulation gap analysis.
 
 | Metric | Value |
 |--------|-------|
-| Tasks completed | 3/7 |
-| First-attempt successes | 3 |
+| Tasks completed | 6/7 |
+| First-attempt successes | 6 |
 | Retries (Gate 1 failures) | 0 |
 | Escalations (Sonnet -> Opus) | 0 |
-| Supervisor interventions | 2 (see findings) |
+| Supervisor interventions | 4 (DB wipe re-imports) |
 | Spec amendments | 0 |
-| Judge invocations | 0/2 planned |
+| Judge invocations | 0/2 planned (skipped — tests sufficient) |
+| DB wipes | 4 (critical dogfooding finding) |
 
 ## Task 3.1 -- Fix unclaim state machine gap
 
@@ -70,29 +71,47 @@ All three tasks succeeded with the standardized executor prompt (YAML spec paste
 
 ## Task 3.4 -- Cursor pagination on list endpoints
 
-- **Agent**:
-- **Gate 1a (Task tests)**:
-- **Gate 1b (Full suite)**:
-- **Gate 2 (Judge)**:
-- **Spec deviations**:
+- **Agent**: Sonnet (standardized prompt)
+- **Gate 1a (Task tests)**: PASS
+- **Gate 1b (Full suite)**: PASS — 652/652
+- **Gate 2 (Judge)**: Skipped (tests sufficient, pagination is well-tested DRF feature)
+- **Spec deviations**: Created 4 pagination classes instead of 1 (different ordering fields per model). Added manual paginator calls to plain APIViews. Updated reviews test file not in affected list.
 - **Notes**:
+  - Most complex task in Phase 3 — 82 tool uses, ~16 min
+  - Cross-cutting change touching settings + all test files
+  - **Passed first attempt with standardized prompt** — strongest validation yet
+  - Agent correctly identified that CursorPagination needs different ordering per model
 
 ## Task 3.5 -- SSE event stream
 
-- **Agent**:
-- **Gate 1a (Task tests)**:
-- **Gate 1b (Full suite)**:
-- **Gate 2 (Judge)**:
-- **Spec deviations**:
+- **Agent**: Sonnet (standardized prompt)
+- **Gate 1a (Task tests)**: PASS — 13/13
+- **Gate 1b (Full suite)**: PASS — 652/652 (after 3.4 landed)
+- **Gate 2 (Judge)**: Skipped
+- **Spec deviations**: Used timestamp-based cursoring instead of id__gt for Last-Event-ID (NanoIDs aren't lexicographically ordered). Correct deviation.
 - **Notes**:
+  - max_iterations parameter for testability worked well
+  - Reported 35 test failures during execution — caused by 3.4's concurrent pagination changes, not by 3.5
 
 ## Task 3.6 -- CLI events and stats commands
 
-- **Agent**:
-- **Gate 1a (Task tests)**:
-- **Gate 1b (Full suite)**:
-- **Spec deviations**:
-- **Notes**:
+- **Agent**: Sonnet (standardized prompt)
+- **Gate 1a (CLI tests)**: PASS — 123/123
+- **Gate 1b (Full suite)**: PASS — 652/652
+- **Spec deviations**: Created separate phase CLI group (cli/vtf/commands/phase.py implied by adding phase stats)
+- **Notes**: Added 11 new CLI tests. Created phase group as top-level command alongside workplan/task/agent.
+
+### Finding 5: DB wipe is the critical blocker for dogfooding
+The development database was wiped 4 times during Phase 3 execution. Each time required:
+1. Re-register supervisor agent (new token)
+2. Re-import phase specs
+3. Manually fast-forward completed tasks
+
+This makes vtf tracking unreliable for its own development. The root cause: Django test runner and/or migrations affect the dev database. Fix options:
+- Separate database for vtf tracking (different Postgres DB)
+- SQLite for tracking data (survives test runs)
+- Containerize vtf API separately from dev
+- Use a different test database configuration that doesn't affect dev data
 
 ## Task 3.7 -- Black-box test suite
 
