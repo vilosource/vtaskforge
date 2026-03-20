@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('v1/health', HealthCheckView.as_view(), name='health-check'),
     path('v1/', include('workplans.urls')),
+    path('v1/', include('agents.urls')),
 ]
 
 handler404 = custom_404
