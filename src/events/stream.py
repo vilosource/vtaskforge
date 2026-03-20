@@ -1,9 +1,9 @@
 import json
 import time
 
-from django.http import StreamingHttpResponse
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from django.http import JsonResponse, StreamingHttpResponse
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 
 from .models import TaskEvent
 
@@ -76,10 +76,33 @@ def event_stream(request, max_iterations=None):
             time.sleep(2)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def stream_events(request):
-    """SSE streaming endpoint: GET /v1/events/stream/"""
+    """SSE streaming endpoint: GET /v1/events/stream/
+
+    Uses a plain Django view (not @api_view) because DRF's content negotiation
+    rejects Accept: text/event-stream. Auth is checked manually.
+    """
+    # Manual auth check — support Token auth, Session auth, and Django login
+    user = None
+
+    # Check Django session first (set by login middleware / test client force_login)
+    if hasattr(request, 'user') and request.user.is_authenticated:
+        user = request.user
+
+    # Fall back to DRF authentication classes
+    if user is None:
+        for auth_class in [TokenAuthentication(), SessionAuthentication()]:
+            try:
+                result = auth_class.authenticate(request)
+                if result is not None:
+                    user = result[0]
+                    break
+            except (AuthenticationFailed, Exception):
+                continue
+
+    if user is None:
+        return JsonResponse({"detail": "Authentication credentials were not provided."}, status=401)
+
     response = StreamingHttpResponse(
         event_stream(request),
         content_type="text/event-stream",
