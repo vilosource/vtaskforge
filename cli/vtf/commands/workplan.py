@@ -95,3 +95,43 @@ def complete(ctx, id):
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
+
+
+@workplan.command()
+@click.argument("id")
+@click.pass_context
+def stats(ctx, id):
+    """Display workplan progress stats."""
+    client = ctx.obj["client"]
+    try:
+        data = client.get(f"/v1/workplans/{id}/stats/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Total tasks: {data['total_tasks']}")
+    click.echo(f"Completed: {data['completed_percentage']}%")
+    for status, count in data.get("by_status", {}).items():
+        click.echo(f"  {status}: {count}")
+
+
+@click.group()
+def phase():
+    """Manage phases."""
+    pass
+
+
+@phase.command()
+@click.argument("id")
+@click.pass_context
+def stats(ctx, id):
+    """Display phase progress stats."""
+    client = ctx.obj["client"]
+    try:
+        data = client.get(f"/v1/phases/{id}/stats/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Total tasks: {data['total_tasks']}")
+    click.echo(f"Completed: {data['completed_percentage']}%")
+    for status, count in data.get("by_status", {}).items():
+        click.echo(f"  {status}: {count}")

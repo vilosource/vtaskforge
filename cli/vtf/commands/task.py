@@ -1,3 +1,4 @@
+import json
 import click
 from vtf.client import VTFAPIError
 
@@ -119,6 +120,25 @@ def fail(ctx, id):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Failed task {id} -> {result['status']}")
+
+
+@task.command()
+@click.argument("id")
+@click.pass_context
+def events(ctx, id):
+    """Display event timeline for a task."""
+    client = ctx.obj["client"]
+    try:
+        data = client.get(f"/v1/tasks/{id}/events/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    results = data.get("results", data) if isinstance(data, dict) else data
+    if not results:
+        click.echo("No events found.")
+        return
+    for event in results:
+        click.echo(f"  {event['event_type']:20s} | {event.get('triggered_by', ''):15s} | {json.dumps(event.get('data', {}))}")
 
 
 @task.command()

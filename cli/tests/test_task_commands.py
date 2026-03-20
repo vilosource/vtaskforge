@@ -285,6 +285,50 @@ def test_task_claimable_api_error(runner, mock_client):
     assert result.exit_code == 1
 
 
+# --- events ---
+
+def test_task_events_success(runner, mock_client):
+    mock_client.get.return_value = {
+        "results": [
+            {"event_type": "created", "triggered_by": "agent-1", "data": {"note": "init"}},
+            {"event_type": "status_changed", "triggered_by": "system", "data": {"from": "todo", "to": "doing"}},
+        ]
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "events", "task-abc"])
+    assert result.exit_code == 0
+    assert "created" in result.output
+    assert "agent-1" in result.output
+    assert "status_changed" in result.output
+    mock_client.get.assert_called_once_with("/v1/tasks/task-abc/events/")
+
+
+def test_task_events_paginated_list(runner, mock_client):
+    mock_client.get.return_value = [
+        {"event_type": "created", "triggered_by": "agent-1", "data": {}},
+    ]
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "events", "task-abc"])
+    assert result.exit_code == 0
+    assert "created" in result.output
+
+
+def test_task_events_empty(runner, mock_client):
+    mock_client.get.return_value = {"results": []}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "events", "task-abc"])
+    assert result.exit_code == 0
+    assert "No events found" in result.output
+
+
+def test_task_events_api_error(runner, mock_client):
+    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "events", "nonexistent"])
+    assert result.exit_code == 1
+    assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))
+
+
 # --- help ---
 
 def test_task_help(runner):
