@@ -1,6 +1,11 @@
 import json
 import time
 
+try:
+    from gevent import sleep as _sleep
+except ImportError:
+    _sleep = time.sleep
+
 from django.http import JsonResponse, StreamingHttpResponse
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -73,7 +78,7 @@ def event_stream(request, max_iterations=None):
         iteration += 1
 
         if max_iterations is None or iteration < max_iterations:
-            time.sleep(2)
+            _sleep(2)
 
 
 def stream_events(request):
