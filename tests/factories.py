@@ -25,6 +25,7 @@ class WorkplanFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Workplan
 
+    project = factory.SubFactory(ProjectFactory)
     name = factory.Sequence(lambda n: f"Workplan {n}")
     status = "active"
 

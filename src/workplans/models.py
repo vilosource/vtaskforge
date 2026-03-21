@@ -10,6 +10,11 @@ class Workplan(NanoIDMixin, TimestampMixin):
         ("archived", "Archived"),
     ]
 
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="workplans",
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     status = models.CharField(

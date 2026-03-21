@@ -1,8 +1,13 @@
 import pytest
 from rest_framework import status
 
-from tests.factories import MilestoneFactory, TaskFactory, WorkplanFactory
+from tests.factories import MilestoneFactory, ProjectFactory, TaskFactory, WorkplanFactory
 from workplans.models import Workplan
+
+
+@pytest.fixture
+def project(db):
+    return ProjectFactory(name="Test Project", description="A test project")
 
 
 @pytest.fixture
@@ -41,24 +46,25 @@ class TestWorkplanList:
 
 @pytest.mark.django_db
 class TestWorkplanCreate:
-    def test_create_returns_201(self, api_client):
-        payload = {"name": "New Workplan"}
+    def test_create_returns_201(self, api_client, project):
+        payload = {"project": project.id, "name": "New Workplan"}
         response = api_client.post("/v1/workplans/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
 
-    def test_create_sets_default_status(self, api_client):
-        payload = {"name": "New Workplan"}
+    def test_create_sets_default_status(self, api_client, project):
+        payload = {"project": project.id, "name": "New Workplan"}
         response = api_client.post("/v1/workplans/", payload, format="json")
         assert response.data["status"] == "active"
 
-    def test_create_returns_id(self, api_client):
-        payload = {"name": "New Workplan"}
+    def test_create_returns_id(self, api_client, project):
+        payload = {"project": project.id, "name": "New Workplan"}
         response = api_client.post("/v1/workplans/", payload, format="json")
         assert "id" in response.data
         assert len(response.data["id"]) == 21
 
-    def test_create_with_all_fields(self, api_client):
+    def test_create_with_all_fields(self, api_client, project):
         payload = {
+            "project": project.id,
             "name": "Full Workplan",
             "description": "A full workplan",
             "status": "active",
@@ -74,17 +80,17 @@ class TestWorkplanCreate:
         assert response.data["tags"] == ["backend", "api"]
         assert response.data["created_by"] == "bob"
 
-    def test_create_without_name_returns_400(self, api_client):
-        response = api_client.post("/v1/workplans/", {}, format="json")
+    def test_create_without_name_returns_400(self, api_client, project):
+        response = api_client.post("/v1/workplans/", {"project": project.id}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_create_persists_to_db(self, api_client):
-        payload = {"name": "Persistent Workplan"}
+    def test_create_persists_to_db(self, api_client, project):
+        payload = {"project": project.id, "name": "Persistent Workplan"}
         response = api_client.post("/v1/workplans/", payload, format="json")
         assert Workplan.objects.filter(id=response.data["id"]).exists()
 
-    def test_create_id_is_read_only(self, api_client):
-        payload = {"name": "Test", "id": "custom-id-12345678901"}
+    def test_create_id_is_read_only(self, api_client, project):
+        payload = {"project": project.id, "name": "Test", "id": "custom-id-12345678901"}
         response = api_client.post("/v1/workplans/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["id"] != "custom-id-12345678901"
@@ -105,7 +111,7 @@ class TestWorkplanRetrieve:
     def test_retrieve_returns_all_fields(self, api_client, workplan):
         response = api_client.get(f"/v1/workplans/{workplan.id}/")
         expected_fields = [
-            "id", "name", "description", "status", "owner", "tags",
+            "id", "project", "name", "description", "status", "owner", "tags",
             "target_date", "default_needs_review_before_start",
             "default_needs_review_on_completion", "created_by",
             "created_at", "updated_at",

@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from links.models import Link
+from projects.models import Project
 from tasks.models import Task
 from workplans.models import Milestone, Workplan
 
@@ -35,7 +36,24 @@ def perform_bulk_import(payload):
                 raise ValueError(f"Duplicate ref: {ref}")
             seen.add(ref)
 
-        # 2. Create or use existing workplan
+        # 2. Get or create project
+        project_id = payload.get("project_id")
+        if not project_id:
+            project_data = payload.get("project")
+            if not project_data or not project_data.get("name"):
+                raise ValueError("project_id or project.name is required")
+            project = Project.objects.create(
+                name=project_data["name"],
+                description=project_data.get("description", ""),
+                tags=project_data.get("tags", []),
+            )
+        else:
+            try:
+                project = Project.objects.get(pk=project_id)
+            except Project.DoesNotExist:
+                raise ValueError(f"Project not found: {project_id}")
+
+        # 3. Create or use existing workplan
         workplan_id = payload.get("workplan_id")
         if workplan_id:
             try:
@@ -47,6 +65,7 @@ def perform_bulk_import(payload):
             if not wp_data.get("name"):
                 raise ValueError("workplan.name is required when workplan_id is not provided")
             workplan = Workplan.objects.create(
+                project=project,
                 name=wp_data["name"],
                 description=wp_data.get("description", ""),
                 tags=wp_data.get("tags", []),
@@ -54,7 +73,7 @@ def perform_bulk_import(payload):
         ref_map["workplan"] = workplan.id
         ref_type_map["workplan"] = "workplan"
 
-        # 3. Create milestones and their nested tasks
+        # 4. Create milestones and their nested tasks
         for milestone_data in payload.get("milestones", []):
             ref = milestone_data["ref"]
             milestone = Milestone.objects.create(
@@ -83,7 +102,7 @@ def perform_bulk_import(payload):
                 ref_map[task_ref] = task.id
                 ref_type_map[task_ref] = "task"
 
-        # 4. Validate all link refs resolve before creating anything
+        # 5. Validate all link refs resolve before creating anything
         for link_data in payload.get("links", []):
             source_ref = link_data["source_ref"]
             target_ref = link_data["target_ref"]
@@ -92,7 +111,7 @@ def perform_bulk_import(payload):
             if target_ref not in ref_map:
                 raise ValueError(f"Unresolved target_ref: {target_ref}")
 
-        # 5. Create links
+        # 6. Create links
         for link_data in payload.get("links", []):
             source_ref = link_data["source_ref"]
             target_ref = link_data["target_ref"]

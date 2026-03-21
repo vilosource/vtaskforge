@@ -8,6 +8,7 @@ class WorkplanSerializer(serializers.ModelSerializer):
         model = Workplan
         fields = [
             "id",
+            "project",
             "name",
             "description",
             "status",

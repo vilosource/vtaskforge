@@ -18,6 +18,7 @@ BULK_IMPORT_URL = "/v1/bulk/import"
 def minimal_payload(**kwargs):
     """Return a minimal valid payload, optionally overriding top-level keys."""
     base = {
+        "project": {"name": "Test Project", "description": "A test project", "tags": ["test"]},
         "workplan": {"name": "Test Workplan", "description": "desc", "tags": ["test"]},
         "milestones": [],
         "links": [],
@@ -74,6 +75,7 @@ def test_bulk_import_workplan_created_in_db(api_client):
 @pytest.mark.django_db
 def test_bulk_import_full_payload(api_client):
     payload = {
+        "project": {"name": "Auth Project", "description": "Authentication project", "tags": ["auth"]},
         "workplan": {"name": "Auth rewrite", "description": "Big project", "tags": ["backend"]},
         "milestones": [
             {

@@ -17,6 +17,13 @@ class WorkplanViewSet(ModelViewSet):
     serializer_class = WorkplanSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+
     def update(self, request, *args, **kwargs):
         # Disable full PUT — PATCH only
         if not kwargs.get("partial", False):

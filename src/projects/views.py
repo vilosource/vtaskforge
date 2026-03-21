@@ -92,9 +92,8 @@ class ProjectWorkplansView(APIView):
         if project is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # For now, since Workplan.project FK doesn't exist yet (comes in task 9.2),
-        # we'll return empty results. This endpoint will work once that FK is added.
-        workplans = Workplan.objects.none()
+        # Filter workplans by the project from the URL
+        workplans = Workplan.objects.filter(project=project)
 
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(workplans, request)
