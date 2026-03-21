@@ -14,12 +14,12 @@ export function BoardView() {
 
   return (
     <div>
-      <div style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Link to={`/workplans/${id}`} style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>
-          &larr; {workplan?.name ?? 'Back'}
+      <div style={{ padding: '12px 24px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Link to={`/workplans/${id}`} style={{ color: 'var(--color-text-secondary)', textDecoration: 'none', fontSize: 14 }}>
+          {workplan?.name ?? 'Back'}
         </Link>
         {phase && (
-          <span style={{ color: '#333', fontSize: 14, fontWeight: 600 }}>
+          <span style={{ color: 'var(--color-text)', fontSize: 14 }}>
             / {phase.name}
           </span>
         )}

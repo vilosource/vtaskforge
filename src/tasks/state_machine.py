@@ -95,4 +95,12 @@ def perform_transition(task, new_status: str, triggered_by: str = ""):
         )
     except Exception:
         pass  # don't break transitions if event creation fails
+
+    if new_status in TERMINAL_STATUSES:
+        try:
+            from workplans.completion import maybe_complete_phase
+            maybe_complete_phase(task)
+        except Exception:
+            pass  # don't break transitions if phase completion fails
+
     return task

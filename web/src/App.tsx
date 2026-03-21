@@ -1,10 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { WorkplanList } from './pages/WorkplanList';
 import { WorkplanDetail } from './pages/WorkplanDetail';
 import { BoardView } from './pages/BoardView';
 import { TaskPage } from './pages/TaskPage';
+import { Sidebar } from './components/Sidebar';
 import Login from './pages/Login';
 
 const queryClient = new QueryClient();
@@ -61,6 +62,19 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AppLayout() {
+  return (
+    <RequireAuth>
+      <div className="app-layout">
+        <Sidebar />
+        <main className="app-main">
+          <Outlet />
+        </main>
+      </div>
+    </RequireAuth>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -68,38 +82,12 @@ export function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route
-              path="/"
-              element={
-                <RequireAuth>
-                  <WorkplanList />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/workplans/:id"
-              element={
-                <RequireAuth>
-                  <WorkplanDetail />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/tasks/:id"
-              element={
-                <RequireAuth>
-                  <TaskPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/workplans/:id/phases/:phaseId"
-              element={
-                <RequireAuth>
-                  <BoardView />
-                </RequireAuth>
-              }
-            />
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<WorkplanList />} />
+              <Route path="/workplans/:id" element={<WorkplanDetail />} />
+              <Route path="/workplans/:id/phases/:phaseId" element={<BoardView />} />
+              <Route path="/tasks/:id" element={<TaskPage />} />
+            </Route>
           </Routes>
         </AuthProvider>
       </BrowserRouter>

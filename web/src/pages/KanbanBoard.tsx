@@ -9,15 +9,14 @@ import { LiveIndicator } from '../components/LiveIndicator';
 import { TaskDetail } from '../components/TaskDetail';
 
 const COLUMNS: ColumnConfig[] = [
-  { id: 'draft', label: 'Draft', statuses: ['draft'], color: 'grey' },
   {
-    id: 'review',
-    label: 'Review',
-    statuses: ['pending_start_review', 'pending_completion_review'],
-    color: 'yellow',
+    id: 'draft',
+    label: 'Draft',
+    statuses: ['draft', 'pending_start_review'],
+    color: 'grey',
   },
   { id: 'ready', label: 'Ready', statuses: ['todo'], color: 'blue' },
-  { id: 'in-progress', label: 'In Progress', statuses: ['doing'], color: 'blue-highlight' },
+  { id: 'in-progress', label: 'In Progress', statuses: ['doing', 'pending_completion_review'], color: 'blue-highlight' },
   {
     id: 'attention',
     label: 'Attention',

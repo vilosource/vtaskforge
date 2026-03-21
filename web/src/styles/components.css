@@ -421,9 +421,7 @@
    ============================================================ */
 
 .workplan-list {
-  max-width: 900px;
-  margin: 2rem auto;
-  padding: 0 1.5rem;
+  padding: 16px 20px;
 }
 
 .workplan-list h1 {

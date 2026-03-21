@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWorkplan } from '../api/tasks';
+import { useWorkplanStats } from '../api/workplans';
 import { usePhases, usePhaseStats, useActivatePhase, useCompletePhase } from '../api/phases';
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
 import { PhasePipeline } from '../components/PhasePipeline';
 
-function PhaseCard({ phase, workplanId }: { phase: { id: string; name: string; status: string }; workplanId: string }) {
+function PhaseCard({ phase, workplanId }: { phase: { id: string; name: string; description: string; status: string }; workplanId: string }) {
   const { data: stats } = usePhaseStats(phase.id);
   const activateMutation = useActivatePhase();
   const completeMutation = useCompletePhase();
@@ -14,94 +15,104 @@ function PhaseCard({ phase, workplanId }: { phase: { id: string; name: string; s
   const done = stats?.by_status?.done ?? 0;
   const pct = stats?.completed_percentage ?? 0;
 
-  const statusColor = phase.status === 'completed' ? '#4caf50'
-    : phase.status === 'active' ? '#1976d2'
-    : '#9e9e9e';
+  const statusColor = phase.status === 'completed' ? 'var(--color-done)'
+    : phase.status === 'active' ? 'var(--color-doing)'
+    : 'var(--color-draft)';
 
   return (
     <Link
       to={`/workplans/${workplanId}/phases/${phase.id}`}
-      style={{
-        display: 'block',
-        padding: '16px 20px',
-        background: 'white',
-        borderRadius: 8,
-        borderLeft: `4px solid ${statusColor}`,
-        textDecoration: 'none',
-        color: 'inherit',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        transition: 'box-shadow 0.2s',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'; }}
+      className="phase-card"
+      style={{ borderLeftColor: statusColor }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 16 }}>{phase.name}</div>
-          <div style={{ color: '#666', fontSize: 13, marginTop: 4 }}>
-            {total} tasks &middot; {done} done
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{
-            display: 'inline-block',
-            padding: '2px 10px',
-            borderRadius: 12,
-            fontSize: 12,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            background: statusColor + '20',
-            color: statusColor,
-          }}>
-            {phase.status}
-          </div>
-          <div style={{ marginTop: 8, width: 120, height: 6, background: '#e0e0e0', borderRadius: 3 }}>
-            <div style={{
-              width: `${pct}%`,
-              height: '100%',
-              background: statusColor,
-              borderRadius: 3,
-              transition: 'width 0.3s',
-            }} />
-          </div>
-          <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{pct}%</div>
-        </div>
+      <div className="phase-card-header">
+        <div className="phase-card-title">{phase.name}</div>
+        <span
+          className={`badge ${
+            phase.status === 'completed' ? 'badge-completed' :
+            phase.status === 'active' ? 'badge-active' :
+            'badge-draft'
+          }`}
+        >
+          {phase.status}
+        </span>
       </div>
-      {phase.status === 'pending' && (
-        <div style={{ marginTop: 8, textAlign: 'right' }}>
+      {phase.description && (
+        <div className="phase-card-desc">{phase.description}</div>
+      )}
+      <div className="phase-card-footer">
+        <span className="phase-card-stats">{total} tasks &middot; {done} done</span>
+        <div className="phase-card-progress">
+          <div className="phase-card-progress-bar">
+            <div className="phase-card-progress-fill" style={{ width: `${pct}%`, background: statusColor }} />
+          </div>
+          <span className="phase-card-progress-text">{pct}%</span>
+        </div>
+        {phase.status === 'pending' && (
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); activateMutation.mutate(phase.id); }}
             disabled={activateMutation.isPending}
-            style={{
-              padding: '4px 12px', border: 'none', borderRadius: 4, cursor: 'pointer',
-              background: '#1976d2', color: 'white', fontSize: 12, fontWeight: 600,
-            }}
+            className="btn btn-primary"
+            style={{ padding: '4px 12px', minHeight: 28, fontSize: 12 }}
           >
             {activateMutation.isPending ? 'Activating...' : 'Activate'}
           </button>
-        </div>
-      )}
-      {phase.status === 'active' && (
-        <div style={{ marginTop: 8, textAlign: 'right' }}>
+        )}
+        {phase.status === 'active' && (
           <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); completeMutation.mutate(phase.id); }}
             disabled={completeMutation.isPending}
-            style={{
-              padding: '4px 12px', border: 'none', borderRadius: 4, cursor: 'pointer',
-              background: '#4caf50', color: 'white', fontSize: 12, fontWeight: 600,
-            }}
+            className="btn btn-success"
+            style={{ padding: '4px 12px', minHeight: 28, fontSize: 12 }}
           >
             {completeMutation.isPending ? 'Completing...' : 'Complete'}
           </button>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function PhaseGroup({ title, phases, workplanId, defaultCollapsed = false }: {
+  title: string;
+  phases: { id: string; name: string; description: string; status: string }[];
+  workplanId: string;
+  defaultCollapsed?: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  if (phases.length === 0) return null;
+
+  return (
+    <div className="phase-group">
+      <button
+        className="phase-group-header"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <svg
+          width="12" height="12" viewBox="0 0 12 12"
+          style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+        >
+          <path d="M3 4.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span className="phase-group-title">{title}</span>
+        <span className="phase-group-count">{phases.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="phase-group-grid">
+          {phases.map((phase) => (
+            <PhaseCard key={phase.id} phase={phase} workplanId={workplanId} />
+          ))}
         </div>
       )}
-    </Link>
+    </div>
   );
 }
 
 export function WorkplanDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: workplan, isLoading: wpLoading } = useWorkplan(id!);
+  const { data: wpStats } = useWorkplanStats(id!);
   const { data: phases, isLoading: phLoading } = usePhases(id!);
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
   const { status: sseStatus } = useSSE({
@@ -110,52 +121,90 @@ export function WorkplanDetail() {
     enabled: !!id,
   });
 
-  if (wpLoading || phLoading) return <div style={{ padding: 40 }}>Loading...</div>;
+  if (wpLoading || phLoading) return <div className="loading">Loading...</div>;
+
+  const activePhases = (phases ?? []).filter((p) => p.status === 'active');
+  const pendingPhases = (phases ?? []).filter((p) => p.status === 'pending');
+  const completedPhases = (phases ?? []).filter((p) => p.status === 'completed');
+
+  const totalTasks = wpStats?.total_tasks ?? 0;
+  const doneTasks = wpStats?.by_status?.done ?? 0;
+  const doingTasks = wpStats?.by_status?.doing ?? 0;
+  const todoTasks = wpStats?.by_status?.todo ?? 0;
+  const overallPct = wpStats?.completed_percentage ?? 0;
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div>
-          <Link to="/" style={{ color: '#666', textDecoration: 'none', fontSize: 14 }}>&larr; Workplans</Link>
-          <h1 style={{ margin: '4px 0 0' }}>{workplan?.name || 'Workplan'}</h1>
-          {workplan?.description && (
-            <p style={{ color: '#666', margin: '4px 0 0' }}>{workplan.description}</p>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="workplan-detail">
+      {/* Project info header */}
+      <div className="workplan-detail-header">
+        <div className="workplan-detail-header-top">
+          <div>
+            <h1 className="workplan-detail-title">{workplan?.name || 'Workplan'}</h1>
+            {workplan?.description && (
+              <p className="workplan-detail-desc">{workplan.description}</p>
+            )}
+          </div>
           <LiveIndicator status={sseStatus} />
-          <span style={{ color: '#888', fontSize: 14 }}>{phases?.length ?? 0} phases</span>
+        </div>
+
+        <div className="workplan-detail-stats">
+          <div className="workplan-stat">
+            <span className="workplan-stat-value">{totalTasks}</span>
+            <span className="workplan-stat-label">Tasks</span>
+          </div>
+          <div className="workplan-stat">
+            <span className="workplan-stat-value">{doneTasks}</span>
+            <span className="workplan-stat-label">Done</span>
+          </div>
+          <div className="workplan-stat">
+            <span className="workplan-stat-value">{doingTasks}</span>
+            <span className="workplan-stat-label">In Progress</span>
+          </div>
+          <div className="workplan-stat">
+            <span className="workplan-stat-value">{todoTasks}</span>
+            <span className="workplan-stat-label">Ready</span>
+          </div>
+          <div className="workplan-stat">
+            <div className="workplan-stat-progress">
+              <div className="workplan-stat-progress-bar">
+                <div className="workplan-stat-progress-fill" style={{ width: `${overallPct}%` }} />
+              </div>
+              <span className="workplan-stat-value">{overallPct}%</span>
+            </div>
+            <span className="workplan-stat-label">Overall</span>
+          </div>
+          {workplan?.tags && workplan.tags.length > 0 && (
+            <div className="workplan-tags">
+              {workplan.tags.map((tag) => (
+                <span key={tag} className="workplan-tag">{tag}</span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* View toggle */}
-      <div style={{ display: 'flex', gap: 4, background: '#f0f0f0', borderRadius: 6, padding: 2, marginBottom: 16, width: 'fit-content' }}>
-        {(['list', 'pipeline'] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            style={{
-              padding: '4px 12px', border: 'none', borderRadius: 4, cursor: 'pointer',
-              background: viewMode === mode ? 'white' : 'transparent',
-              fontWeight: viewMode === mode ? 600 : 400,
-              boxShadow: viewMode === mode ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-              fontSize: 13, textTransform: 'capitalize',
-            }}
-          >
-            {mode}
-          </button>
-        ))}
+      <div className="workplan-detail-toolbar">
+        <div className="workplan-view-toggle">
+          {(['list', 'pipeline'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`workplan-view-toggle-btn ${viewMode === mode ? 'workplan-view-toggle-btn--active' : ''}`}
+            >
+              {mode === 'list' ? 'Phases' : 'Pipeline'}
+            </button>
+          ))}
+        </div>
+        <span className="workplan-phase-count">{phases?.length ?? 0} phases</span>
       </div>
 
+      {/* Phase content */}
       {viewMode === 'list' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {phases && phases.length > 0 ? (
-            phases.map((phase) => (
-              <PhaseCard key={phase.id} phase={phase} workplanId={id!} />
-            ))
-          ) : (
-            <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>No phases yet.</div>
-          )}
+        <div className="workplan-phases">
+          <PhaseGroup title="Active" phases={activePhases} workplanId={id!} />
+          <PhaseGroup title="Pending" phases={pendingPhases} workplanId={id!} />
+          <PhaseGroup title="Completed" phases={completedPhases} workplanId={id!} defaultCollapsed />
         </div>
       ) : (
         <PhasePipeline phases={phases ?? []} workplanId={id!} />
