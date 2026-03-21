@@ -31,7 +31,7 @@ def agent_abc(db):
 def make_task(milestone, workplan, task_status="draft", **kwargs):
     return TaskFactory(
         title="Test Task",
-        milestone=phase,
+        milestone=milestone,
         workplan=workplan,
         status=task_status,
         **kwargs,

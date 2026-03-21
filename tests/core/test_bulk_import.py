@@ -241,7 +241,7 @@ def test_bulk_import_link_phase_to_task(api_client):
     assert response.status_code == 201
     ref_map = response.json()["ref_map"]
     link = Link.objects.get(source_id=ref_map["task-1"])
-    assert link.target_type == "phase"
+    assert link.target_type == "milestone"
     assert link.target_id == ref_map["phase-1"]
 
 

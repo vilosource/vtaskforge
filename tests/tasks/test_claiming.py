@@ -50,7 +50,7 @@ def agent_other(db):
 def make_task(milestone, workplan, task_status="todo", **kwargs):
     kwargs.setdefault("title", "Test Task")
     return TaskFactory(
-        milestone=phase,
+        milestone=milestone,
         workplan=workplan,
         status=task_status,
         **kwargs,

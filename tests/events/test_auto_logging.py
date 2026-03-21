@@ -26,7 +26,7 @@ def milestone(db, workplan):
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return TaskFactory(title="Test Task", milestone=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", milestone=milestone, workplan=workplan)
 
 
 @pytest.fixture

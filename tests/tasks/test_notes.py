@@ -24,7 +24,7 @@ def milestone(db, workplan):
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return TaskFactory(title="Test Task", milestone=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", milestone=milestone, workplan=workplan)
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ class TestNoteList:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_list_only_returns_notes_for_task(self, api_client, phase, workplan, task):
-        other_task = TaskFactory(title="Other Task", milestone=phase, workplan=workplan)
+        other_task = TaskFactory(title="Other Task", milestone=milestone, workplan=workplan)
         NoteFactory(task=task, text="Task note", actor_id="agent-1")
         NoteFactory(task=other_task, text="Other note", actor_id="agent-2")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")

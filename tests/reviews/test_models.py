@@ -25,7 +25,7 @@ def milestone(db, workplan):
 def task(db, phase, workplan):
     return TaskFactory(
         title="Test Task",
-        milestone=phase,
+        milestone=milestone,
         workplan=workplan,
         status="pending_start_review",
     )
