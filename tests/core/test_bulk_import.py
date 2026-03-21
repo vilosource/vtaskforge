@@ -157,7 +157,7 @@ def test_bulk_import_tasks_linked_to_phase_and_workplan(api_client):
     assert response.status_code == 201
     ref_map = response.json()["ref_map"]
     task = Task.objects.get(id=ref_map["task-1"])
-    assert task.phase_id == ref_map["phase-1"]
+    assert task.milestone_id == ref_map["phase-1"]
     assert task.workplan_id == ref_map["workplan"]
 
 

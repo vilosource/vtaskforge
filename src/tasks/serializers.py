@@ -18,7 +18,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "status",
-            "phase",
+            "milestone",
             "workplan",
             "acceptance_criteria",
             "needs_review_before_start",
