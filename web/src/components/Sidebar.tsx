@@ -1,27 +1,27 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useWorkplans, useWorkplanStats, type Workplan } from '../api/workplans';
+import { useProjects, useProjectStats, type Project } from '../api/projects';
 
-function WorkplanItem({ wp, isActive }: { wp: Workplan; isActive: boolean }) {
-  const { data: stats } = useWorkplanStats(wp.id);
+function ProjectItem({ project, isActive }: { project: Project; isActive: boolean }) {
+  const { data: stats } = useProjectStats(project.id);
   const pct = stats?.completed_percentage ?? 0;
 
   const statusDotColor =
-    wp.status === 'completed' ? 'var(--color-done)' :
-    wp.status === 'active' ? 'var(--color-doing)' :
-    wp.status === 'archived' ? 'var(--color-draft)' :
+    project.status === 'completed' ? 'var(--color-done)' :
+    project.status === 'active' ? 'var(--color-doing)' :
+    project.status === 'archived' ? 'var(--color-draft)' :
     'var(--color-draft)';
 
   return (
     <Link
-      to={`/workplans/${wp.id}`}
+      to={`/projects/${project.id}`}
       className={`sidebar-wp-item ${isActive ? 'sidebar-wp-item--active' : ''}`}
     >
       <span
         className="sidebar-wp-dot"
         style={{ background: statusDotColor }}
       />
-      <span className="sidebar-wp-name">{wp.name}</span>
+      <span className="sidebar-wp-name">{project.name}</span>
       {stats && stats.total_tasks > 0 && (
         <span className="sidebar-wp-pct">{pct}%</span>
       )}
@@ -31,9 +31,9 @@ function WorkplanItem({ wp, isActive }: { wp: Workplan; isActive: boolean }) {
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { id: activeWorkplanId } = useParams<{ id: string }>();
-  const { data } = useWorkplans();
-  const workplans = data?.results ?? [];
+  const { id: activeProjectId } = useParams<{ id: string }>();
+  const { data } = useProjects();
+  const projects = data?.results ?? [];
 
   if (collapsed) {
     return (
@@ -66,18 +66,18 @@ export function Sidebar() {
         </button>
       </div>
 
-      <div className="sidebar-section-label">Workplans</div>
+      <div className="sidebar-section-label">Projects</div>
 
       <nav className="sidebar-nav">
-        {workplans.map((wp) => (
-          <WorkplanItem
-            key={wp.id}
-            wp={wp}
-            isActive={wp.id === activeWorkplanId}
+        {projects.map((project) => (
+          <ProjectItem
+            key={project.id}
+            project={project}
+            isActive={project.id === activeProjectId}
           />
         ))}
-        {workplans.length === 0 && (
-          <div className="sidebar-empty">No workplans</div>
+        {projects.length === 0 && (
+          <div className="sidebar-empty">No projects</div>
         )}
       </nav>
     </aside>

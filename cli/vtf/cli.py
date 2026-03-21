@@ -5,6 +5,7 @@ from vtf.commands.workplan import workplan, milestone
 from vtf.commands.task import task
 from vtf.commands.agent import agent
 from vtf.commands.import_cmd import import_cmd
+from vtf.commands.project import project
 
 
 def get_client():
@@ -46,7 +47,7 @@ def config():
 @click.argument("key")
 @click.argument("value")
 def config_set(key, value):
-    """Set a config value (api_url, token)."""
+    """Set a config value (api_url, token, project)."""
     cfg = Config()
     cfg.set(key, value)
     click.echo(f"Set {key}")
@@ -58,6 +59,7 @@ def config_show():
     cfg = Config()
     click.echo(f"api_url: {cfg.api_url}")
     click.echo(f"token: {'***' if cfg.token else 'not set'}")
+    click.echo(f"project: {cfg.project or 'not set'}")
 
 
 cli.add_command(workplan)
@@ -65,3 +67,4 @@ cli.add_command(task)
 cli.add_command(agent)
 cli.add_command(import_cmd, "import")
 cli.add_command(milestone)
+cli.add_command(project)

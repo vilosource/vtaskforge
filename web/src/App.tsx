@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { WorkplanList } from './pages/WorkplanList';
+import { ProjectList } from './pages/ProjectList';
+import { ProjectDashboard } from './pages/ProjectDashboard';
 import { WorkplanDetail } from './pages/WorkplanDetail';
 import { BoardView } from './pages/BoardView';
 import { TaskPage } from './pages/TaskPage';
@@ -83,9 +84,10 @@ export function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<AppLayout />}>
-              <Route path="/" element={<WorkplanList />} />
-              <Route path="/workplans/:id" element={<WorkplanDetail />} />
-              <Route path="/workplans/:id/milestones/:milestoneId" element={<BoardView />} />
+              <Route path="/" element={<ProjectList />} />
+              <Route path="/projects/:id" element={<ProjectDashboard />} />
+              <Route path="/projects/:id/workplans/:wid" element={<WorkplanDetail />} />
+              <Route path="/projects/:id/workplans/:wid/milestones/:milestoneId" element={<BoardView />} />
               <Route path="/tasks/:id" element={<TaskPage />} />
             </Route>
           </Routes>

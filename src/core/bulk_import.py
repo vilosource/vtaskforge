@@ -105,13 +105,13 @@ def perform_bulk_import(payload):
                 ref_map[task_ref] = task.id
                 ref_type_map[task_ref] = "task"
 
-        # 5. Create backlog tasks (no milestone, no workplan)
+        # 5. Create backlog tasks (no milestone, but inherit workplan)
         for task_data in payload.get("backlog_tasks", []):
             task_ref = task_data["ref"]
             task = Task.objects.create(
                 project=project,
                 milestone=None,
-                workplan=None,
+                workplan=workplan,
                 title=task_data["title"],
                 description=task_data.get("description", ""),
                 labels=task_data.get("labels", []),

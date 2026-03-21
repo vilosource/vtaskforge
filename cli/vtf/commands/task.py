@@ -1,6 +1,7 @@
 import json
 import click
 from vtf.client import VTFAPIError, unwrap_list
+from vtf.config import Config
 
 
 @click.group()
@@ -13,10 +14,12 @@ def task():
 @click.option("--status", default=None, help="Filter by status")
 @click.option("--workplan", default=None, help="Filter by workplan ID")
 @click.option("--milestone", default=None, help="Filter by milestone ID")
+@click.option("--project", default=None, help="Filter by project ID")
 @click.pass_context
-def list_tasks(ctx, status, workplan, milestone):
+def list_tasks(ctx, status, workplan, milestone, project):
     """List tasks."""
     client = ctx.obj["client"]
+    cfg = Config()
     params = {}
     if status:
         params["status"] = status
@@ -24,6 +27,10 @@ def list_tasks(ctx, status, workplan, milestone):
         params["workplan"] = workplan
     if milestone:
         params["milestone"] = milestone
+    if project:
+        params["project"] = project
+    elif cfg.project:
+        params["project"] = cfg.project
     try:
         results = unwrap_list(client.get("/v1/tasks/", params=params if params else None))
     except VTFAPIError as e:
@@ -162,13 +169,21 @@ def events(ctx, id):
 
 @task.command()
 @click.option("--tags", default="", help="Comma-separated agent tags")
+@click.option("--project", default=None, help="Filter by project ID")
 @click.pass_context
-def claimable(ctx, tags):
+def claimable(ctx, tags, project):
     """List tasks claimable by an agent with given tags."""
     client = ctx.obj["client"]
-    params = {"tags": tags} if tags else None
+    cfg = Config()
+    params = {}
+    if tags:
+        params["tags"] = tags
+    if project:
+        params["project"] = project
+    elif cfg.project:
+        params["project"] = cfg.project
     try:
-        results = unwrap_list(client.get("/v1/tasks/claimable/", params=params))
+        results = unwrap_list(client.get("/v1/tasks/claimable/", params=params if params else None))
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
@@ -181,3 +196,45 @@ def claimable(ctx, tags):
         title = t['title'][:33] + '..' if len(t['title']) > 35 else t['title']
         requires = ', '.join(t.get('requires', []))
         click.echo(f"{t['id']:<25} {title:<35} {requires:<15}")
+
+
+@task.command()
+@click.argument("title")
+@click.option("--project", help="Project ID")
+@click.option("--workplan", help="Workplan ID")
+@click.option("--milestone", help="Milestone ID")
+@click.option("--labels", default="", help="Comma-separated labels")
+@click.option("--description", default="", help="Task description")
+@click.pass_context
+def create(ctx, title, project, workplan, milestone, labels, description):
+    """Create a new task."""
+    client = ctx.obj["client"]
+    cfg = Config()
+
+    data = {"title": title, "description": description}
+
+    # Set project (required)
+    if project:
+        data["project"] = project
+    elif cfg.project:
+        data["project"] = cfg.project
+    else:
+        click.echo("Error: project is required. Use --project or set default with 'vtf config set project <id>'", err=True)
+        raise SystemExit(1)
+
+    # Set optional workplan and milestone
+    if workplan:
+        data["workplan"] = workplan
+    if milestone:
+        data["milestone"] = milestone
+
+    # Set labels
+    if labels:
+        data["labels"] = [l.strip() for l in labels.split(",")]
+
+    try:
+        result = client.post("/v1/tasks/", data)
+        click.echo(f"Created task {result['id']}: {result['title']}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)

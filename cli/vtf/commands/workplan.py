@@ -1,5 +1,6 @@
 import click
 from vtf.client import VTFAPIError
+from vtf.config import Config
 
 
 @click.group()
@@ -12,11 +13,24 @@ def workplan():
 @click.option("--name", required=True, help="Workplan name")
 @click.option("--description", default="", help="Description")
 @click.option("--tags", default="", help="Comma-separated tags")
+@click.option("--project", help="Project ID")
 @click.pass_context
-def create(ctx, name, description, tags):
+def create(ctx, name, description, tags, project):
     """Create a new workplan."""
     client = ctx.obj["client"]
+    cfg = Config()
+
     data = {"name": name, "description": description}
+
+    # Set project (required)
+    if project:
+        data["project"] = project
+    elif cfg.project:
+        data["project"] = cfg.project
+    else:
+        click.echo("Error: project is required. Use --project or set default with 'vtf config set project <id>'", err=True)
+        raise SystemExit(1)
+
     if tags:
         data["tags"] = [t.strip() for t in tags.split(",")]
     try:
@@ -29,16 +43,22 @@ def create(ctx, name, description, tags):
 
 @workplan.command("list")
 @click.option("--status", default=None, help="Filter by status")
+@click.option("--project", default=None, help="Filter by project ID")
 @click.pass_context
-def list_workplans(ctx, status):
+def list_workplans(ctx, status, project):
     """List workplans."""
     client = ctx.obj["client"]
+    cfg = Config()
     params = {}
     if status:
         params["status"] = status
+    if project:
+        params["project"] = project
+    elif cfg.project:
+        params["project"] = cfg.project
     try:
         from vtf.client import unwrap_list
-        results = unwrap_list(client.get("/v1/workplans/", params=params))
+        results = unwrap_list(client.get("/v1/workplans/", params=params if params else None))
         if not results:
             click.echo("No workplans found.")
             return

@@ -17,6 +17,11 @@ class BulkImportView(APIView):
         payload = request.data
 
         # Validate top-level required fields
+        if "project_id" not in payload and "project" not in payload:
+            return Response(
+                {"error": {"code": "VALIDATION_ERROR", "message": "project_id or project is required"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if "workplan_id" not in payload and "workplan" not in payload:
             return Response(
                 {"error": {"code": "VALIDATION_ERROR", "message": "workplan or workplan_id is required"}},
@@ -52,6 +57,19 @@ class BulkImportView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+        # Validate backlog_tasks
+        for i, task in enumerate(payload.get("backlog_tasks", [])):
+            if "ref" not in task:
+                return Response(
+                    {"error": {"code": "VALIDATION_ERROR", "message": f"backlog_tasks[{i}].ref is required"}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if "title" not in task:
+                return Response(
+                    {"error": {"code": "VALIDATION_ERROR", "message": f"backlog_tasks[{i}].title is required"}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         try:
             ref_map = perform_bulk_import(payload)
         except ValueError as e:
@@ -62,7 +80,9 @@ class BulkImportView(APIView):
 
         # Build created counts
         milestones_count = len(payload.get("milestones", []))
-        tasks_count = sum(len(p.get("tasks", [])) for p in payload.get("milestones", []))
+        milestone_tasks_count = sum(len(p.get("tasks", [])) for p in payload.get("milestones", []))
+        backlog_tasks_count = len(payload.get("backlog_tasks", []))
+        tasks_count = milestone_tasks_count + backlog_tasks_count
         links_count = len(payload.get("links", []))
 
         return Response(

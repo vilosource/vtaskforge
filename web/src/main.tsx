@@ -6,6 +6,7 @@ import './styles/modal.css';
 import './styles/components.css';
 import './styles/sidebar.css';
 import './styles/workplan-detail.css';
+import './styles/project-dashboard.css';
 import { App } from './App';
 
 const rootEl = document.getElementById('root');

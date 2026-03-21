@@ -285,6 +285,115 @@ def test_task_claimable_api_error(runner, mock_client):
     assert result.exit_code == 1
 
 
+def test_task_list_with_project_filter(runner, mock_client):
+    mock_client.get.return_value = [
+        {"id": "task-001", "title": "Build API", "status": "todo"},
+    ]
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "list", "--project", "proj-123"])
+    assert result.exit_code == 0
+    mock_client.get.assert_called_once_with("/v1/tasks/", params={"project": "proj-123"})
+
+
+def test_task_claimable_with_project_filter(runner, mock_client):
+    mock_client.get.return_value = [
+        {"id": "task-001", "title": "Build API", "requires": []},
+    ]
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "claimable", "--project", "proj-123"])
+    assert result.exit_code == 0
+    mock_client.get.assert_called_once_with("/v1/tasks/claimable/", params={"project": "proj-123"})
+
+
+# --- create ---
+
+def test_task_create_success(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "task-123",
+        "title": "Test Task",
+        "status": "draft",
+        "project": "proj-abc",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "create", "Test Task", "--project", "proj-abc"])
+    assert result.exit_code == 0
+    assert "Created task task-123" in result.output
+    assert "Test Task" in result.output
+    mock_client.post.assert_called_once_with(
+        "/v1/tasks/", {"title": "Test Task", "description": "", "project": "proj-abc"}
+    )
+
+
+def test_task_create_with_labels(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "task-456",
+        "title": "Labeled Task",
+        "status": "draft",
+        "project": "proj-abc",
+        "labels": ["bugfix", "ui"],
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "create", "Labeled Task", "--project", "proj-abc", "--labels", "bugfix,ui"],
+        )
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["labels"] == ["bugfix", "ui"]
+
+
+def test_task_create_with_workplan_and_milestone(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "task-789",
+        "title": "Structured Task",
+        "status": "draft",
+        "project": "proj-abc",
+        "workplan": "wp-123",
+        "milestone": "ms-456",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "create", "Structured Task", "--project", "proj-abc", "--workplan", "wp-123", "--milestone", "ms-456"],
+        )
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["workplan"] == "wp-123"
+    assert call_data["milestone"] == "ms-456"
+
+
+def test_task_create_missing_project(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "create", "Test Task"])
+    assert result.exit_code == 1
+    assert "project is required" in result.output
+
+
+def test_task_create_with_default_project(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "task-999",
+        "title": "Default Project Task",
+        "status": "draft",
+        "project": "proj-default",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client), \
+         patch("vtf.commands.task.Config") as mock_config_cls:
+        mock_config = mock_config_cls.return_value
+        mock_config.project = "proj-default"
+        result = runner.invoke(cli, ["task", "create", "Default Project Task"])
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["project"] == "proj-default"
+
+
+def test_task_create_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Invalid data"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "create", "Fail Task", "--project", "proj-abc"])
+    assert result.exit_code == 1
+    assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))
+
+
 # --- events ---
 
 def test_task_events_success(runner, mock_client):
@@ -343,6 +452,7 @@ def test_task_list_help(runner):
     assert "--status" in result.output
     assert "--workplan" in result.output
     assert "--milestone" in result.output
+    assert "--project" in result.output
 
 
 def test_task_claim_help(runner):

@@ -182,6 +182,25 @@ def test_import_with_workplan_option_includes_workplan_id(runner, mock_client, s
     assert payload.get("workplan_id") == "wp-existing"
 
 
+def test_import_with_project_option_includes_project_id(runner, mock_client, successful_import_response):
+    mock_client.post.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(FIXTURES_DIR), "--project", "prj-existing"])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    assert payload.get("project_id") == "prj-existing"
+
+
+def test_import_without_project_option_creates_project(runner, mock_client, successful_import_response):
+    mock_client.post.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(FIXTURES_DIR)])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    assert "project" in payload
+    assert payload["project"]["name"] == "Test Milestone"
+
+
 # --- help ---
 
 def test_import_help(runner):

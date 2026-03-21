@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWorkplan } from '../api/tasks';
 import { useWorkplanStats } from '../api/workplans';
+import { useProject } from '../api/projects';
 import { useMilestones, useMilestoneStats, useActivateMilestone, useCompleteMilestone } from '../api/milestones';
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
 import { MilestonePipeline } from '../components/MilestonePipeline';
 
-function MilestoneCard({ milestone, workplanId }: { milestone: { id: string; name: string; description: string; status: string }; workplanId: string }) {
+function MilestoneCard({ milestone, projectId, workplanId }: { milestone: { id: string; name: string; description: string; status: string }; projectId: string; workplanId: string }) {
   const { data: stats } = useMilestoneStats(milestone.id);
   const activateMutation = useActivateMilestone();
   const completeMutation = useCompleteMilestone();

@@ -7,9 +7,10 @@ from vtf.client import VTFAPIError
 @click.command("import")
 @click.argument("milestone_dir", type=click.Path(exists=True))
 @click.option("--workplan", default=None, help="Import into existing workplan ID")
+@click.option("--project", default=None, help="Import into existing project ID")
 @click.option("--dry-run", is_flag=True, help="Validate without creating")
 @click.pass_context
-def import_cmd(ctx, milestone_dir, workplan, dry_run):
+def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
     """Import a milestone directory into vtaskforge."""
     milestone_path = Path(milestone_dir)
     client = ctx.obj["client"]
@@ -99,6 +100,16 @@ def import_cmd(ctx, milestone_dir, workplan, dry_run):
         }],
         "links": links,
     }
+
+    if project:
+        # Add to existing project
+        payload["project_id"] = project
+    else:
+        # Create new project named after the milestone directory
+        payload["project"] = {
+            "name": milestone_name,
+            "description": "",
+        }
 
     if workplan:
         # Add milestone to existing workplan

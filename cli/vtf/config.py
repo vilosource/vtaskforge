@@ -53,3 +53,10 @@ class Config:
     @property
     def token(self):
         return self.get_token()
+
+    def get_project(self):
+        return self.get("project")
+
+    @property
+    def project(self):
+        return self.get_project()
