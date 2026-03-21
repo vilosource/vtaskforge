@@ -317,6 +317,133 @@ These findings directly inform the vf-agents architecture:
 6. **Numerical verification over visual.** Use getBoundingClientRect(), test
    counts, grep counts — never eyeball screenshots.
 
+## Lessons from Phase 9 (2026-03-21)
+
+Phase 9 applied Phase 8 corrections. Results improved significantly:
+
+### What improved
+
+1. **Supervisor stayed in role.** Zero code fixes by supervisor. All work done
+   by executors, all verification by judges. Phase 8 had the supervisor fixing
+   231 test references directly.
+
+2. **Reject/rework loop worked.** Task 9.2 was rejected by the judge for three
+   specific issues (stale stats view, stale tests, missing filter test). The
+   executor fixed all three on rework. Judge approved on attempt 2. First
+   successful full cycle.
+
+3. **Judge quality was high.** Judges caught stale comments, missing tests,
+   design doc divergences, and N+1 query risks. The 9.3 review checked
+   migrations, review policy, bulk import, serializer validation — thorough.
+
+4. **Parallel execution had zero merge conflicts.** Wave 4 ran four executors
+   simultaneously (9.4, 9.5, 9.7, 9.8) with no issues. Task boundaries were
+   designed by module, not by layer.
+
+5. **Zero test failures after all agents completed.** Phase 8 had 262 failures
+   requiring supervisor cleanup. Phase 9 had zero.
+
+### What still needs fixing
+
+1. **Review gate not enforced by the system.** `judge: true` in specs doesn't
+   set `needs_review_on_completion` on imported tasks. Executors bypass
+   `pending_completion_review` and go straight to `done`. The judge gate only
+   worked because the supervisor manually dispatched judges — not because the
+   board enforced it. **Filed as backlog task.**
+
+2. **Single agent ID blocks concurrent claims.** Parallel executors sharing one
+   agent registration means only one can claim at a time. Each executor needs
+   its own agent ID.
+
+3. **Task specs overlapped.** Tasks 9.2, 9.3, and 9.5 all modified
+   `bulk_import.py`. Tasks 9.3 and 9.4 both modified `review_policy.py`. When
+   earlier tasks do more than their spec says, later tasks find the work already
+   done. This wastes executor effort and creates confusion.
+
+4. **Spec referenced non-existent files.** Task 9.10 listed `.claude/agents/*.md`
+   as files to modify, but they don't exist in the repo. The executor correctly
+   reported the blocker, but this should have been caught during spec review.
+
+5. **"Documentation tests" that always pass.** Task 9.6's tests used try/except
+   to pass even when the feature doesn't work (FK doesn't exist yet). Tests
+   should fail when the feature is broken — otherwise they provide false
+   confidence.
+
+### Phase 8 vs Phase 9 comparison
+
+| Metric | Phase 8 | Phase 9 |
+|--------|---------|---------|
+| Supervisor fixed code directly | Yes (231 references) | No |
+| Judge used | No (skipped all) | Yes (5 reviews) |
+| Reject/rework cycle | No | Yes (1 rejection, 1 rework) |
+| Tests broken after agents | 262 failures | 0 failures |
+| Parallel merge conflicts | Yes (4 agents, same files) | No (4 agents, separate files) |
+| Executor false completion | Yes (8.2 declared done) | No (honest reports) |
+| Process improvement | — | Clear improvement |
+
+## Diagram 5: Actual Process Flow (as executed in Phase 9)
+
+This shows what actually happened vs the ideal, including the review gate gap.
+
+```mermaid
+sequenceDiagram
+    participant S as 👑 Supervisor
+    participant B as 📋 Board
+    participant E as 🔧 Executor
+    participant J as ⚖️ Judge
+
+    Note over S: Submit task (draft → todo)
+
+    S->>E: Dispatch executor
+    E->>B: Claim (todo → doing)
+    E->>E: Work in worktree, commit
+
+    alt needs_review_on_completion = true (DESIRED)
+        E->>B: Complete (doing → pending_completion_review)
+        Note over B: Judge can be triggered by board state
+    else needs_review_on_completion = false (ACTUAL — bug)
+        E->>B: Complete (doing → done)
+        Note over B: Judge gate bypassed!
+        Note over S: Supervisor must manually<br/>dispatch judge anyway
+    end
+
+    S->>J: Dispatch judge (manual workaround)
+    J->>J: Run test_command
+    J->>J: Review against acceptance criteria
+
+    alt Judge approves
+        J->>S: "APPROVED"
+        Note over S: If task already done: no action needed<br/>If in pending_review: submit approved review
+    else Judge rejects
+        J->>S: "REJECTED — 3 issues found"
+        Note over S: Must PATCH status back to doing<br/>(another workaround for bypassed review)
+        S->>E: Dispatch executor with judge feedback
+        E->>E: Fix issues, commit
+        E->>B: Complete again
+        S->>J: Dispatch judge again
+        J->>S: "APPROVED"
+    end
+```
+
+## Task Spec Design Rules (learned from Phases 8-9)
+
+1. **One task, one module.** A task should own all files in a Django app or
+   CLI module. Don't split the same file across multiple tasks.
+
+2. **Verify file existence.** Before importing specs, confirm all files in
+   `create` and `modify` lists actually exist (or can be created).
+
+3. **Specs must say "update all consumers."** When adding a FK or renaming a
+   field, the spec must explicitly list every file that references the old
+   name/imports the model. Don't assume the executor will find them.
+
+4. **Tests must fail when the feature is broken.** Don't write try/except
+   tests that pass regardless. If a FK doesn't exist yet, the test should
+   be marked `@pytest.mark.skip("Requires Task.project FK from task 9.3")`.
+
+5. **`judge: true` must map to `needs_review_on_completion: true`.** Until
+   this is fixed in the import code, the review gate is unenforceable.
+
 ## What vf-agents Must Encode
 
 When we build the agent pool manager, it must implement:
@@ -324,13 +451,20 @@ When we build the agent pool manager, it must implement:
 1. **Supervisor control loop** — activate milestones, submit tasks respecting
    DAG deps, monitor progress, handle escalations
 2. **Executor boundaries** — can claim and submit for review, cannot mark done
-3. **Judge automation** — watches pending_completion_review queue, runs
-   test_command, reviews against spec, submits formal review
-4. **Reject/rework cycle** — changes_requested with actionable feedback,
-   executor picks up rework, max 3 retries before escalation
-5. **Deploy agent** — Docker builds, migrations, dogfood restarts (currently
+   directly. The `needs_review_on_completion` flag must be enforced.
+3. **Judge automation** — triggered when task enters `pending_completion_review`,
+   runs test_command, reviews against spec, submits formal review via API
+4. **Reject/rework cycle** — changes_requested with actionable feedback
+   (file names, line numbers, error output), executor picks up rework,
+   max 3 retries before escalation to human
+5. **Multiple agent registrations** — each executor instance needs its own
+   agent ID to avoid concurrent claim conflicts
+6. **Deploy agent** — Docker builds, migrations, dogfood restarts (currently
    manual)
-6. **Smoke-test agent** — Playwright verification with numerical checks
+7. **Smoke-test agent** — Playwright verification with numerical checks
    (currently manual)
-7. **Spec writer agent** — reads design docs, produces YAML task specs
+8. **Spec writer agent** — reads design docs, produces YAML task specs
    (currently human+AI collaborative)
+9. **Spec validator** — verifies file existence, checks for overlapping file
+   ownership across tasks, validates that `judge: true` tasks have review
+   flags set
