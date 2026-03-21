@@ -263,10 +263,19 @@ class TestProjectStats:
         assert response.data["by_status"] == {}
 
     def test_stats_workplan_counts(self, api_client, project):
+        # Create workplans with different statuses linked to the project
+        from tests.factories import WorkplanFactory
+        WorkplanFactory(project=project, status="active")
+        WorkplanFactory(project=project, status="active")
+        WorkplanFactory(project=project, status="completed")
+        WorkplanFactory(project=project, status="archived")
+
         response = api_client.get(f"/v1/projects/{project.id}/stats/")
         assert "workplans" in response.data
-        # The workplan counts will be empty for now since Workplan.project
-        # FK doesn't exist yet, but the structure should be there
+        workplan_counts = response.data["workplans"]
+        assert workplan_counts.get("active", 0) == 2
+        assert workplan_counts.get("completed", 0) == 1
+        assert workplan_counts.get("archived", 0) == 1
 
 
 @pytest.mark.django_db
@@ -285,10 +294,20 @@ class TestProjectWorkplansList:
         assert "previous" in response.data
         assert "results" in response.data
 
-    def test_workplans_list_empty_for_now(self, api_client, project):
-        # Since Workplan.project FK doesn't exist yet, this should be empty
+    def test_workplans_list_shows_linked_workplans(self, api_client, project):
+        # Create workplans linked to the project
+        from tests.factories import WorkplanFactory
+        workplan1 = WorkplanFactory(project=project, name="Workplan 1")
+        workplan2 = WorkplanFactory(project=project, name="Workplan 2")
+        # Create a workplan for another project to ensure filtering works
+        other_project = ProjectFactory(name="Other Project")
+        WorkplanFactory(project=other_project, name="Other Workplan")
+
         response = api_client.get(f"/v1/projects/{project.id}/workplans/")
-        assert response.data["results"] == []
+        assert len(response.data["results"]) == 2
+        workplan_ids = [w["id"] for w in response.data["results"]]
+        assert workplan1.id in workplan_ids
+        assert workplan2.id in workplan_ids
 
 
 @pytest.mark.django_db

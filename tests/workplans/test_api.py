@@ -43,6 +43,30 @@ class TestWorkplanList:
         assert response.data["results"][0]["id"] == workplan.id
         assert response.data["results"][0]["name"] == workplan.name
 
+    def test_list_filters_by_project(self, api_client):
+        # Create two projects with workplans each
+        project1 = ProjectFactory(name="Project 1")
+        project2 = ProjectFactory(name="Project 2")
+
+        workplan1a = WorkplanFactory(project=project1, name="Workplan 1A")
+        workplan1b = WorkplanFactory(project=project1, name="Workplan 1B")
+        workplan2a = WorkplanFactory(project=project2, name="Workplan 2A")
+
+        # Test filtering by project1
+        response = api_client.get(f"/v1/workplans/?project={project1.id}")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 2
+        workplan_ids = [w["id"] for w in response.data["results"]]
+        assert workplan1a.id in workplan_ids
+        assert workplan1b.id in workplan_ids
+        assert workplan2a.id not in workplan_ids
+
+        # Test filtering by project2
+        response = api_client.get(f"/v1/workplans/?project={project2.id}")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == workplan2a.id
+
 
 @pytest.mark.django_db
 class TestWorkplanCreate:

@@ -44,16 +44,10 @@ class ProjectViewSet(ModelViewSet):
     def stats(self, request, pk=None):
         project = self.get_object()
 
-        # For now, since there's no Workplan.project FK yet (comes in task 9.2)
-        # and no Task.project FK yet (comes in task 9.3), we'll return empty stats.
-        # This endpoint is designed to count ALL project tasks (workplan + backlog)
-        # but those FKs don't exist yet.
-
         from tasks.models import Task
 
-        # Since the project-workplan and project-task relationships don't exist yet,
-        # we return empty stats but maintain the correct structure for the future.
-        tasks = Task.objects.none()
+        # Get all tasks from workplans belonging to this project
+        tasks = Task.objects.filter(workplan__project=project)
 
         total = tasks.count()
         status_counts = {
@@ -63,8 +57,12 @@ class ProjectViewSet(ModelViewSet):
         done_count = status_counts.get("done", 0)
         completed_percentage = round(done_count / total * 100, 1) if total > 0 else 0.0
 
-        # Count workplans by status - also empty since no Workplan.project FK
-        workplan_counts = {"active": 0, "completed": 0, "archived": 0}
+        # Count workplans by status using the now-existing Workplan.project FK
+        workplan_queryset = Workplan.objects.filter(project=project)
+        workplan_counts = {
+            row["status"]: row["count"]
+            for row in workplan_queryset.values("status").annotate(count=Count("id"))
+        }
 
         stats_data = {
             "project_id": project.id,
