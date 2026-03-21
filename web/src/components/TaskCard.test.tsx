@@ -10,6 +10,8 @@ const baseTask: Task = {
   status: 'todo',
   milestone: 'milestone-1',
   workplan: 'wp-1',
+  project: 'project-1',
+  labels: [],
   claimed_by: null,
   claimed_at: null,
   assigned_to: null,

@@ -5,6 +5,7 @@ import { ProjectList } from './pages/ProjectList';
 import { ProjectDashboard } from './pages/ProjectDashboard';
 import { WorkplanDetail } from './pages/WorkplanDetail';
 import { BoardView } from './pages/BoardView';
+import { BacklogView } from './pages/BacklogView';
 import { TaskPage } from './pages/TaskPage';
 import { Sidebar } from './components/Sidebar';
 import Login from './pages/Login';
@@ -86,6 +87,7 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<ProjectList />} />
               <Route path="/projects/:id" element={<ProjectDashboard />} />
+              <Route path="/projects/:id/backlog" element={<BacklogView />} />
               <Route path="/projects/:id/workplans/:wid" element={<WorkplanDetail />} />
               <Route path="/projects/:id/workplans/:wid/milestones/:milestoneId" element={<BoardView />} />
               <Route path="/tasks/:id" element={<TaskPage />} />

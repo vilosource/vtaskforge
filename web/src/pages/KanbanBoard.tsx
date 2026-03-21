@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useTasksByWorkplan, useTasksByMilestone, useWorkplan } from '../api/tasks';
+import { useTasksByWorkplan, useTasksByMilestone, useBacklogTasks, useWorkplan } from '../api/tasks';
 import type { Task } from '../api/tasks';
 import { KanbanColumn } from '../components/KanbanColumn';
 import type { ColumnConfig } from '../components/KanbanColumn';
@@ -59,16 +59,20 @@ function groupTasksByColumn(tasks: Task[], showHidden: boolean): Map<string, Tas
 }
 
 interface KanbanBoardProps {
-  workplanId: string;
+  workplanId?: string;
   milestoneId?: string;
+  projectId?: string;
   title?: string;
   onTaskClick?: (task: Task) => void;
+  labelFilters?: string[];
 }
 
-export function KanbanBoard({ workplanId, milestoneId, title, onTaskClick }: KanbanBoardProps) {
+export function KanbanBoard({ workplanId, milestoneId, projectId, title, onTaskClick, labelFilters = [] }: KanbanBoardProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const isBacklogMode = !workplanId && !!projectId;
 
   const handleTaskClick = useCallback(
     (task: Task) => {
@@ -91,28 +95,42 @@ export function KanbanBoard({ workplanId, milestoneId, title, onTaskClick }: Kan
         queryClient.invalidateQueries({ queryKey: ['task', data.task_id] });
       }
     },
-    [queryClient, workplanId],
+    [queryClient, workplanId, projectId],
   );
 
+  const sseUrl = isBacklogMode
+    ? `/v1/events/stream/?project=${projectId}`
+    : `/v1/events/stream/?workplan=${workplanId}`;
+
   const { status: sseStatus } = useSSE({
-    url: `/v1/events/stream/?workplan=${workplanId}`,
+    url: sseUrl,
     onEvent: handleSSEEvent,
-    enabled: !!workplanId,
+    enabled: !!(workplanId || projectId),
   });
 
   const {
     data: workplanData,
     isLoading: workplanLoading,
     error: workplanError,
-  } = useWorkplan(workplanId);
+  } = useWorkplan(workplanId || '');
 
-  const workplanTasks = useTasksByWorkplan(workplanId);
+  const workplanTasks = useTasksByWorkplan(workplanId || '');
   const milestoneTasks = useTasksByMilestone(milestoneId ?? '');
-  const tasksQuery = milestoneId ? milestoneTasks : workplanTasks;
+  const backlogTasks = useBacklogTasks(projectId || '');
+
+  let tasksQuery;
+  if (isBacklogMode) {
+    tasksQuery = backlogTasks;
+  } else if (milestoneId) {
+    tasksQuery = milestoneTasks;
+  } else {
+    tasksQuery = workplanTasks;
+  }
+
   const { data: tasksData, isLoading: tasksLoading, error: tasksError, refetch } = tasksQuery;
 
-  const isLoading = workplanLoading || tasksLoading;
-  const error = workplanError || tasksError;
+  const isLoading = (!isBacklogMode && workplanLoading) || tasksLoading;
+  const error = (!isBacklogMode && workplanError) || tasksError;
 
   if (isLoading) {
     return <div className="loading">Loading board...</div>;
@@ -126,7 +144,15 @@ export function KanbanBoard({ workplanId, milestoneId, title, onTaskClick }: Kan
     );
   }
 
-  const tasks = tasksData?.results ?? [];
+  let tasks = tasksData?.results ?? [];
+
+  // Apply label filtering if provided
+  if (labelFilters.length > 0) {
+    tasks = tasks.filter((task) =>
+      task.labels.some((label) => labelFilters.includes(label))
+    );
+  }
+
   const columnTasks = groupTasksByColumn(tasks, showHidden);
   const totalTasks = tasks.filter((t) => !HIDDEN_STATUSES.includes(t.status)).length;
 
@@ -134,7 +160,7 @@ export function KanbanBoard({ workplanId, milestoneId, title, onTaskClick }: Kan
     <div className="kanban-board">
       <div className="kanban-board-header">
         <div className="kanban-board-title">
-          <h1>{title || workplanData?.name || workplanId}</h1>
+          <h1>{title || (isBacklogMode ? 'Backlog' : workplanData?.name || workplanId)}</h1>
           <LiveIndicator status={sseStatus} />
         </div>
         <div className="kanban-board-controls">
@@ -150,7 +176,9 @@ export function KanbanBoard({ workplanId, milestoneId, title, onTaskClick }: Kan
         </div>
       </div>
       {tasks.length === 0 ? (
-        <div className="kanban-empty">No tasks yet.</div>
+        <div className="kanban-empty">
+          {isBacklogMode ? 'No backlog tasks.' : 'No tasks yet.'}
+        </div>
       ) : (
         <div className="kanban-columns">
           {COLUMNS.map((col) => (

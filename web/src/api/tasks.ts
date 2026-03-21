@@ -8,6 +8,8 @@ export interface Task {
   status: string;
   milestone: string;
   workplan: string;
+  project: string;
+  labels: string[];
   claimed_by: string | null;
   claimed_at: string | null;
   assigned_to: string | null;
@@ -88,6 +90,14 @@ export function useTasksByMilestone(milestoneId: string) {
     queryKey: ['tasks', 'milestone', milestoneId],
     queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?milestone=${milestoneId}`),
     enabled: !!milestoneId,
+  });
+}
+
+export function useBacklogTasks(projectId: string) {
+  return useQuery({
+    queryKey: ['tasks', 'backlog', projectId],
+    queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?project=${projectId}&workplan__isnull=true`),
+    enabled: !!projectId,
   });
 }
 
