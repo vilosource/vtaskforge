@@ -5,30 +5,30 @@ from vtf.client import VTFAPIError
 
 
 @click.command("import")
-@click.argument("phase_dir", type=click.Path(exists=True))
+@click.argument("milestone_dir", type=click.Path(exists=True))
 @click.option("--workplan", default=None, help="Import into existing workplan ID")
 @click.option("--dry-run", is_flag=True, help="Validate without creating")
 @click.pass_context
-def import_cmd(ctx, phase_dir, workplan, dry_run):
-    """Import a phase directory into vtaskforge."""
-    phase_path = Path(phase_dir)
+def import_cmd(ctx, milestone_dir, workplan, dry_run):
+    """Import a milestone directory into vtaskforge."""
+    milestone_path = Path(milestone_dir)
     client = ctx.obj["client"]
 
-    # Read PHASE.md for metadata (extract name from first # heading)
-    phase_md = phase_path / "PHASE.md"
-    phase_name = phase_path.name
-    phase_description = ""
-    if phase_md.exists():
-        content = phase_md.read_text()
+    # Read MILESTONE.md for metadata (extract name from first # heading)
+    milestone_md = milestone_path / "MILESTONE.md"
+    milestone_name = milestone_path.name
+    milestone_description = ""
+    if milestone_md.exists():
+        content = milestone_md.read_text()
         lines = content.strip().split("\n")
         for line in lines:
             if line.startswith("# "):
-                phase_name = line[2:].strip()
+                milestone_name = line[2:].strip()
                 break
-        phase_description = content
+        milestone_description = content
 
     # Read dag.yaml for dependencies (authoritative source)
-    dag_file = phase_path / "dag.yaml"
+    dag_file = milestone_path / "dag.yaml"
     dag_tasks = []
     if dag_file.exists():
         with open(dag_file) as f:
@@ -42,7 +42,7 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
         dag_deps[task_id] = [str(d) for d in dag_task.get("depends_on", [])]
 
     # Read task YAML files
-    tasks_dir = phase_path / "tasks"
+    tasks_dir = milestone_path / "tasks"
     task_specs = []
     if tasks_dir.exists():
         for yaml_file in sorted(tasks_dir.glob("*.yaml")):
@@ -53,12 +53,12 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
                     spec["_raw_yaml"] = raw_yaml
                     task_specs.append(spec)
 
-    # Determine the phase ref from directory name
-    phase_ref = phase_path.name.replace(" ", "-").lower()
+    # Determine the milestone ref from directory name
+    milestone_ref = milestone_path.name.replace(" ", "-").lower()
 
     # Build task list and ref map
     task_refs = {}
-    phase_tasks = []
+    milestone_tasks = []
     for spec in task_specs:
         task_id = str(spec["id"])
         ref = f"task-{task_id}"
@@ -74,7 +74,7 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
             "judge": spec.get("judge", False),
             "isolation": spec.get("isolation", "sequential"),
         }
-        phase_tasks.append(task_entry)
+        milestone_tasks.append(task_entry)
 
     # Build dependency links from dag.yaml (dag is authoritative)
     links = []
@@ -91,38 +91,38 @@ def import_cmd(ctx, phase_dir, workplan, dry_run):
 
     # Build bulk import payload
     payload = {
-        "phases": [{
-            "ref": phase_ref,
-            "name": phase_name,
-            "description": "",  # don't dump full PHASE.md as description
-            "tasks": phase_tasks,
+        "milestones": [{
+            "ref": milestone_ref,
+            "name": milestone_name,
+            "description": "",  # don't dump full MILESTONE.md as description
+            "tasks": milestone_tasks,
         }],
         "links": links,
     }
 
     if workplan:
-        # Add phase to existing workplan
+        # Add milestone to existing workplan
         payload["workplan_id"] = workplan
     else:
-        # Create new workplan named after the phase directory
+        # Create new workplan named after the milestone directory
         payload["workplan"] = {
-            "name": phase_name,
-            "description": phase_description,
+            "name": milestone_name,
+            "description": milestone_description,
         }
 
     if dry_run:
         click.echo("Dry run — payload that would be sent:")
         click.echo(yaml.dump(payload, default_flow_style=False))
-        what = f"add 1 phase to workplan {workplan}" if workplan else "create 1 workplan + 1 phase"
-        click.echo(f"\nWould {what}, {len(phase_tasks)} tasks, {len(links)} links")
+        what = f"add 1 milestone to workplan {workplan}" if workplan else "create 1 workplan + 1 milestone"
+        click.echo(f"\nWould {what}, {len(milestone_tasks)} tasks, {len(links)} links")
         return
 
     try:
         result = client.post("/v1/bulk/import", payload)
         ref_map = result.get("ref_map", {})
         click.echo("Import successful!")
-        click.echo(f"Workplan: {ref_map.get('workplan', 'N/A')}")
-        click.echo(f"Phase:    {ref_map.get(phase_ref, 'N/A')}")
+        click.echo(f"Workplan:  {ref_map.get('workplan', 'N/A')}")
+        click.echo(f"Milestone: {ref_map.get(milestone_ref, 'N/A')}")
         click.echo("\nTasks:")
         for spec in task_specs:
             task_id = str(spec["id"])

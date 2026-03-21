@@ -116,19 +116,19 @@ def stats(ctx, id):
 
 
 @click.group()
-def phase():
-    """Manage phases."""
+def milestone():
+    """Manage milestones."""
     pass
 
 
-@phase.command()
+@milestone.command()
 @click.argument("id")
 @click.pass_context
 def stats(ctx, id):
-    """Display phase progress stats."""
+    """Display milestone progress stats."""
     client = ctx.obj["client"]
     try:
-        data = client.get(f"/v1/phases/{id}/stats/")
+        data = client.get(f"/v1/milestones/{id}/stats/")
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)

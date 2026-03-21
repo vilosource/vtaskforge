@@ -1,10 +1,10 @@
-# Test Phase
+# Test Milestone
 
 Status: Draft
 
 ## Goal
 
-A minimal phase for testing the import command.
+A minimal milestone for testing the import command.
 
 ## Scope
 

@@ -1,7 +1,7 @@
 import click
 from vtf.client import VTFClient, VTFAPIError
 from vtf.config import Config
-from vtf.commands.workplan import workplan, phase
+from vtf.commands.workplan import workplan, milestone
 from vtf.commands.task import task
 from vtf.commands.agent import agent
 from vtf.commands.import_cmd import import_cmd
@@ -64,4 +64,4 @@ cli.add_command(workplan)
 cli.add_command(task)
 cli.add_command(agent)
 cli.add_command(import_cmd, "import")
-cli.add_command(phase)
+cli.add_command(milestone)

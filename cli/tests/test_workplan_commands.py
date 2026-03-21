@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 from vtf.cli import cli
 from vtf.client import VTFAPIError
 from vtf.config import Config
-from vtf.commands.workplan import phase
+from vtf.commands.workplan import milestone
 
 
 @pytest.fixture
@@ -266,46 +266,46 @@ def test_workplan_stats_api_error(runner, mock_client):
     assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))
 
 
-# --- phase stats ---
+# --- milestone stats ---
 
-def test_phase_stats_success(runner, mock_client):
+def test_milestone_stats_success(runner, mock_client):
     mock_client.get.return_value = {
         "total_tasks": 6,
         "completed_percentage": 33,
         "by_status": {"todo": 2, "doing": 2, "done": 2},
     }
     with patch("vtf.cli.get_client", return_value=mock_client):
-        result = runner.invoke(cli, ["phase", "stats", "ph-abc"])
+        result = runner.invoke(cli, ["milestone", "stats", "ms-abc"])
     assert result.exit_code == 0
     assert "Total tasks: 6" in result.output
     assert "33%" in result.output
     assert "todo: 2" in result.output
-    mock_client.get.assert_called_once_with("/v1/phases/ph-abc/stats/")
+    mock_client.get.assert_called_once_with("/v1/milestones/ms-abc/stats/")
 
 
-def test_phase_stats_no_by_status(runner, mock_client):
+def test_milestone_stats_no_by_status(runner, mock_client):
     mock_client.get.return_value = {
         "total_tasks": 0,
         "completed_percentage": 0,
     }
     with patch("vtf.cli.get_client", return_value=mock_client):
-        result = runner.invoke(cli, ["phase", "stats", "ph-empty"])
+        result = runner.invoke(cli, ["milestone", "stats", "ms-empty"])
     assert result.exit_code == 0
     assert "Total tasks: 0" in result.output
 
 
-def test_phase_stats_api_error(runner, mock_client):
+def test_milestone_stats_api_error(runner, mock_client):
     mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
-        result = runner.invoke(cli, ["phase", "stats", "nonexistent"])
+        result = runner.invoke(cli, ["milestone", "stats", "nonexistent"])
     assert result.exit_code == 1
     assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))
 
 
-def test_phase_help(runner):
-    result = runner.invoke(cli, ["phase", "--help"])
+def test_milestone_help(runner):
+    result = runner.invoke(cli, ["milestone", "--help"])
     assert result.exit_code == 0
-    assert "phase" in result.output.lower()
+    assert "milestone" in result.output.lower()
 
 
 # --- help ---

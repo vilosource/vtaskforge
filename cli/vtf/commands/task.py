@@ -12,9 +12,9 @@ def task():
 @task.command("list")
 @click.option("--status", default=None, help="Filter by status")
 @click.option("--workplan", default=None, help="Filter by workplan ID")
-@click.option("--phase", default=None, help="Filter by phase ID")
+@click.option("--milestone", default=None, help="Filter by milestone ID")
 @click.pass_context
-def list_tasks(ctx, status, workplan, phase):
+def list_tasks(ctx, status, workplan, milestone):
     """List tasks."""
     client = ctx.obj["client"]
     params = {}
@@ -22,8 +22,8 @@ def list_tasks(ctx, status, workplan, phase):
         params["status"] = status
     if workplan:
         params["workplan"] = workplan
-    if phase:
-        params["phase"] = phase
+    if milestone:
+        params["milestone"] = milestone
     try:
         results = unwrap_list(client.get("/v1/tasks/", params=params if params else None))
     except VTFAPIError as e:
@@ -60,7 +60,7 @@ def show(ctx, id, as_json):
     click.echo(f"ID:          {t['id']}")
     click.echo(f"Title:       {t['title']}")
     click.echo(f"Status:      {t['status']}")
-    click.echo(f"Phase:       {t.get('phase', '')}")
+    click.echo(f"Milestone:   {t.get('milestone', '')}")
     click.echo(f"Workplan:    {t.get('workplan', '')}")
     click.echo(f"Claimed by:  {t.get('claimed_by', 'none')}")
     click.echo(f"Requires:    {', '.join(t.get('requires', []))}")

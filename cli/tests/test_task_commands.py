@@ -63,14 +63,14 @@ def test_task_list_with_workplan_filter(runner, mock_client):
     mock_client.get.assert_called_once_with("/v1/tasks/", params={"workplan": "wp-abc"})
 
 
-def test_task_list_with_phase_filter(runner, mock_client):
+def test_task_list_with_milestone_filter(runner, mock_client):
     mock_client.get.return_value = [
         {"id": "task-001", "title": "Build API", "status": "todo"},
     ]
     with patch("vtf.cli.get_client", return_value=mock_client):
-        result = runner.invoke(cli, ["task", "list", "--phase", "ph-123"])
+        result = runner.invoke(cli, ["task", "list", "--milestone", "ms-123"])
     assert result.exit_code == 0
-    mock_client.get.assert_called_once_with("/v1/tasks/", params={"phase": "ph-123"})
+    mock_client.get.assert_called_once_with("/v1/tasks/", params={"milestone": "ms-123"})
 
 
 def test_task_list_api_error(runner, mock_client):
@@ -98,7 +98,7 @@ def test_task_show_success(runner, mock_client):
         "id": "task-abc",
         "title": "Implement auth",
         "status": "doing",
-        "phase": "ph-1",
+        "milestone": "ms-1",
         "workplan": "wp-1",
         "claimed_by": "agent-x",
         "requires": ["task-000"],
@@ -110,7 +110,7 @@ def test_task_show_success(runner, mock_client):
     assert "task-abc" in result.output
     assert "Implement auth" in result.output
     assert "doing" in result.output
-    assert "ph-1" in result.output
+    assert "ms-1" in result.output
     assert "wp-1" in result.output
     assert "agent-x" in result.output
     assert "task-000" in result.output
@@ -123,7 +123,7 @@ def test_task_show_no_description(runner, mock_client):
         "id": "task-min",
         "title": "Minimal task",
         "status": "todo",
-        "phase": "",
+        "milestone": "",
         "workplan": "",
         "claimed_by": None,
         "requires": [],
@@ -342,7 +342,7 @@ def test_task_list_help(runner):
     assert result.exit_code == 0
     assert "--status" in result.output
     assert "--workplan" in result.output
-    assert "--phase" in result.output
+    assert "--milestone" in result.output
 
 
 def test_task_claim_help(runner):
