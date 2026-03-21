@@ -121,3 +121,25 @@ def test_config_show_env_var_api_url(runner, isolated_config, monkeypatch):
     result = runner.invoke(cli, ["config", "show"])
     assert result.exit_code == 0
     assert "http://from-env.com" in result.output
+
+
+def test_config_set_project(runner, isolated_config):
+    result = runner.invoke(cli, ["config", "set", "project", "proj-123"])
+    assert result.exit_code == 0
+    assert "Set project" in result.output
+    with open(isolated_config) as f:
+        data = yaml.safe_load(f)
+    assert data["project"] == "proj-123"
+
+
+def test_config_show_with_project(runner, isolated_config):
+    runner.invoke(cli, ["config", "set", "project", "proj-456"])
+    result = runner.invoke(cli, ["config", "show"])
+    assert result.exit_code == 0
+    assert "project: proj-456" in result.output
+
+
+def test_config_show_defaults_includes_project(runner, isolated_config):
+    result = runner.invoke(cli, ["config", "show"])
+    assert result.exit_code == 0
+    assert "project: not set" in result.output

@@ -75,3 +75,22 @@ def test_get_api_url_method(mock_config):
 
 def test_get_token_method(mock_config):
     assert mock_config.get_token() is None
+
+
+def test_default_project_is_none(mock_config):
+    assert mock_config.project is None
+
+
+def test_set_and_get_project(mock_config):
+    mock_config.set("project", "proj-123")
+    assert mock_config.project == "proj-123"
+
+
+def test_env_var_overrides_project(monkeypatch, mock_config):
+    mock_config.set("project", "file-project")
+    monkeypatch.setenv("VTF_PROJECT", "env-project")
+    assert mock_config.project == "env-project"
+
+
+def test_get_project_method(mock_config):
+    assert mock_config.get_project() is None

@@ -36,12 +36,12 @@ def test_workplan_create_success(runner, mock_client):
         "created_at": "2025-01-01T00:00:00Z",
     }
     with patch("vtf.cli.get_client", return_value=mock_client):
-        result = runner.invoke(cli, ["workplan", "create", "--name", "Test Workplan"])
+        result = runner.invoke(cli, ["workplan", "create", "--name", "Test Workplan", "--project", "proj-123"])
     assert result.exit_code == 0
     assert "Created workplan wp-123" in result.output
     assert "Test Workplan" in result.output
     mock_client.post.assert_called_once_with(
-        "/v1/workplans/", {"name": "Test Workplan", "description": ""}
+        "/v1/workplans/", {"name": "Test Workplan", "description": "", "project": "proj-123"}
     )
 
 
@@ -57,7 +57,7 @@ def test_workplan_create_with_tags(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(
             cli,
-            ["workplan", "create", "--name", "Tagged Plan", "--tags", "a,b"],
+            ["workplan", "create", "--name", "Tagged Plan", "--tags", "a,b", "--project", "proj-456"],
         )
     assert result.exit_code == 0
     assert "Created workplan wp-456" in result.output
@@ -77,7 +77,7 @@ def test_workplan_create_with_description(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(
             cli,
-            ["workplan", "create", "--name", "Described Plan", "--description", "My description"],
+            ["workplan", "create", "--name", "Described Plan", "--description", "My description", "--project", "proj-789"],
         )
     assert result.exit_code == 0
     call_data = mock_client.post.call_args[0][1]
@@ -87,7 +87,7 @@ def test_workplan_create_with_description(runner, mock_client):
 def test_workplan_create_api_error(runner, mock_client):
     mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Name is required"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
-        result = runner.invoke(cli, ["workplan", "create", "--name", "Fail"])
+        result = runner.invoke(cli, ["workplan", "create", "--name", "Fail", "--project", "proj-fail"])
     assert result.exit_code == 1
     assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))
 
@@ -320,3 +320,61 @@ def test_workplan_create_help(runner):
     result = runner.invoke(cli, ["workplan", "create", "--help"])
     assert result.exit_code == 0
     assert "--name" in result.output
+    assert "--project" in result.output
+
+
+def test_workplan_create_with_project(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "wp-proj",
+        "name": "Project Plan",
+        "status": "active",
+        "description": "",
+        "project": "proj-123",
+        "tags": [],
+        "created_at": "2025-01-01T00:00:00Z",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["workplan", "create", "--name", "Project Plan", "--project", "proj-123"],
+        )
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["project"] == "proj-123"
+
+
+def test_workplan_create_missing_project(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["workplan", "create", "--name", "No Project Plan"])
+    assert result.exit_code == 1
+    assert "project is required" in result.output
+
+
+def test_workplan_create_with_default_project(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "wp-def",
+        "name": "Default Project Plan",
+        "status": "active",
+        "description": "",
+        "project": "proj-default",
+        "tags": [],
+        "created_at": "2025-01-01T00:00:00Z",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client), \
+         patch("vtf.commands.workplan.Config") as mock_config_cls:
+        mock_config = mock_config_cls.return_value
+        mock_config.project = "proj-default"
+        result = runner.invoke(cli, ["workplan", "create", "--name", "Default Project Plan"])
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["project"] == "proj-default"
+
+
+def test_workplan_list_with_project_filter(runner, mock_client):
+    mock_client.get.return_value = [
+        {"id": "wp-001", "name": "Plan Alpha", "status": "active"},
+    ]
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["workplan", "list", "--project", "proj-123"])
+    assert result.exit_code == 0
+    mock_client.get.assert_called_once_with("/v1/workplans/", params={"project": "proj-123"})
