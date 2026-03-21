@@ -1,0 +1,78 @@
+id: "9.7"
+name: "CLI — project commands, default project config, updated task/import commands"
+depends_on: ["9.3"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Add project management commands to the vtf CLI, default project config,
+  and update task commands to support --project, --labels, and optional
+  workplan/milestone.
+
+files:
+  modify:
+    - cli/vtf/cli.py
+    - cli/vtf/commands/task.py
+    - cli/vtf/commands/workplan.py
+    - cli/tests/test_task_commands.py
+    - cli/tests/test_workplan_commands.py
+  create:
+    - cli/vtf/commands/project.py
+    - cli/tests/test_project_commands.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Create cli/vtf/commands/project.py
+    - vtf project list — GET /v1/projects/
+    - vtf project create --name NAME [--repo URL] [--tags t1,t2]
+    - vtf project show ID — GET /v1/projects/:id/
+
+    Step 2: Register project commands in cli/vtf/cli.py
+
+    Step 3: Add default project to config
+    - vtf config set project <id>
+    - Stored in config file alongside api_url
+    - Used as default when --project not provided
+
+    Step 4: Update task commands
+    - vtf task create: add --project, --labels options
+    - vtf task create: workplan and milestone are now optional
+    - vtf task list: add --project filter
+    - vtf task claimable: add --project filter
+    - If no --project provided, use default from config
+
+    Step 5: Update workplan commands
+    - vtf workplan create: add --project option (required)
+    - vtf workplan list: add --project filter
+    - If no --project provided, use default from config
+
+    Step 6: Write tests
+    - Project list, create, show commands
+    - Task create with --labels
+    - Task create without workplan (backlog)
+    - Task list with --project filter
+    - Config set project
+
+  constraints:
+    - Default project from config avoids repetitive --project flags
+    - All existing CLI commands must still work
+    - Labels passed as comma-separated: --labels bugfix,ops,ui
+
+  references:
+    - cli/vtf/commands/task.py
+    - cli/vtf/commands/workplan.py
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "vtf project list/create/show commands work"
+  - "vtf config set project stores default project"
+  - "vtf task create supports --project and --labels"
+  - "vtf task create works without --workplan (backlog task)"
+  - "vtf task list/claimable support --project filter"
+  - "vtf workplan create requires --project"
+  - "All CLI tests pass"
+
+test_command:
+  unit: "cd cli && python -m pytest tests/ -v"

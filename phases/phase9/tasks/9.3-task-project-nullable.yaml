@@ -1,0 +1,114 @@
+id: "9.3"
+name: "Task.project FK, nullable workplan/milestone, labels, validation, and tests"
+depends_on: ["9.2"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Core model change: add project FK to Task, make workplan and milestone
+  nullable, add labels field, and implement validation rules. This enables
+  backlog tasks that belong to a project without a workplan or milestone.
+
+files:
+  modify:
+    - src/tasks/models.py
+    - src/tasks/serializers.py
+    - src/tasks/views.py
+    - tests/factories.py
+    - tests/conftest.py
+    - tests/tasks/test_api.py
+    - tests/tasks/test_models.py
+  create:
+    - src/tasks/migrations/NNNN_add_project_nullable_workplan_labels.py
+    - tests/tasks/test_backlog.py
+  affected:
+    - src/workplans/views.py
+
+implementation:
+  approach: |
+    Step 1: Update Task model
+    - Add: project = ForeignKey('projects.Project', on_delete=CASCADE, related_name='tasks')
+    - Change: workplan = ForeignKey(..., null=True, blank=True, default=None)
+    - Change: milestone (was phase) = ForeignKey(..., null=True, blank=True, default=None)
+    - Add: labels = JSONField(default=list, blank=True)
+
+    Step 2: Create migration
+    - Add nullable project FK
+    - Data migration: set task.project = task.workplan.project for all tasks
+    - Make project FK non-nullable
+    - Make workplan nullable
+    - Make milestone nullable
+    - Add labels field
+
+    Step 3: Add validation in TaskSerializer
+    - project is required
+    - workplan is optional
+    - milestone is optional
+    - If milestone is set, workplan must also be set
+    - If milestone is set, milestone.workplan must equal workplan
+    - If workplan is set, workplan.project must equal project
+    - labels is optional, defaults to []
+
+    Step 4: Update TaskViewSet
+    - Add ?project= filter to get_queryset
+    - Add ?labels= filter (tasks that have any of the specified labels)
+    - Update claimable endpoint to support ?project= filter
+
+    Step 5: Add project-level task creation endpoint
+    - New view: ProjectTasksView at /v1/projects/:id/tasks/
+    - POST auto-sets project from URL, workplan and milestone null
+    - GET lists backlog tasks (workplan is null) — same as ProjectBacklogView
+
+    Step 6: Update MilestoneTasksView (was PhaseTasksView)
+    - Auto-set project from milestone.workplan.project on create
+
+    Step 7: Update TaskFactory
+    - Add project = LazyAttribute(lambda o: o.milestone.workplan.project if o.milestone else ...)
+    - Handle the case where milestone/workplan are None
+
+    Step 8: Write backlog-specific tests (tests/tasks/test_backlog.py)
+    - Create task with only project (no workplan, no milestone)
+    - Create task with project + workplan (no milestone)
+    - Validation: milestone without workplan fails
+    - Validation: milestone.workplan != workplan fails
+    - Validation: workplan.project != project fails
+    - List tasks filtered by project
+    - List backlog tasks (workplan is null)
+    - Claimable endpoint with project filter
+    - Labels filtering
+
+    Step 9: Update existing tests for the nullable fields
+    - Factories must still produce valid tasks with milestone + workplan
+
+    Step 10: Run full test suite
+
+  constraints:
+    - All existing tests must pass — tasks with workplan+milestone must still work
+    - Data migration must populate project on all existing tasks
+    - Validation must prevent orphaned states (milestone without workplan)
+    - The claimable endpoint MUST support project filtering
+    - Labels field uses JSONField (list of strings), not a separate model
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+    - src/tasks/models.py
+    - src/tasks/views.py
+    - src/tasks/serializers.py
+
+acceptance_criteria:
+  - "Task model has required project FK"
+  - "Task.workplan is nullable"
+  - "Task.milestone is nullable"
+  - "Task.labels is JSONField with default []"
+  - "Validation prevents milestone without workplan"
+  - "Validation prevents cross-project milestone/workplan"
+  - "POST /v1/projects/:id/tasks/ creates backlog task"
+  - "GET /v1/tasks/?project=:id filters by project"
+  - "GET /v1/tasks/claimable?project=:id scopes discovery"
+  - "GET /v1/tasks/?labels=bugfix filters by label"
+  - "All existing tests pass"
+  - "New backlog tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/ -v --tb=short"

@@ -1,0 +1,56 @@
+tasks:
+  - id: "9.1"
+    name: "Project model, serializer, views, URLs, and tests"
+    depends_on: []
+
+  - id: "9.2"
+    name: "Workplan.project FK, data migration, and tests"
+    depends_on: ["9.1"]
+
+  - id: "9.3"
+    name: "Task.project FK, nullable workplan/milestone, labels, validation, and tests"
+    depends_on: ["9.2"]
+
+  - id: "9.4"
+    name: "Review policy and auto-completion updates for nullable milestone/workplan"
+    depends_on: ["9.3"]
+
+  - id: "9.5"
+    name: "Bulk import update — project context, milestones key, backlog_tasks"
+    depends_on: ["9.3"]
+
+  - id: "9.6"
+    name: "SSE event stream project-scoped filtering"
+    depends_on: ["9.1"]
+
+  - id: "9.7"
+    name: "CLI — project commands, default project config, updated task/import commands"
+    depends_on: ["9.3"]
+
+  - id: "9.8"
+    name: "Web UI — sidebar shows projects, project dashboard page"
+    depends_on: ["9.1", "9.3"]
+
+  - id: "9.9"
+    name: "Web UI — backlog board with label filtering"
+    depends_on: ["9.3", "9.8"]
+
+  - id: "9.10"
+    name: "Agent prompt updates for project context"
+    depends_on: []
+
+  - id: "9.11"
+    name: "Full verification — tests, dogfood rebuild, data migration, Playwright"
+    depends_on: ["9.4", "9.5", "9.6", "9.7", "9.9", "9.10"]
+
+# Dependency graph:
+#
+#   9.1 (Project model) ──┬→ 9.2 (Workplan FK) → 9.3 (Task FK) ──┬→ 9.4 (review/completion)──┐
+#                         │                                       ├→ 9.5 (bulk import)        ├→ 9.11 (verify)
+#                         ├→ 9.6 (SSE)                            ├→ 9.7 (CLI)                │
+#                         └→ 9.8 (sidebar + dashboard) ───────────┤                           │
+#                                                                 └→ 9.9 (backlog board)  ────┤
+#   9.10 (agent prompts) ────────────────────────────────────────────────────────────────────┘
+#
+# 9.1 → 9.2 → 9.3 is the critical path (model changes must be sequential).
+# 9.4, 9.5, 9.6, 9.7, 9.8+9.9, 9.10 can run in parallel after their deps.

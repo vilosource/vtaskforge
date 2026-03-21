@@ -1,0 +1,76 @@
+id: "8.4"
+name: "Rename Phase to Milestone in CLI"
+depends_on: ["8.1"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Rename all Phase references to Milestone in the vtf CLI codebase.
+  This includes commands, client API calls, import logic, tests, and
+  test fixtures.
+
+files:
+  modify:
+    - cli/vtf/cli.py
+    - cli/vtf/commands/workplan.py
+    - cli/vtf/commands/task.py
+    - cli/vtf/commands/import_cmd.py
+    - cli/tests/test_import_command.py
+    - cli/tests/test_workplan_commands.py
+    - cli/tests/test_task_commands.py
+  create: []
+  affected:
+    - cli/tests/fixtures/sample-phase/
+
+implementation:
+  approach: |
+    Step 1: Rename cli/tests/fixtures/sample-phase/ → cli/tests/fixtures/sample-milestone/
+    - Update PHASE.md → MILESTONE.md inside the fixture directory
+    - Update any references to "phase" in fixture YAML files
+
+    Step 2: Update cli/vtf/commands/import_cmd.py
+    - PHASE.md → MILESTONE.md file detection
+    - 'phases' payload key → 'milestones'
+    - All phase variable names → milestone
+    - Command help text references
+
+    Step 3: Update cli/vtf/commands/workplan.py
+    - Any phase references in workplan subcommands
+
+    Step 4: Update cli/vtf/commands/task.py
+    - --phase option → --milestone
+    - phase parameter names → milestone
+    - API field names: phase → milestone
+
+    Step 5: Update cli/vtf/cli.py
+    - Any top-level phase command registration
+
+    Step 6: Update CLI tests
+    - All fixture paths: sample-phase → sample-milestone
+    - All API URL assertions: /phases/ → /milestones/
+    - All payload assertions: 'phases' → 'milestones'
+    - Variable names and comments
+
+    Step 7: Run CLI test suite
+
+  constraints:
+    - CLI must work against the renamed backend API
+    - The import command must look for MILESTONE.md (not PHASE.md)
+    - All CLI help text must say "milestone" not "phase"
+    - Fixture directory rename must use git mv
+
+  references:
+    - cli/vtf/commands/import_cmd.py
+    - cli/tests/fixtures/sample-phase/
+
+acceptance_criteria:
+  - "CLI import looks for MILESTONE.md not PHASE.md"
+  - "CLI sends 'milestones' not 'phases' in bulk import payload"
+  - "CLI --phase options renamed to --milestone"
+  - "CLI test fixtures renamed from sample-phase to sample-milestone"
+  - "All CLI tests pass"
+  - "No references to 'phase' remain in cli/ directory"
+
+test_command:
+  unit: "cd cli && python -m pytest tests/ -v"

@@ -1,0 +1,74 @@
+id: "9.5"
+name: "Bulk import update — project context, milestones key, backlog_tasks"
+depends_on: ["9.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Update the bulk import system to require project context, use 'milestones'
+  key (renamed from 'phases'), and support a new 'backlog_tasks' section
+  for importing tasks without a milestone.
+
+files:
+  modify:
+    - src/core/bulk_import.py
+    - src/core/views.py
+    - tests/core/test_bulk_import.py
+    - cli/vtf/commands/import_cmd.py
+    - cli/tests/test_import_command.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Update src/core/bulk_import.py
+    - Add project_id parameter (required)
+    - Validate project exists
+    - 'milestones' key instead of 'phases' (already done in phase 8,
+      verify it stuck)
+    - Set task.project on all created tasks
+    - New 'backlog_tasks' section: list of tasks with no milestone
+      - Each gets project set, workplan set (if workplan_id provided), milestone null
+      - Refs work the same (can be link targets/sources)
+
+    Step 2: Update src/core/views.py (BulkImportView)
+    - Extract project_id from payload
+    - Pass to perform_bulk_import
+
+    Step 3: Update CLI import command
+    - Add --project option
+    - Include project_id in the import payload
+    - Update MILESTONE.md (was PHASE.md) parsing to include project context
+
+    Step 4: Update tests
+    - All existing bulk import tests must pass with project_id added
+    - New test: import with backlog_tasks section
+    - New test: backlog tasks get correct project, null milestone
+    - New test: links between milestone tasks and backlog tasks work
+    - New test: missing project_id returns error
+
+    Step 5: Update CLI tests for --project option
+
+  constraints:
+    - project_id is required in the payload — imports without it fail
+    - backlog_tasks is optional (empty = no backlog tasks imported)
+    - backlog_tasks items can be link targets/sources like any task
+    - Existing import format must still work (just add project_id)
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+    - src/core/bulk_import.py
+    - cli/vtf/commands/import_cmd.py
+
+acceptance_criteria:
+  - "Bulk import requires project_id in payload"
+  - "All created tasks have project FK set"
+  - "backlog_tasks section creates tasks with null milestone"
+  - "Links between milestone tasks and backlog tasks work"
+  - "CLI import command has --project option"
+  - "Missing project_id returns clear error"
+  - "All existing bulk import tests pass"
+  - "New backlog import tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/core/test_bulk_import.py -v && cd cli && python -m pytest tests/test_import_command.py -v"

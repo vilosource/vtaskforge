@@ -1,0 +1,94 @@
+id: "8.1"
+name: "Rename Phase to Milestone in backend models, serializers, views, URLs"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Rename all Phase references to Milestone in the backend Django code.
+  This is the foundational step — models define the schema that everything
+  else depends on. Includes database migration to rename the table and fields.
+
+files:
+  modify:
+    - src/workplans/models.py
+    - src/workplans/serializers.py
+    - src/workplans/views.py
+    - src/workplans/urls.py
+    - src/tasks/models.py
+    - src/tasks/serializers.py
+    - src/tasks/views.py
+    - src/tasks/urls.py
+    - src/links/serializers.py
+    - src/events/stream.py
+    - src/vtaskforge/settings/base.py
+  create:
+    - src/workplans/migrations/NNNN_rename_phase_to_milestone.py
+  affected:
+    - src/core/bulk_import.py
+
+implementation:
+  approach: |
+    Step 1: Rename the Phase model to Milestone in src/workplans/models.py
+    - Class name: Phase → Milestone
+    - PHASE_STATUS_CHOICES → MILESTONE_STATUS_CHOICES
+    - All comments and docstrings
+
+    Step 2: Create a Django migration that renames:
+    - The model: Phase → Milestone
+    - The database table: workplans_phase → workplans_milestone
+    - Any FK references in other models
+
+    Step 3: Update src/tasks/models.py
+    - FK field: phase → milestone
+    - ForeignKey target: 'workplans.Phase' → 'workplans.Milestone'
+    - related_name: 'tasks' stays the same (on the Milestone side)
+
+    Step 4: Update serializers
+    - src/workplans/serializers.py: PhaseSerializer → MilestoneSerializer
+    - src/tasks/serializers.py: field 'phase' → 'milestone'
+    - src/links/serializers.py: phase title resolution
+
+    Step 5: Update views
+    - src/workplans/views.py: PhaseViewSet → MilestoneViewSet,
+      WorkplanPhasesView → WorkplanMilestonesView, all internal references
+    - src/tasks/views.py: PhaseTasksView → MilestoneTasksView,
+      Phase import → Milestone import, all phase references
+
+    Step 6: Update URLs
+    - src/workplans/urls.py: 'phases/' → 'milestones/'
+    - src/tasks/urls.py: 'phases/' → 'milestones/'
+
+    Step 7: Update event stream
+    - src/events/stream.py: any phase references in SSE filtering
+
+    Do NOT update tests, CLI, web UI, or docs — those are separate tasks.
+    Do NOT update bulk_import.py yet — that is covered in task 8.3.
+
+  constraints:
+    - Must create a proper Django migration (not a manual SQL rename)
+    - The migration must handle both the model rename and FK field renames
+    - All API endpoints must use /milestones/ not /phases/
+    - Do not change any test files in this task
+    - Do not touch CLI or web UI code
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+    - src/workplans/models.py
+    - src/workplans/views.py
+    - src/tasks/models.py
+
+acceptance_criteria:
+  - "Phase model renamed to Milestone in src/workplans/models.py"
+  - "Django migration exists that renames model and table"
+  - "Task.phase FK renamed to Task.milestone"
+  - "PhaseSerializer → MilestoneSerializer"
+  - "PhaseViewSet → MilestoneViewSet"
+  - "All URL patterns use /milestones/ not /phases/"
+  - "No references to 'phase' remain in src/ (excluding tests, bulk_import)"
+  - "python manage.py check passes"
+  - "python manage.py makemigrations --check reports no changes needed"
+
+test_command:
+  unit: "docker compose exec api python manage.py check && docker compose exec api python manage.py makemigrations --check"

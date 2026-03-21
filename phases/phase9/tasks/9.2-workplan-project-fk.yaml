@@ -1,0 +1,77 @@
+id: "9.2"
+name: "Workplan.project FK, data migration, and tests"
+depends_on: ["9.1"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add a required project FK to Workplan. Write a data migration that
+  creates a Project for each existing Workplan and links them. Update
+  serializer, views, and tests.
+
+files:
+  modify:
+    - src/workplans/models.py
+    - src/workplans/serializers.py
+    - src/workplans/views.py
+    - tests/factories.py
+    - tests/workplans/test_api.py
+    - tests/workplans/test_milestone_models.py
+  create:
+    - src/workplans/migrations/NNNN_add_project_to_workplan.py
+  affected:
+    - tests/conftest.py
+
+implementation:
+  approach: |
+    Step 1: Add project FK to Workplan model
+    - project = models.ForeignKey('projects.Project', on_delete=CASCADE, related_name='workplans')
+    - Initially nullable for migration, then made required
+
+    Step 2: Create migration
+    - Schema migration: add nullable project FK
+    - Data migration: for each Workplan, create a Project with the same name
+      and tags, then set workplan.project to the new project
+    - Schema migration: make project FK non-nullable
+
+    Step 3: Update WorkplanSerializer
+    - Add 'project' to fields
+    - project is required on create
+
+    Step 4: Update WorkplanViewSet
+    - Filter by project if ?project= query param provided
+
+    Step 5: Update ProjectWorkplansView (from 9.1)
+    - Filter workplans by project from URL
+
+    Step 6: Update WorkplanFactory
+    - Add project = SubFactory(ProjectFactory)
+
+    Step 7: Update all workplan tests that create workplans
+    - Factories now auto-create a project
+
+    Step 8: Run full test suite
+
+  constraints:
+    - Data migration must be reversible
+    - Every existing Workplan gets its own Project (1:1 for now)
+    - Project names match Workplan names
+    - After migration, no Workplan has null project
+    - Existing tests must pass — factory changes handle this
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+    - src/workplans/models.py
+    - tests/factories.py
+
+acceptance_criteria:
+  - "Workplan model has required project FK"
+  - "Data migration creates Projects for existing Workplans"
+  - "WorkplanSerializer includes project field"
+  - "WorkplanFactory includes project SubFactory"
+  - "GET /v1/workplans/?project=:id filters by project"
+  - "All tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/ -v --tb=short"

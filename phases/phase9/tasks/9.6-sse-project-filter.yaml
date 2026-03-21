@@ -1,0 +1,53 @@
+id: "9.6"
+name: "SSE event stream project-scoped filtering"
+depends_on: ["9.1"]
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Add project-scoped filtering to the SSE event stream. The project
+  dashboard needs to show live updates across all workplans and backlog
+  tasks within a project.
+
+files:
+  modify:
+    - src/events/stream.py
+    - tests/events/test_stream.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Update the SSE view to accept ?project= query parameter
+    - Filter events where task.project_id matches the project parameter
+    - Keep existing ?workplan= filter working
+    - If both provided, project takes precedence (or AND them)
+
+    Step 2: Update event queryset/filtering logic
+    - Events are linked to tasks via task FK
+    - Filter: TaskEvent.objects.filter(task__project_id=project_id)
+
+    Step 3: Write tests
+    - SSE with ?project= returns events for tasks in that project
+    - SSE with ?project= includes backlog task events
+    - SSE with ?workplan= still works (unchanged)
+    - Events from other projects are excluded
+
+  constraints:
+    - Existing ?workplan= filtering must not break
+    - Project filter must include ALL tasks in the project (workplan + backlog)
+    - Performance: the filter should use indexed FK lookups
+
+  references:
+    - src/events/stream.py
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "SSE stream accepts ?project= query parameter"
+  - "Project-scoped stream includes events from all workplans in the project"
+  - "Project-scoped stream includes events from backlog tasks"
+  - "Existing workplan-scoped stream still works"
+  - "All stream tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/events/test_stream.py -v"

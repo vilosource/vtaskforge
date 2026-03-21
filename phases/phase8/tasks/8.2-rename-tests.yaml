@@ -1,0 +1,85 @@
+id: "8.2"
+name: "Rename Phase to Milestone in tests and factories"
+depends_on: ["8.1"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Rename all Phase references to Milestone across the test suite. This is the
+  highest-density area (~947 occurrences across 21 files) and must result in
+  the full test suite passing.
+
+files:
+  modify:
+    - tests/factories.py
+    - tests/conftest.py
+    - tests/workplans/test_phase_api.py
+    - tests/workplans/test_phase_models.py
+    - tests/workplans/test_phase_auto_complete.py
+    - tests/workplans/test_api.py
+    - tests/tasks/test_api.py
+    - tests/tasks/test_models.py
+    - tests/tasks/test_lifecycle.py
+    - tests/tasks/test_state_machine.py
+    - tests/tasks/test_review_policy.py
+    - tests/tasks/test_review_cascading.py
+    - tests/tasks/test_claiming.py
+    - tests/tasks/test_claim_expiry.py
+    - tests/tasks/test_notes.py
+    - tests/reviews/test_api.py
+    - tests/reviews/test_models.py
+    - tests/events/test_api.py
+    - tests/events/test_auto_logging.py
+    - tests/events/test_stream.py
+    - tests/core/test_bulk_import.py
+    - tests/core/test_pagination.py
+    - tests/links/test_models.py
+  create: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Update tests/factories.py
+    - PhaseFactory → MilestoneFactory
+    - All references to Phase model → Milestone
+
+    Step 2: Update tests/conftest.py
+    - Import MilestoneFactory instead of PhaseFactory
+    - Rename phase fixtures to milestone fixtures
+
+    Step 3: Rename test files
+    - tests/workplans/test_phase_api.py → tests/workplans/test_milestone_api.py
+    - tests/workplans/test_phase_models.py → tests/workplans/test_milestone_models.py
+    - tests/workplans/test_phase_auto_complete.py → tests/workplans/test_milestone_auto_complete.py
+
+    Step 4: In each test file, rename:
+    - All 'phase' variable names → 'milestone'
+    - All PhaseFactory calls → MilestoneFactory calls
+    - All URL patterns: '/phases/' → '/milestones/'
+    - All assertion keys: 'phase' → 'milestone'
+    - All fixture names: 'phase' → 'milestone'
+    - All class/function names containing 'phase' → 'milestone'
+
+    Step 5: Run the full test suite and fix any remaining references
+
+  constraints:
+    - Every single test must pass after the rename
+    - Do not change test logic or assertions — only rename references
+    - File renames must be git mv (preserve history)
+    - The test count must remain the same (currently 684+)
+
+  references:
+    - tests/factories.py
+    - tests/conftest.py
+
+acceptance_criteria:
+  - "PhaseFactory renamed to MilestoneFactory in factories.py"
+  - "All test files use 'milestone' instead of 'phase'"
+  - "Test files renamed: test_phase_*.py → test_milestone_*.py"
+  - "All URL assertions use /milestones/ not /phases/"
+  - "Full test suite passes: docker compose exec api pytest tests/ -v"
+  - "Test count is same or higher than before the rename"
+
+test_command:
+  unit: "docker compose exec api pytest tests/ -v --tb=short"

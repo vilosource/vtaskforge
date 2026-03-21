@@ -1,0 +1,108 @@
+id: "8.5"
+name: "Rename Phase to Milestone in web UI"
+depends_on: ["8.1"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Rename all Phase references to Milestone in the React web UI. Includes
+  component renames, API hook renames, route updates, CSS class renames,
+  and display text changes.
+
+files:
+  modify:
+    - web/src/App.tsx
+    - web/src/api/phases.ts
+    - web/src/api/tasks.ts
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/pages/WorkplanList.tsx
+    - web/src/pages/BoardView.tsx
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/pages/KanbanBoard.test.tsx
+    - web/src/pages/TaskPage.tsx
+    - web/src/components/PhasePipeline.tsx
+    - web/src/components/TaskCard.tsx
+    - web/src/components/TaskCard.test.tsx
+    - web/src/components/TaskDetail.test.tsx
+    - web/src/styles/workplan-detail.css
+    - web/src/styles/kanban.css
+  create:
+    - web/src/api/milestones.ts
+    - web/src/components/MilestonePipeline.tsx
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Rename API module
+    - web/src/api/phases.ts → web/src/api/milestones.ts (git mv)
+    - Phase interface → Milestone interface
+    - PhaseStats → MilestoneStats
+    - usePhases → useMilestones
+    - usePhase → useMilestone
+    - usePhaseStats → useMilestoneStats
+    - useActivatePhase → useActivateMilestone
+    - useCompletePhase → useCompleteMilestone
+    - API URLs: /phases/ → /milestones/
+
+    Step 2: Rename component
+    - web/src/components/PhasePipeline.tsx → web/src/components/MilestonePipeline.tsx
+    - PhasePipeline → MilestonePipeline
+    - PipelineNode phase prop → milestone prop
+
+    Step 3: Update all imports across pages
+    - Every file that imports from '../api/phases' → '../api/milestones'
+    - Every file that imports PhasePipeline → MilestonePipeline
+
+    Step 4: Update web/src/api/tasks.ts
+    - Task interface: phase field → milestone field
+    - Any phase query params → milestone
+
+    Step 5: Update pages
+    - WorkplanDetail.tsx: PhaseCard → MilestoneCard, PhaseGroup → MilestoneGroup,
+      all phase variable names → milestone, display text "Phases" → "Milestones"
+    - BoardView.tsx: phase references → milestone, usePhase → useMilestone
+    - KanbanBoard.tsx: phase props → milestone, phaseId → milestoneId
+    - TaskPage.tsx: phase references → milestone
+    - WorkplanList.tsx: usePhases → useMilestones
+
+    Step 6: Update App.tsx routes
+    - /workplans/:id/phases/:phaseId → /workplans/:id/milestones/:milestoneId
+
+    Step 7: Update CSS
+    - .phase-card → .milestone-card
+    - .phase-group → .milestone-group
+    - .phase-card-* → .milestone-card-*
+    - .phase-group-* → .milestone-group-*
+
+    Step 8: Update test files
+    - KanbanBoard.test.tsx, TaskCard.test.tsx, TaskDetail.test.tsx
+
+    Step 9: Build and verify
+    - cd web && npm run build (must succeed)
+    - cd web && npx vitest run (all tests pass)
+
+  constraints:
+    - File renames must use git mv
+    - All display text visible to users must say "Milestone" not "Phase"
+    - Route URLs change: /phases/ → /milestones/
+    - CSS class names change for consistency
+    - Build must succeed (npm run build)
+
+  references:
+    - web/src/api/phases.ts
+    - web/src/components/PhasePipeline.tsx
+    - web/src/pages/WorkplanDetail.tsx
+
+acceptance_criteria:
+  - "phases.ts renamed to milestones.ts with all hooks renamed"
+  - "PhasePipeline.tsx renamed to MilestonePipeline.tsx"
+  - "All routes use /milestones/ not /phases/"
+  - "All display text says 'Milestone' not 'Phase'"
+  - "CSS classes renamed from phase-* to milestone-*"
+  - "cd web && npm run build succeeds"
+  - "cd web && npx vitest run passes"
+  - "No references to 'phase' remain in web/src/"
+
+test_command:
+  unit: "cd web && npx vitest run && npm run build"

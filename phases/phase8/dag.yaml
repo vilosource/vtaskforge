@@ -1,0 +1,40 @@
+tasks:
+  - id: "8.1"
+    name: "Rename Phase to Milestone in backend models, serializers, views, URLs"
+    depends_on: []
+
+  - id: "8.2"
+    name: "Rename Phase to Milestone in tests and factories"
+    depends_on: ["8.1"]
+
+  - id: "8.3"
+    name: "Rename Phase to Milestone in completion, review_policy, state_machine"
+    depends_on: ["8.1"]
+
+  - id: "8.4"
+    name: "Rename Phase to Milestone in CLI"
+    depends_on: ["8.1"]
+
+  - id: "8.5"
+    name: "Rename Phase to Milestone in web UI"
+    depends_on: ["8.1"]
+
+  - id: "8.6"
+    name: "Rename Phase to Milestone in docs, CLAUDE.md, agent prompts"
+    depends_on: []
+
+  - id: "8.7"
+    name: "Full verification — tests, dogfood rebuild, Playwright smoke test"
+    depends_on: ["8.2", "8.3", "8.4", "8.5", "8.6"]
+
+# Dependency graph:
+#   8.1 (backend core) ──┬→ 8.2 (tests)    ──┐
+#                        ├→ 8.3 (logic)     ──┤
+#                        ├→ 8.4 (CLI)       ──┼→ 8.7 (verify)
+#                        └→ 8.5 (web UI)    ──┤
+#   8.6 (docs)         ────────────────────────┘
+#
+# 8.1 must go first (models define the schema).
+# 8.2, 8.3, 8.4, 8.5 depend on 8.1 but are independent of each other.
+# 8.6 is fully independent (text-only changes).
+# 8.7 runs last — full regression.

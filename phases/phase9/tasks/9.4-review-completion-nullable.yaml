@@ -1,0 +1,70 @@
+id: "9.4"
+name: "Review policy and auto-completion updates for nullable milestone/workplan"
+depends_on: ["9.3"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Update review_policy.py and completion.py to handle tasks that have no
+  milestone and/or no workplan. Backlog tasks must not crash these code paths.
+
+files:
+  modify:
+    - src/tasks/review_policy.py
+    - src/workplans/completion.py
+  create:
+    - tests/tasks/test_backlog_review_policy.py
+    - tests/workplans/test_backlog_completion.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Update src/tasks/review_policy.py (get_effective_review_flags)
+    Current cascade: Task → Milestone → Workplan
+    New behavior:
+    - If task.milestone is None and task.workplan is None:
+      return (task.needs_review_before_start or False,
+              task.needs_review_on_completion or False)
+    - If task.milestone is None but task.workplan is set:
+      cascade Task → Workplan (skip milestone)
+    - If task.milestone is set:
+      cascade Task → Milestone → Workplan (unchanged)
+
+    Step 2: Update src/workplans/completion.py (maybe_complete_milestone)
+    - Guard already checks task.milestone is not None — verify this works
+    - Backlog tasks (milestone=None) should be a no-op
+    - Add explicit test for this
+
+    Step 3: Write tests for backlog task review policy
+    - Backlog task with no review flags → both False
+    - Backlog task with needs_review_before_start=True → True
+    - Task with workplan (no milestone) inherits workplan defaults
+    - Task with milestone inherits milestone → workplan (unchanged)
+
+    Step 4: Write tests for backlog task completion
+    - Completing a backlog task does not trigger milestone completion
+    - Completing a backlog task does not crash
+
+  constraints:
+    - Existing review policy behavior MUST NOT change for tasks with milestone
+    - Backlog tasks must never crash get_effective_review_flags
+    - Backlog tasks must never crash maybe_complete_milestone
+    - Both functions must handle None gracefully with guard clauses
+
+  references:
+    - src/tasks/review_policy.py
+    - src/workplans/completion.py
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "get_effective_review_flags handles task.milestone=None without crash"
+  - "get_effective_review_flags handles task.workplan=None without crash"
+  - "maybe_complete_milestone is a no-op for backlog tasks"
+  - "Existing review policy tests still pass"
+  - "Existing auto-completion tests still pass"
+  - "New backlog-specific tests pass"
+  - "Full test suite passes"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/test_review_policy.py tests/tasks/test_backlog_review_policy.py tests/workplans/test_milestone_auto_complete.py tests/workplans/test_backlog_completion.py -v"

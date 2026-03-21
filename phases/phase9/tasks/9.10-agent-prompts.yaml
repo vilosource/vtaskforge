@@ -1,0 +1,58 @@
+id: "9.10"
+name: "Agent prompt updates for project context"
+depends_on: []
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Update agent prompt files to use "milestone" terminology and include
+  project context in their workflows.
+
+files:
+  modify:
+    - .claude/agents/vtf-supervisor.md
+    - .claude/agents/vtf-executor.md
+    - .claude/agents/vtf-judge.md
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Update vtf-supervisor.md
+    - "phase" → "milestone" throughout
+    - Add project context: supervisor is assigned to a project
+    - Task discovery: vtf task claimable --project <id>
+    - Milestone processing: check active workplans, process milestones
+
+    Step 2: Update vtf-executor.md
+    - "phase" → "milestone" throughout
+    - Document that task JSON now includes project context
+    - Executor can use project.repo_url to know which repo to work in
+
+    Step 3: Update vtf-judge.md
+    - "phase" → "milestone" throughout
+    - Review context includes project information
+
+    Step 4: Review each prompt for correctness
+    - Ensure CLI command examples use new syntax
+    - Ensure vtf commands reference --project where needed
+
+  constraints:
+    - These are prompt files, not code — changes affect agent behavior
+    - Be precise with CLI command examples
+    - Don't change agent behavior logic, only terminology and context
+
+  references:
+    - .claude/agents/vtf-supervisor.md
+    - .claude/agents/vtf-executor.md
+    - .claude/agents/vtf-judge.md
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "No 'phase' references in agent prompts (use 'milestone')"
+  - "Supervisor prompt includes project context in workflow"
+  - "Executor prompt documents project context in task JSON"
+  - "CLI command examples use --project where appropriate"
+
+test_command:
+  unit: "echo 'Text-only changes — no automated tests. Manual review required.'"

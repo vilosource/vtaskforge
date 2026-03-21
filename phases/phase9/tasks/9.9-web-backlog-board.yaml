@@ -1,0 +1,79 @@
+id: "9.9"
+name: "Web UI — backlog board with label filtering"
+depends_on: ["9.3", "9.8"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Create a Kanban board view for project backlog tasks (tasks without
+  workplan/milestone). Includes label filter pills for narrowing the view.
+
+files:
+  modify:
+    - web/src/App.tsx
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/api/tasks.ts
+  create:
+    - web/src/pages/BacklogView.tsx
+  affected:
+    - web/src/pages/ProjectDashboard.tsx
+
+implementation:
+  approach: |
+    Step 1: Update web/src/api/tasks.ts
+    - Add useBacklogTasks(projectId) hook
+      - GET /v1/projects/:id/backlog/ (or /v1/tasks/?project=:id&workplan__isnull=true)
+    - Add useTasksByProject(projectId) hook (all tasks in project)
+
+    Step 2: Update KanbanBoard.tsx
+    - Add a new mode: project backlog mode
+    - Accept optional projectId prop (without workplanId/milestoneId)
+    - When in backlog mode:
+      - Query backlog tasks instead of workplan/milestone tasks
+      - SSE: connect to /v1/events/stream/?project=:id
+      - Show label filter pills above the board
+    - Same columns (Draft, Ready, In Progress, Attention, Done)
+
+    Step 3: Create BacklogView.tsx
+    - Route: /projects/:id/backlog
+    - Breadcrumb: Project name → Backlog
+    - Renders KanbanBoard in backlog mode
+    - Label filter pills:
+      - Extract unique labels from all backlog tasks
+      - Clicking a label pill toggles filtering
+      - Multiple labels = OR filter (show tasks with any selected label)
+      - "All" button to clear filters
+
+    Step 4: Register route in App.tsx
+    - /projects/:id/backlog → BacklogView
+
+    Step 5: Link from ProjectDashboard
+    - Backlog section header links to /projects/:id/backlog
+    - Show label pills with counts on dashboard
+
+    Step 6: Build and verify
+
+  constraints:
+    - Reuse KanbanBoard component — don't create a separate board
+    - Label filtering happens client-side (filter the fetched tasks)
+    - Same column layout as milestone boards
+    - Empty backlog shows a friendly "No backlog tasks" message
+
+  references:
+    - web/src/pages/KanbanBoard.tsx
+    - web/src/pages/BoardView.tsx
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "BacklogView renders at /projects/:id/backlog"
+  - "KanbanBoard works in backlog mode (project-scoped, no workplan)"
+  - "Label filter pills appear above the board"
+  - "Clicking a label pill filters tasks"
+  - "SSE uses project-scoped stream"
+  - "Empty backlog shows appropriate message"
+  - "npm run build succeeds"
+  - "npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run && npm run build"

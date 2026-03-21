@@ -1,0 +1,118 @@
+id: "9.11"
+name: "Full verification — tests, dogfood rebuild, data migration, Playwright"
+depends_on: ["9.4", "9.5", "9.6", "9.7", "9.9", "9.10"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  End-of-phase verification gate. Runs all tests, rebuilds dogfood,
+  runs data migration (existing workplans → projects), seeds demo data,
+  and visually verifies the complete project hierarchy UI via Playwright.
+
+files:
+  create:
+    - scripts/dogfood_migrate_projects.py
+    - scripts/seed_demo_project.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Run full backend test suite
+    ```bash
+    docker compose exec api pytest tests/ -v --tb=short
+    ```
+    Must pass ALL tests.
+
+    Step 2: Run CLI test suite
+    ```bash
+    cd cli && python -m pytest tests/ -v
+    ```
+
+    Step 3: Run web UI tests and build
+    ```bash
+    cd web && npx vitest run && npm run build
+    ```
+
+    Step 4: Rebuild and deploy dogfood
+    ```bash
+    docker compose -f docker-compose.dogfood.yml build dogfood-api
+    docker compose -f docker-compose.dogfood.yml up -d dogfood-api
+    ```
+
+    Step 5: Run migrations on dogfood
+    ```bash
+    docker compose -f docker-compose.dogfood.yml exec dogfood-api \
+      python src/manage.py migrate
+    ```
+
+    Step 6: Run data migration script
+    Create scripts/dogfood_migrate_projects.py that:
+    - Connects to dogfood DB
+    - For each Workplan without a project, creates a Project
+    - Links workplan to project
+    - Sets project on all tasks belonging to that workplan
+    - Verifies no orphaned tasks (tasks without project)
+
+    Step 7: Seed demo data
+    Create scripts/seed_demo_project.py that creates:
+    - Project "Platform Migration" with repo_url and tags
+    - Workplan "v2.0" with 5 milestones:
+      - API Gateway (completed — all tasks done)
+      - Auth Service (active — tasks at various stages)
+      - Data Pipeline (active — parallel with Auth)
+      - Frontend SPA (pending)
+      - Load Testing (pending)
+    - 5 backlog tasks with labels (bugfix, ops, docs, infra)
+      at various statuses (draft, todo, doing, done, blocked)
+
+    Step 8: Playwright verification
+    - Navigate to http://localhost:8001
+    - Log in as admin/admin
+    - Verify sidebar shows PROJECTS (not WORKPLANS)
+    - Verify project list shows all projects
+    - Click a project → verify project dashboard loads
+    - Verify dashboard shows workplans and backlog count
+    - Click a workplan → verify milestones (not phases)
+    - Click a milestone → verify Kanban board loads
+    - Navigate to backlog → verify backlog board with label pills
+    - Take screenshots at each step
+    - Verify numerically that no "Phase" text appears in the UI
+
+    Step 9: Verify vtf CLI against dogfood
+    ```bash
+    vtf config set api_url http://localhost:8001
+    vtf project list
+    vtf project show <id>
+    vtf workplan list --project <id>
+    vtf task list --project <id>
+    vtf task list --project <id> --labels bugfix
+    ```
+
+  constraints:
+    - ALL tests must pass — zero failures
+    - Data migration must not lose any existing data
+    - Demo data must showcase all new features
+    - UI must show "Milestone" and "Project" — no "Phase" anywhere
+    - CLI must work with --project flag
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "Backend test suite: all tests pass"
+  - "CLI test suite: all tests pass"
+  - "Web UI: vitest passes, npm run build succeeds"
+  - "Dogfood rebuilt and deployed"
+  - "Migrations applied without errors"
+  - "Data migration: all workplans have projects, all tasks have projects"
+  - "Demo project seeded with milestones and backlog tasks"
+  - "Playwright: sidebar shows PROJECTS"
+  - "Playwright: project dashboard shows workplans + backlog"
+  - "Playwright: backlog board shows label filter pills"
+  - "Playwright: no 'Phase' text visible anywhere"
+  - "vtf CLI project/task commands work against dogfood"
+
+test_command:
+  unit: "docker compose exec api pytest tests/ -v --tb=short"

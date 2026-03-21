@@ -1,0 +1,104 @@
+id: "9.8"
+name: "Web UI — sidebar shows projects, project dashboard page"
+depends_on: ["9.1", "9.3"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Update the sidebar to show projects instead of workplans. Create a new
+  project dashboard page that shows workplans and backlog for a project.
+
+files:
+  modify:
+    - web/src/App.tsx
+    - web/src/components/Sidebar.tsx
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/pages/BoardView.tsx
+    - web/src/styles/sidebar.css
+    - web/src/styles/workplan-detail.css
+  create:
+    - web/src/api/projects.ts
+    - web/src/pages/ProjectDashboard.tsx
+    - web/src/styles/project-dashboard.css
+  affected:
+    - web/src/main.tsx
+
+implementation:
+  approach: |
+    Step 1: Create web/src/api/projects.ts
+    - Project interface (id, name, description, status, repo_url, tags, etc)
+    - ProjectStats interface
+    - useProjects() — GET /v1/projects/
+    - useProject(id) — GET /v1/projects/:id/
+    - useProjectStats(id) — GET /v1/projects/:id/stats/
+    - useProjectWorkplans(id) — GET /v1/projects/:id/workplans/
+    - useProjectBacklog(id) — GET /v1/projects/:id/backlog/
+
+    Step 2: Update Sidebar.tsx
+    - Import useProjects instead of useWorkplans
+    - Section label: "WORKPLANS" → "PROJECTS"
+    - List projects with status dots and progress
+    - Active project highlighted based on URL params
+    - Link to /projects/:id (project dashboard)
+
+    Step 3: Create ProjectDashboard.tsx
+    - Header: project name, description, repo URL, tags
+    - Stats row: total tasks, done, in progress, ready, overall %
+    - Workplans section: cards grouped by status (active/pending/completed)
+    - Each workplan card links to /projects/:pid/workplans/:wid
+    - Backlog section: count with label pills, link to backlog board
+    - SSE: connect to /v1/events/stream/?project=:id for live updates
+
+    Step 4: Update App.tsx routes
+    - / → ProjectList (was WorkplanList)
+    - /projects/:id → ProjectDashboard (new)
+    - /projects/:id/workplans/:wid → WorkplanDetail (updated URL)
+    - /projects/:id/workplans/:wid/milestones/:mid → BoardView (updated URL)
+    - /projects/:id/backlog → BacklogBoard (task 9.9)
+    - /tasks/:id → TaskPage (unchanged)
+
+    Step 5: Update WorkplanDetail.tsx
+    - Breadcrumb: links back to /projects/:pid
+    - URL params: extract pid from route
+    - SSE: use workplan-scoped stream (unchanged)
+
+    Step 6: Update BoardView.tsx
+    - Breadcrumb: Project → Workplan → Milestone
+    - URL params: extract pid, wid, mid from route
+
+    Step 7: Create project-dashboard.css
+    - Styles for the project dashboard layout
+    - Consistent with workplan-detail.css spacing
+
+    Step 8: Register CSS import in main.tsx
+
+    Step 9: Build and verify
+    - npm run build must succeed
+    - npx vitest run must pass
+
+  constraints:
+    - Home page (/) should show a project list, not workplan list
+    - Sidebar shows projects, not workplans
+    - All routes nest under /projects/:id/
+    - WorkplanDetail and BoardView URLs change — update all internal links
+    - The project dashboard must handle projects with zero workplans
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+    - web/src/components/Sidebar.tsx
+    - web/src/pages/WorkplanDetail.tsx
+    - web/src/App.tsx
+
+acceptance_criteria:
+  - "Sidebar shows projects with status dots"
+  - "Clicking project goes to /projects/:id dashboard"
+  - "Project dashboard shows workplans and backlog count"
+  - "Workplan cards link to /projects/:pid/workplans/:wid"
+  - "All routes nest under /projects/:id/"
+  - "Breadcrumbs updated on workplan detail and board views"
+  - "npm run build succeeds"
+  - "npx vitest run passes"
+
+test_command:
+  unit: "cd web && npx vitest run && npm run build"

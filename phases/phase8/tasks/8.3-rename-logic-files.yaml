@@ -1,0 +1,69 @@
+id: "8.3"
+name: "Rename Phase to Milestone in completion, review_policy, state_machine, bulk_import"
+depends_on: ["8.1"]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Rename Phase references in the critical logic files: auto-completion,
+  review policy cascade, state machine hook, and bulk import. These files
+  contain business logic that must remain functionally identical after rename.
+
+files:
+  modify:
+    - src/workplans/completion.py
+    - src/tasks/review_policy.py
+    - src/tasks/state_machine.py
+    - src/core/bulk_import.py
+    - src/core/views.py
+  create: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: src/workplans/completion.py
+    - maybe_complete_phase() → maybe_complete_milestone()
+    - All 'phase' variable names → 'milestone'
+    - task.phase → task.milestone
+
+    Step 2: src/tasks/state_machine.py
+    - Import: from workplans.completion import maybe_complete_milestone
+    - Call: maybe_complete_milestone(task) instead of maybe_complete_phase(task)
+
+    Step 3: src/tasks/review_policy.py
+    - task.phase → task.milestone
+    - phase variable names → milestone
+    - Cascade logic: Task → Milestone → Workplan (same behavior, new names)
+
+    Step 4: src/core/bulk_import.py
+    - 'phases' key in payload → 'milestones'
+    - Phase.objects.create → Milestone.objects.create
+    - ref_type_map: "phase" → "milestone"
+    - phase variable names → milestone
+    - All comments referencing phase → milestone
+
+    Step 5: src/core/views.py (BulkImportView)
+    - Any phase references in the view that calls bulk_import
+
+  constraints:
+    - Logic must remain functionally identical — only names change
+    - Bulk import payload key changes from 'phases' to 'milestones'
+    - The review policy cascade order is unchanged
+    - Auto-completion behavior is unchanged
+
+  references:
+    - src/workplans/completion.py
+    - src/tasks/review_policy.py
+    - src/core/bulk_import.py
+
+acceptance_criteria:
+  - "maybe_complete_phase renamed to maybe_complete_milestone"
+  - "state_machine.py imports and calls maybe_complete_milestone"
+  - "review_policy.py uses task.milestone instead of task.phase"
+  - "bulk_import.py uses 'milestones' key instead of 'phases'"
+  - "No references to 'phase' remain in these files"
+  - "docker compose exec api pytest tests/ passes"
+
+test_command:
+  unit: "docker compose exec api pytest tests/workplans/test_milestone_auto_complete.py tests/tasks/test_review_policy.py tests/core/test_bulk_import.py -v"

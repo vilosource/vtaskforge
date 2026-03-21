@@ -1,0 +1,99 @@
+id: "8.7"
+name: "Full verification — tests, dogfood rebuild, Playwright smoke test"
+depends_on: ["8.2", "8.3", "8.4", "8.5", "8.6"]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  End-of-phase verification gate. Runs all tests across all layers,
+  rebuilds the dogfood Docker image, deploys it, and uses Playwright
+  to visually verify the UI renders correctly with "Milestone" terminology.
+  This task MUST pass before Phase 9 begins.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Verify no "phase" references remain (excluding migration files and this spec)
+    ```bash
+    # Backend (excluding migrations which must keep historical names)
+    grep -ri "phase" src/ --include="*.py" \
+      --exclude-dir=migrations \
+      | grep -v "# migration" | grep -v "test_phase" || echo "CLEAN"
+
+    # CLI
+    grep -ri "phase" cli/ --include="*.py" || echo "CLEAN"
+
+    # Web UI
+    grep -ri "phase" web/src/ --include="*.ts" --include="*.tsx" --include="*.css" || echo "CLEAN"
+    ```
+
+    Step 2: Run full backend test suite
+    ```bash
+    docker compose exec api pytest tests/ -v --tb=short
+    ```
+    Must pass ALL tests. Count must be >= 684.
+
+    Step 3: Run CLI test suite
+    ```bash
+    cd cli && python -m pytest tests/ -v
+    ```
+
+    Step 4: Run web UI tests and build
+    ```bash
+    cd web && npx vitest run && npm run build
+    ```
+
+    Step 5: Rebuild and deploy dogfood
+    ```bash
+    docker compose -f docker-compose.dogfood.yml build dogfood-api
+    docker compose -f docker-compose.dogfood.yml up -d dogfood-api
+    ```
+
+    Step 6: Run database migrations on dogfood
+    ```bash
+    docker compose -f docker-compose.dogfood.yml exec dogfood-api \
+      python src/manage.py migrate
+    ```
+
+    Step 7: Playwright smoke test
+    - Navigate to http://localhost:8001
+    - Log in as admin/admin
+    - Verify sidebar shows workplans
+    - Click a workplan → verify "Milestones" text appears (not "Phases")
+    - Click a milestone → verify Kanban board loads
+    - Take screenshots at each step for evidence
+    - Verify numerically (evaluate JS) that no "Phase" text is visible in the UI
+
+    Step 8: Verify vtf CLI against dogfood
+    ```bash
+    vtf config set api_url http://localhost:8001
+    vtf workplan list          # must work
+    vtf task list              # must work
+    ```
+
+  constraints:
+    - ALL tests must pass — zero failures
+    - The dogfood UI must show "Milestone" everywhere, not "Phase"
+    - CLI must work against the renamed API endpoints
+    - No shortcuts — every verification step must be executed
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+
+acceptance_criteria:
+  - "grep finds zero 'phase' references in src/, cli/, web/src/ (excluding migrations)"
+  - "Backend test suite: all tests pass, count >= 684"
+  - "CLI test suite: all tests pass"
+  - "Web UI: vitest passes, npm run build succeeds"
+  - "Dogfood rebuilt and deployed successfully"
+  - "Dogfood migrations applied without errors"
+  - "Playwright screenshots confirm 'Milestone' text in UI"
+  - "vtf CLI commands work against dogfood API"
+
+test_command:
+  unit: "docker compose exec api pytest tests/ -v --tb=short"

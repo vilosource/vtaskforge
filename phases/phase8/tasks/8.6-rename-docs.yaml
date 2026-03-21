@@ -1,0 +1,85 @@
+id: "8.6"
+name: "Rename Phase to Milestone in docs, CLAUDE.md, agent prompts"
+depends_on: []
+agent_model: sonnet
+isolation: parallel
+judge: false
+
+description: |
+  Rename all Phase references to Milestone in documentation, project
+  instructions, and agent prompt files. This is text-only work with no
+  code risk, but important for consistency.
+
+files:
+  modify:
+    - CLAUDE.md
+    - docs/INDEX.md
+    - docs/design/api-surface-DESIGN.md
+    - docs/design/vtaskforge-DESIGN.md
+    - docs/design/actor-model-DESIGN.md
+    - docs/design/session-handoff-GUIDE.md
+    - docs/design/process-retrospective-ANALYSIS.md
+    - docs/design/simulation-gap-ANALYSIS.md
+    - docs/design/design-gaps-ANALYSIS.md
+    - docs/design/behavioral-verification-DESIGN.md
+    - docs/guides/phase-process-GUIDE.md
+    - docs/guides/phase-decomposition-GUIDE.md
+    - docs/guides/quickstart-GUIDE.md
+    - docs/guides/task-breakdown-GUIDE.md
+    - docs/references/gitlab-pipeline-analogy-REFERENCE.md
+    - docs/proposals/agent-pool-manager-PROPOSAL.md
+    - docs/proposals/scrum-master-agent-PROPOSAL.md
+    - docs/diagrams/generate-c4-diagrams.py
+  affected:
+    - .claude/agents/vtf-supervisor.md
+    - .claude/agents/vtf-executor.md
+    - .claude/agents/vtf-judge.md
+  create: []
+
+implementation:
+  approach: |
+    Step 1: Rename doc files
+    - docs/guides/phase-process-GUIDE.md → docs/guides/milestone-process-GUIDE.md
+    - docs/guides/phase-decomposition-GUIDE.md → docs/guides/milestone-decomposition-GUIDE.md
+
+    Step 2: Find-and-replace across all docs (case-sensitive):
+    - "Phase" → "Milestone" (capitalized)
+    - "phase" → "milestone" (lowercase)
+    - "phases" → "milestones" (plural)
+    - "PHASE" → "MILESTONE" (uppercase, for file names like PHASE.md)
+
+    Step 3: Update CLAUDE.md
+    - All phase references in vtf CLI examples
+    - phases/ directory references
+
+    Step 4: Update agent prompts in .claude/agents/
+    - vtf-supervisor.md: phase orchestration → milestone orchestration
+    - vtf-executor.md: phase context references
+    - vtf-judge.md: phase context references
+
+    Step 5: Update docs/INDEX.md to reflect renamed guide files
+
+    Step 6: Review each file to ensure the rename makes sense in context
+    (don't blindly replace — "phase" might appear in non-vtf contexts)
+
+  constraints:
+    - File renames must use git mv
+    - Do not rename "phase" when it appears in a non-vtf context
+      (e.g., "deployment phase" in general prose is fine to rename,
+      but "three-phase power" would not be — unlikely but check)
+    - CLAUDE.md changes affect all future sessions — be thorough
+    - Agent prompts are critical for agent behavior — review carefully
+
+  references:
+    - CLAUDE.md
+    - docs/INDEX.md
+
+acceptance_criteria:
+  - "Guide files renamed: phase-process → milestone-process, phase-decomposition → milestone-decomposition"
+  - "CLAUDE.md uses 'milestone' throughout"
+  - "Agent prompts (.claude/agents/) use 'milestone' throughout"
+  - "docs/INDEX.md updated with new file names"
+  - "No inappropriate 'phase' references remain in docs/"
+
+test_command:
+  unit: "echo 'Text-only changes — no automated tests. Manual review required.'"

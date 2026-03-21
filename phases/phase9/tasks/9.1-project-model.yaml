@@ -1,0 +1,99 @@
+id: "9.1"
+name: "Project model, serializer, views, URLs, and tests"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create the Project Django app with model, serializer, viewset, URLs,
+  and full test coverage. Project is the new top-level container for
+  all work on a codebase/product.
+
+files:
+  create:
+    - src/projects/__init__.py
+    - src/projects/apps.py
+    - src/projects/models.py
+    - src/projects/serializers.py
+    - src/projects/views.py
+    - src/projects/urls.py
+    - src/projects/migrations/__init__.py
+    - src/projects/migrations/0001_initial.py
+    - tests/projects/__init__.py
+    - tests/projects/test_api.py
+    - tests/projects/test_models.py
+  modify:
+    - src/vtaskforge/settings/base.py
+    - src/vtaskforge/urls.py
+    - tests/factories.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Create the projects Django app
+    - Model: Project with fields from design doc (id, name, description,
+      status, repo_url, default_branch, tags, owner, created_by, timestamps)
+    - Uses NanoIDMixin and TimestampMixin like other models
+    - Status choices: active, archived
+
+    Step 2: Register in INSTALLED_APPS (settings/base.py)
+
+    Step 3: Create serializer
+    - ProjectSerializer: all fields, id/timestamps read-only
+    - Same pattern as WorkplanSerializer
+
+    Step 4: Create viewset
+    - ProjectViewSet (ModelViewSet): CRUD + archive action + stats action
+    - Stats endpoint returns: project_id, total_tasks, backlog_tasks,
+      workplan_tasks, by_status, completed_percentage, workplan counts
+    - Nested endpoint: ProjectWorkplansView (list workplans for project)
+    - Nested endpoint: ProjectBacklogView (list tasks without workplan)
+    - Disable PUT (PATCH only), same pattern as WorkplanViewSet
+
+    Step 5: Create URLs
+    - /v1/projects/ — ProjectViewSet
+    - /v1/projects/:id/workplans/ — ProjectWorkplansView
+    - /v1/projects/:id/backlog/ — ProjectBacklogView
+    - /v1/projects/:id/stats/ — stats action
+    - /v1/projects/:id/archive/ — archive action
+
+    Step 6: Register URLs in vtaskforge/urls.py
+
+    Step 7: Add ProjectFactory to tests/factories.py
+
+    Step 8: Write tests
+    - test_models.py: creation, defaults, str representation
+    - test_api.py: list, create, retrieve, update, delete, archive, stats,
+      nested workplans list, nested backlog list, pagination
+
+    Step 9: Run makemigrations and migrate
+
+  constraints:
+    - Follow exact same patterns as WorkplanViewSet
+    - Stats endpoint must be designed to count ALL tasks in project
+      (both workplan and backlog) even though backlog tasks don't
+      exist yet (Task.project FK comes in task 9.3)
+    - Use cursor pagination on all list endpoints
+    - Do NOT add project FK to Workplan or Task yet — that's tasks 9.2 and 9.3
+
+  references:
+    - docs/design/project-hierarchy-DESIGN.md
+    - src/workplans/models.py
+    - src/workplans/views.py
+    - src/workplans/serializers.py
+
+acceptance_criteria:
+  - "Project model exists with all fields from design doc"
+  - "Project registered in INSTALLED_APPS"
+  - "CRUD endpoints work: GET/POST/PATCH/DELETE /v1/projects/"
+  - "Archive endpoint works: POST /v1/projects/:id/archive/"
+  - "Stats endpoint works: GET /v1/projects/:id/stats/"
+  - "Nested workplans list: GET /v1/projects/:id/workplans/"
+  - "Nested backlog list: GET /v1/projects/:id/backlog/"
+  - "ProjectFactory in factories.py"
+  - "All tests pass"
+  - "Migrations clean: makemigrations --check reports no changes"
+
+test_command:
+  unit: "docker compose exec api pytest tests/projects/ tests/ -v --tb=short"
