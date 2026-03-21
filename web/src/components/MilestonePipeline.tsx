@@ -4,6 +4,7 @@ import type { Milestone } from '../api/milestones';
 
 interface MilestonePipelineProps {
   milestones: Milestone[];
+  projectId: string;
   workplanId: string;
 }
 
@@ -15,7 +16,7 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }
   pending: { bg: '#f5f5f5', border: '#9e9e9e', text: '#616161' },
 };
 
-function PipelineNode({ milestone, workplanId }: { milestone: Milestone; workplanId: string }) {
+function PipelineNode({ milestone, projectId, workplanId }: { milestone: Milestone; projectId: string; workplanId: string }) {
   const { data: stats } = useMilestoneStats(milestone.id);
   const total = stats?.total_tasks ?? 0;
   const done = stats?.by_status?.done ?? 0;
@@ -24,7 +25,7 @@ function PipelineNode({ milestone, workplanId }: { milestone: Milestone; workpla
 
   return (
     <Link
-      to={`/workplans/${workplanId}/milestones/${milestone.id}`}
+      to={`/projects/${projectId}/workplans/${workplanId}/milestones/${milestone.id}`}
       style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}
     >
       <div style={{
@@ -92,7 +93,7 @@ function VConnector({ side }: { side: 'right' | 'left' }) {
   );
 }
 
-export function MilestonePipeline({ milestones, workplanId }: MilestonePipelineProps) {
+export function MilestonePipeline({ milestones, projectId, workplanId }: MilestonePipelineProps) {
   if (milestones.length === 0) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>No milestones yet.</div>;
   }
@@ -118,7 +119,7 @@ export function MilestonePipeline({ milestones, workplanId }: MilestonePipelineP
             }}>
               {displayRow.map((milestone, i) => (
                 <div key={milestone.id} style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-                  <PipelineNode milestone={milestone} workplanId={workplanId} />
+                  <PipelineNode milestone={milestone} projectId={projectId} workplanId={workplanId} />
                   {i < displayRow.length - 1 && <HArrow reverse={isReversed} />}
                 </div>
               ))}

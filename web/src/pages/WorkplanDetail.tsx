@@ -22,7 +22,7 @@ function MilestoneCard({ milestone, projectId, workplanId }: { milestone: { id: 
 
   return (
     <Link
-      to={`/workplans/${workplanId}/milestones/${milestone.id}`}
+      to={`/projects/${projectId}/workplans/${workplanId}/milestones/${milestone.id}`}
       className="milestone-card"
       style={{ borderLeftColor: statusColor }}
     >
@@ -74,9 +74,10 @@ function MilestoneCard({ milestone, projectId, workplanId }: { milestone: { id: 
   );
 }
 
-function MilestoneGroup({ title, milestones, workplanId, defaultCollapsed = false }: {
+function MilestoneGroup({ title, milestones, projectId, workplanId, defaultCollapsed = false }: {
   title: string;
   milestones: { id: string; name: string; description: string; status: string }[];
+  projectId: string;
   workplanId: string;
   defaultCollapsed?: boolean;
 }) {
@@ -102,7 +103,7 @@ function MilestoneGroup({ title, milestones, workplanId, defaultCollapsed = fals
       {!collapsed && (
         <div className="milestone-group-grid">
           {milestones.map((milestone) => (
-            <MilestoneCard key={milestone.id} milestone={milestone} workplanId={workplanId} />
+            <MilestoneCard key={milestone.id} milestone={milestone} projectId={projectId} workplanId={workplanId} />
           ))}
         </div>
       )}
@@ -111,15 +112,16 @@ function MilestoneGroup({ title, milestones, workplanId, defaultCollapsed = fals
 }
 
 export function WorkplanDetail() {
-  const { id } = useParams<{ id: string }>();
-  const { data: workplan, isLoading: wpLoading } = useWorkplan(id!);
-  const { data: wpStats } = useWorkplanStats(id!);
-  const { data: milestones, isLoading: phLoading } = useMilestones(id!);
+  const { id: projectId, wid: workplanId } = useParams<{ id: string; wid: string }>();
+  const { data: project } = useProject(projectId);
+  const { data: workplan, isLoading: wpLoading } = useWorkplan(workplanId!);
+  const { data: wpStats } = useWorkplanStats(workplanId!);
+  const { data: milestones, isLoading: phLoading } = useMilestones(workplanId!);
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
   const { status: sseStatus } = useSSE({
-    url: `/v1/events/stream/?workplan=${id}`,
+    url: `/v1/events/stream/?workplan=${workplanId}`,
     onEvent: () => {},
-    enabled: !!id,
+    enabled: !!workplanId,
   });
 
   if (wpLoading || phLoading) return <div className="loading">Loading...</div>;
@@ -136,6 +138,16 @@ export function WorkplanDetail() {
 
   return (
     <div className="workplan-detail">
+      {/* Breadcrumbs */}
+      <div style={{ padding: '12px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Link to={`/projects/${projectId}`} style={{ color: 'var(--color-text-secondary)', textDecoration: 'none', fontSize: 14 }}>
+          {project?.name ?? 'Project'}
+        </Link>
+        <span style={{ color: 'var(--color-text)', fontSize: 14 }}>
+          / {workplan?.name ?? 'Workplan'}
+        </span>
+      </div>
+
       {/* Project info header */}
       <div className="workplan-detail-header">
         <div className="workplan-detail-header-top">
@@ -203,12 +215,12 @@ export function WorkplanDetail() {
       {/* Milestone content */}
       {viewMode === 'list' ? (
         <div className="workplan-milestones">
-          <MilestoneGroup title="Active" milestones={activeMilestones} workplanId={id!} />
-          <MilestoneGroup title="Pending" milestones={pendingMilestones} workplanId={id!} />
-          <MilestoneGroup title="Completed" milestones={completedMilestones} workplanId={id!} defaultCollapsed />
+          <MilestoneGroup title="Active" milestones={activeMilestones} projectId={projectId!} workplanId={workplanId!} />
+          <MilestoneGroup title="Pending" milestones={pendingMilestones} projectId={projectId!} workplanId={workplanId!} />
+          <MilestoneGroup title="Completed" milestones={completedMilestones} projectId={projectId!} workplanId={workplanId!} defaultCollapsed />
         </div>
       ) : (
-        <MilestonePipeline milestones={milestones ?? []} workplanId={id!} />
+        <MilestonePipeline milestones={milestones ?? []} projectId={projectId!} workplanId={workplanId!} />
       )}
     </div>
   );
