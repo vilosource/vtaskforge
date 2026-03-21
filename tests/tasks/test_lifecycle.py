@@ -222,38 +222,38 @@ class TestUnclaim:
 @pytest.mark.django_db
 class TestComplete:
     def test_complete_doing_returns_200(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "doing")
+        task = make_task(milestone, workplan, "doing", needs_review_on_completion=False)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert response.status_code == status.HTTP_200_OK
 
     def test_complete_transitions_to_done(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "doing")
+        task = make_task(milestone, workplan, "doing", needs_review_on_completion=False)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert response.data["status"] == "done"
 
     def test_complete_persists_to_db(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "doing")
+        task = make_task(milestone, workplan, "doing", needs_review_on_completion=False)
         api_client.post(f"/v1/tasks/{task.id}/complete/")
         task.refresh_from_db()
         assert task.status == "done"
 
     def test_complete_from_draft_returns_422(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "draft")
+        task = make_task(milestone, workplan, "draft", needs_review_on_completion=False)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert_invalid_transition_error(response, "draft", "done")
 
     def test_complete_from_todo_returns_422(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "todo")
+        task = make_task(milestone, workplan, "todo", needs_review_on_completion=False)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert_invalid_transition_error(response, "todo", "done")
 
     def test_complete_from_done_returns_422(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "done")
+        task = make_task(milestone, workplan, "done", needs_review_on_completion=False)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert_invalid_transition_error(response, "done", "done")
 
     def test_complete_from_cancelled_returns_422(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "cancelled")
+        task = make_task(milestone, workplan, "cancelled", needs_review_on_completion=False)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert_invalid_transition_error(response, "cancelled", "done")
 

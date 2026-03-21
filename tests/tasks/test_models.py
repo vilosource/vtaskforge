@@ -23,10 +23,10 @@ class TestTaskModel:
         task = TaskFactory()
         assert task.requires == []
 
-    def test_review_flags_default_to_none(self):
+    def test_review_flags_defaults(self):
         task = TaskFactory()
         assert task.needs_review_before_start is None
-        assert task.needs_review_on_completion is None
+        assert task.needs_review_on_completion is True
 
     def test_claim_fields_default_to_none(self):
         task = TaskFactory()

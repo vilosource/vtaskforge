@@ -173,7 +173,7 @@ class TestCompleteReviewCascading:
     def test_complete_all_false_goes_to_done(
         self, api_client, milestone_no_override, workplan_no_review
     ):
-        task = make_task(milestone_no_override, workplan_no_review, "doing")
+        task = make_task(milestone_no_override, workplan_no_review, "doing", needs_review_on_completion=None)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == "done"
@@ -243,7 +243,7 @@ class TestCompleteReviewCascading:
     def test_complete_phase_false_overrides_workplan_true(
         self, api_client, milestone_no_review, workplan_review_both
     ):
-        task = make_task(milestone_no_review, workplan_review_both, "doing")
+        task = make_task(milestone_no_review, workplan_review_both, "doing", needs_review_on_completion=None)
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == "done"

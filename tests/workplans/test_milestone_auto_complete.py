@@ -146,7 +146,13 @@ class TestMaybeCompleteMilestoneGuards:
 class TestAutoCompleteViaTaskComplete:
     def test_complete_auto_completes_milestone(self, api_client, milestone):
         t1 = make_task(milestone, "done")
-        t2 = make_task(milestone, "doing")
+        t2 = TaskFactory(
+            title="Test Task",
+            milestone=milestone,
+            workplan=milestone.workplan,
+            status="doing",
+            needs_review_on_completion=False
+        )
         response = api_client.post(f"/v1/tasks/{t2.id}/complete/")
         assert response.status_code == 200
         milestone.refresh_from_db()

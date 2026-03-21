@@ -51,7 +51,7 @@ class Task(NanoIDMixin, TimestampMixin):
     acceptance_criteria = models.JSONField(default=list, blank=True)
     labels = models.JSONField(default=list, blank=True)
     needs_review_before_start = models.BooleanField(null=True, blank=True, default=None)
-    needs_review_on_completion = models.BooleanField(null=True, blank=True, default=None)
+    needs_review_on_completion = models.BooleanField(null=True, blank=True, default=True)
     review_return_to = models.CharField(max_length=30, null=True, blank=True, default=None)
     requires = models.JSONField(default=list, blank=True)
     assigned_to = models.CharField(max_length=255, null=True, blank=True, default=None)
