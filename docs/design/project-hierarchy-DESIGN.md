@@ -1,6 +1,6 @@
 # Design: Project Hierarchy & Ad-Hoc Task Support
 
-## Status: Draft
+## Status: Draft (reviewed 2026-03-21)
 ## Date: 2026-03-21
 
 ## Problem
@@ -89,6 +89,12 @@ Validation:
 | created_at | DateTime | Auto |
 | updated_at | DateTime | Auto |
 
+**Note:** Project does NOT carry review defaults (`default_needs_review_before_start`,
+`default_needs_review_on_completion`). These stay on Workplan and Milestone only.
+Review flag cascade remains: Task → Milestone → Workplan. Backlog tasks (no
+milestone, no workplan) have no cascading defaults — review flags must be set
+explicitly on the task itself.
+
 ### Workplan (modified)
 
 | Field | Change |
@@ -125,7 +131,40 @@ All other fields unchanged (name, description, workplan, status, order, etc).
 | Note | No change — FK to Task |
 | TaskEvent | No change — FK to Task |
 | Link | No change — links reference task IDs directly |
+| Link serializer | Rename: title resolution references `phase` → `milestone` |
 | Agent | No change — agents are project-agnostic (supervisor handles scoping) |
+
+## Affected Code Inventory
+
+The rename touches significantly more code than it might appear. Full inventory:
+
+| Area | Files | Occurrences | Notes |
+|------|-------|-------------|-------|
+| Backend (src/) | 19 | 134 | Models, views, serializers, URLs, state machine, completion, review policy |
+| Tests | 21 | 947 | Highest density — factories, fixtures, assertions, test file names |
+| CLI | 8 | 84 | Commands, client, import, test fixtures |
+| Web UI | 15 | 153 | Components, pages, API hooks, CSS, routes |
+| Docs | 18 | 333 | Design docs, guides, proposals, diagrams, INDEX |
+| CLAUDE.md | 1 | 15 | Project instructions |
+| **Total** | **82 files** | **~1,666** | |
+
+The rename MUST be atomic per layer — you cannot half-rename. Each layer
+(backend, CLI, web) should be one commit that renames everything and passes
+all tests before moving to the next.
+
+### Specific files requiring careful attention
+
+| File | Why |
+|------|-----|
+| `src/workplans/completion.py` | New file from today — `maybe_complete_phase()` → `maybe_complete_milestone()` |
+| `src/tasks/review_policy.py` | Review flag cascade: Phase → Workplan. Must handle nullable milestone — backlog tasks with no milestone/workplan get no cascaded defaults |
+| `src/links/serializers.py` | Title resolution looks up phase names for link display |
+| `src/events/stream.py` | SSE filtering uses `phase` references |
+| `src/core/bulk_import.py` | Creates phases nested under workplans — rename + add project support |
+| `tests/factories.py` | `PhaseFactory` → `MilestoneFactory`, used by every test file |
+| `web/src/components/PhasePipeline.tsx` | Rename to `MilestonePipeline.tsx` |
+| `web/src/api/phases.ts` | Rename to `milestones.ts`, update all hooks |
+| `.claude/agents/*.md` | Supervisor and executor prompts reference "phase" |
 
 ## API Changes
 
@@ -139,8 +178,31 @@ PATCH  /v1/projects/:id/                Update project
 DELETE /v1/projects/:id/                Delete project
 GET    /v1/projects/:id/stats/          Project-level stats
 GET    /v1/projects/:id/workplans/      List workplans for project
-GET    /v1/projects/:id/backlog/        List tasks without workplan
+GET    /v1/projects/:id/backlog/        List tasks without workplan (paginated)
+POST   /v1/projects/:id/tasks/          Create backlog task (no workplan/milestone)
 ```
+
+### Project stats endpoint
+
+`GET /v1/projects/:id/stats/` returns:
+
+```json
+{
+  "project_id": "abc123",
+  "total_tasks": 67,
+  "backlog_tasks": 7,
+  "workplan_tasks": 60,
+  "by_status": {"done": 12, "doing": 8, "todo": 15, "draft": 25, ...},
+  "completed_percentage": 17.9,
+  "workplans": {
+    "active": 1,
+    "completed": 0,
+    "archived": 0
+  }
+}
+```
+
+This counts ALL tasks in the project — both workplan tasks and backlog tasks.
 
 ### Renamed endpoints
 
@@ -160,6 +222,10 @@ POST /v1/tasks/
   - project: required (was implicit via workplan)
   - workplan: optional (was required)
   - milestone: optional (was phase, required)
+  - labels: optional (new, default [])
+
+GET /v1/tasks/?project=:id
+  - New: project filter
 
 GET /v1/tasks/claimable?project=:id&tags=executor
   - New: project filter for scoped discovery
@@ -168,8 +234,9 @@ POST /v1/workplans/
   - project: required (new field)
 
 POST /v1/bulk/import
-  - project: required in payload
-  - phase_specs → milestone_specs (renamed)
+  - project_id or project: required in payload
+  - phases → milestones (renamed in payload)
+  - New: backlog_tasks section for tasks without milestone
 ```
 
 ### Backwards compatibility
@@ -209,6 +276,15 @@ vtf workplan list --project <id>
 vtf import milestones/core/ --workplan <id> --project <id>
 ```
 
+### Spec directory convention
+
+The existing spec files live in `phases/phase1/`, `phases/phase2/`, etc.
+After the rename:
+- Directory: `phases/` → `milestones/`
+- Subdirectories: `milestones/core/`, `milestones/ui/`, etc.
+- Phase description: `PHASE.md` → `MILESTONE.md`
+- Import command: `vtf import milestones/core/ --workplan <id> --project <id>`
+
 ## Web UI Changes
 
 ### Sidebar
@@ -246,22 +322,31 @@ vtaskforge
 ├─────────────────────────────────────────────────┤
 │ BACKLOG  [ops: 2] [bugfix: 3] [ui: 2]          │
 │                                                 │
-│ ● Fix phase button bug         [bugfix]  draft  │
+│ ● Fix milestone button bug     [bugfix]  draft  │
 │ ● Make dogfood auto-start      [ops]     done   │
 │ ● Sidebar UX cleanup           [ui]      todo   │
 └─────────────────────────────────────────────────┘
 ```
 
-### Workplan detail (unchanged)
+### Workplan detail (unchanged in structure)
 
 Same as today — milestones grouped by status (active/pending/completed),
 click through to Kanban board per milestone.
+Rename: "Phases" toggle → "Milestones", PhaseCard → MilestoneCard, etc.
 
 ### Kanban board
 
 Works for both:
 - Milestone board: `/projects/:pid/workplans/:wid/milestones/:mid` (structured tasks)
 - Backlog board: `/projects/:pid/backlog` (ad-hoc tasks, filterable by labels)
+
+**Backlog board changes:** The current `KanbanBoard` component requires `workplanId`
+and optionally `phaseId` for SSE subscriptions and task queries. The backlog board
+needs a new mode:
+- Query: `GET /v1/tasks/?project=:id&workplan__isnull=true` (tasks without workplan)
+- SSE: `GET /v1/events/stream/?project=:id` (project-scoped events)
+- No milestone/workplan context needed
+- Label filter pills above the board for narrowing by label
 
 ### URL structure
 
@@ -273,6 +358,104 @@ Works for both:
 /projects/:id/backlog                          Backlog board
 /tasks/:id                                     Task detail (unchanged)
 ```
+
+### Pipeline view
+
+`PhasePipeline.tsx` → `MilestonePipeline.tsx`. Shows milestones within a
+workplan in the zigzag flow layout. No functional change beyond the rename.
+The pipeline view is NOT shown on the project dashboard — it only appears
+on the workplan detail page.
+
+## SSE Event Stream Changes
+
+The current SSE endpoint filters by `?workplan=`. Two additions needed:
+
+```
+GET /v1/events/stream/?project=:id        Project-scoped (all workplans + backlog)
+GET /v1/events/stream/?workplan=:id       Workplan-scoped (unchanged)
+```
+
+The project dashboard needs project-scoped events to show live updates across
+all workplans and backlog tasks. The workplan detail and milestone kanban board
+continue using workplan-scoped events.
+
+## Review Policy Changes
+
+The review flag cascade is currently: Task → Phase → Workplan.
+
+With optional milestone/workplan:
+
+| Task has | Cascade behavior |
+|----------|-----------------|
+| milestone + workplan | Task → Milestone → Workplan (unchanged) |
+| workplan only (no milestone) | Task → Workplan (skip milestone) |
+| neither (backlog task) | Task only — no cascading, use task's own flags |
+
+`src/tasks/review_policy.py` (`get_effective_review_flags`) must handle
+`task.milestone is None` and `task.workplan is None` gracefully. Currently
+it always accesses `task.phase` — this will crash on backlog tasks if not
+guarded.
+
+## Bulk Import Changes
+
+Current payload structure:
+```json
+{
+  "workplan_id": "abc",
+  "phases": [
+    {
+      "ref": "p1",
+      "name": "Core API",
+      "tasks": [{"ref": "t1", "title": "Build auth"}]
+    }
+  ],
+  "links": [...]
+}
+```
+
+New payload structure:
+```json
+{
+  "project_id": "proj-abc",
+  "workplan_id": "wp-abc",
+  "milestones": [
+    {
+      "ref": "m1",
+      "name": "Core API",
+      "tasks": [{"ref": "t1", "title": "Build auth"}]
+    }
+  ],
+  "backlog_tasks": [
+    {"ref": "bt1", "title": "Fix button bug", "labels": ["bugfix"]}
+  ],
+  "links": [...]
+}
+```
+
+Changes:
+- `project_id` required (or `project` object to create one)
+- `phases` → `milestones`
+- New `backlog_tasks` section for tasks without milestone
+- Backlog tasks get `project` set, `workplan` and `milestone` null
+- `ref_type_map` entries: `"phase"` → `"milestone"`
+
+## Task Creation Paths
+
+With the new model there are multiple ways to create a task:
+
+| Endpoint | Creates |
+|----------|---------|
+| `POST /v1/projects/:id/tasks/` | Backlog task (project only, no workplan/milestone) |
+| `POST /v1/milestones/:id/tasks/` | Structured task (auto-sets milestone, workplan, project) |
+| `POST /v1/tasks/` | Any task — caller provides project + optional workplan/milestone |
+| `POST /v1/bulk/import` | Batch creation with milestone and/or backlog tasks |
+
+The `POST /v1/milestones/:id/tasks/` endpoint (currently `PhaseTasksView`)
+auto-sets milestone, workplan (from milestone.workplan), and project (from
+workplan.project). This is the most convenient path for structured work.
+
+The `POST /v1/projects/:id/tasks/` endpoint is new — it auto-sets project
+and leaves workplan/milestone null. This is the backlog path.
 
 ## Agent Workflow Impact
 
@@ -329,6 +512,30 @@ With the project model, this context is explicit:
 }
 ```
 
+### Agent prompt updates
+
+The following agent definitions reference "phase" and need updating:
+- `.claude/agents/vtf-supervisor.md` — dispatches by phase
+- `.claude/agents/vtf-executor.md` — receives phase context
+- `.claude/agents/vtf-judge.md` — reviews within phase context
+
+These are markdown prompt files, not code — the rename is textual only.
+
+## Milestone Auto-Completion
+
+The `maybe_complete_phase()` function (built today in `src/workplans/completion.py`)
+becomes `maybe_complete_milestone()`. Logic is unchanged:
+
+- Guard: task has a milestone, milestone is `active`, milestone has tasks
+- Query: `milestone.tasks.exclude(status__in=TERMINAL_STATUSES).exists()`
+- If no non-terminal tasks remain: complete the milestone
+
+This function is called from `perform_transition()` in `state_machine.py` when
+a task reaches a terminal status. No change to the trigger — just the rename.
+
+**Backlog tasks** (no milestone) skip this check entirely — there's nothing to
+auto-complete.
+
 ## Migration Plan
 
 ### Database migration
@@ -346,15 +553,20 @@ With the project model, this context is explicit:
 
 1. Rename all `phase` references to `milestone` across:
    - Models, serializers, views, URLs
-   - Tests and factories
+   - Tests and factories (947 occurrences — largest area)
    - CLI commands and client
    - Web UI components, API hooks, routes
    - Agent prompts and supervisor logic
+   - Docs, guides, CLAUDE.md
 2. Add Project app (model, serializer, views, URLs)
 3. Update Task serializer/views for optional workplan/milestone
-4. Update bulk import for project context
-5. Update web UI: sidebar → projects, project dashboard, backlog view
-6. Update CLI: project commands, default project config
+4. Update review_policy.py for nullable milestone/workplan
+5. Update bulk import for project context + backlog tasks
+6. Update SSE stream for project-scoped filtering
+7. Update web UI: sidebar → projects, project dashboard, backlog view
+8. Update KanbanBoard component for backlog mode (no workplan/milestone)
+9. Update CLI: project commands, default project config
+10. Update link serializer for milestone title resolution
 
 ### Data migration (dogfood)
 
@@ -366,21 +578,54 @@ Existing workplan "Platform Migr" → Project "Platform Migration" + Workplan "v
 
 All existing tasks retain their workplan and milestone associations.
 
+### Demo data seeding (post-deploy)
+
+Create a demo project that showcases all the new features:
+
+```
+Project: Platform Migration
+├── Workplan: v2.0
+│   ├── Milestone: API Gateway (completed — all tasks done)
+│   ├── Milestone: Auth Service (active — mixed statuses)
+│   ├── Milestone: Data Pipeline (active — parallel with Auth)
+│   ├── Milestone: Frontend SPA (pending — blocked on API)
+│   └── Milestone: Load Testing (pending)
+├── Backlog
+│   ├── Fix CORS headers               [bugfix]     todo
+│   ├── Update monitoring dashboards    [ops]        doing
+│   ├── Write API docs                  [docs]       draft
+│   ├── Investigate memory leak         [bugfix]     blocked
+│   └── Set up staging environment      [infra]      done
+```
+
+This demonstrates:
+- Parallel milestones (Auth + Data Pipeline both active)
+- Sequential milestones (Frontend pending on API)
+- Completed milestone
+- Backlog tasks with labels at various statuses
+- Project-level stats aggregating everything
+
 ## What We Are NOT Building
 
+- Project-level review defaults (review cascade stays at Milestone → Workplan)
 - Project templates
 - Cross-project dashboards or reports
 - Recurring task templates
 - Agent-to-project binding (supervisor handles scoping)
 - Priority/ordering for backlog (creation date is sufficient)
-- Workplan dependencies (milestone A in workplan X blocks milestone B in workplan Y)
+- Workplan dependencies (milestone in workplan X blocks milestone in workplan Y)
 - Time tracking
+- Backlog-to-milestone promotion UI (can be done via PATCH, no special UI)
 
 ## Risks
 
 | Risk | Mitigation |
 |------|------------|
-| Rename breaks all existing tests (650+) | Mechanical rename, run full suite |
+| Rename blast radius (~1,666 occurrences across 82 files) | Atomic rename per layer, full test suite between each |
+| Tests are the biggest risk (947 occurrences in 21 files) | Mechanical find-replace, run `pytest` after each file |
+| Review policy crash on backlog tasks | Guard `task.milestone is None` and `task.workplan is None` |
+| KanbanBoard assumes workplan/milestone exist | Add backlog mode with project-scoped queries |
+| SSE stream doesn't support project scope | Add `?project=` filter parameter |
 | CLI breaking change | We control all CLI consumers, update atomically |
 | Dogfood data migration | Script it, test on dev DB first |
 | Scope creep into project management | Strict "not building" list above |
@@ -388,20 +633,29 @@ All existing tasks retain their workplan and milestone associations.
 
 ## Implementation Order
 
-| Step | Scope | Estimated effort |
-|------|-------|-----------------|
-| 1 | Phase → Milestone rename (backend + tests) | Medium |
-| 2 | Phase → Milestone rename (CLI) | Small |
-| 3 | Phase → Milestone rename (web UI) | Small |
-| 4 | Project model + API | Medium |
-| 5 | Workplan.project FK + migration | Small |
-| 6 | Task.project FK + nullable workplan/milestone + labels | Medium |
-| 7 | CLI: project commands + default context | Small |
-| 8 | Web UI: sidebar → projects, project dashboard | Medium |
-| 9 | Web UI: backlog view | Small |
-| 10 | Update bulk import | Small |
-| 11 | Update agent/supervisor prompts | Small |
-| 12 | Dogfood data migration | Small |
+| Step | Scope | Risk | Notes |
+|------|-------|------|-------|
+| 1 | Phase → Milestone rename (backend models, views, serializers, URLs) | High | Touches 19 files, 134 occurrences |
+| 2 | Phase → Milestone rename (tests + factories) | High | 21 files, 947 occurrences — must pass full suite |
+| 3 | Phase → Milestone rename (completion.py, review_policy.py, state_machine.py) | Medium | Small files but critical logic |
+| 4 | Phase → Milestone rename (CLI) | Low | 8 files, 84 occurrences |
+| 5 | Phase → Milestone rename (web UI) | Medium | 15 files, 153 occurrences, includes component renames |
+| 6 | Phase → Milestone rename (docs, CLAUDE.md, agent prompts) | Low | Textual only, no test risk |
+| 7 | Project model + API + tests | Medium | New Django app, standard CRUD |
+| 8 | Workplan.project FK + data migration | Low | One FK, one migration script |
+| 9 | Task.project FK + nullable workplan/milestone + labels + validation | Medium | Core model change, review policy update |
+| 10 | Bulk import update (project context, milestones, backlog_tasks) | Medium | Rename + new features |
+| 11 | SSE stream project-scoped filtering | Low | Add query param filter |
+| 12 | CLI: project commands + default context | Low | New commands, config update |
+| 13 | Web UI: sidebar → projects | Medium | Component update |
+| 14 | Web UI: project dashboard page | Medium | New page |
+| 15 | Web UI: backlog board (KanbanBoard in project mode) | Medium | New board mode |
+| 16 | Web UI: milestone rename across all components | Low | Mechanical after step 5 groundwork |
+| 17 | Agent prompt updates | Low | Textual, no code |
+| 18 | Dogfood deploy + data migration script | Low | Docker rebuild + migration |
+| 19 | Demo data seeding + smoke test | Low | Script + Playwright verification |
 
-Steps 1-3 can be done as a standalone rename PR. Steps 4-12 are the
-project hierarchy feature.
+Steps 1-6 are the rename (can be one PR).
+Steps 7-11 are the backend project hierarchy.
+Steps 12-16 are the CLI + web UI updates.
+Steps 17-19 are the deployment and verification.
