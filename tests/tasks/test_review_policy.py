@@ -52,7 +52,7 @@ class TestBeforeStartCascade:
         assert before_start is True
 
     def test_task_false_overrides_phase_true(self):
-        """Explicit False on task must win over phase=True."""
+        """Explicit False on task must win over milestone=True."""
         task = make_task(
             task_before_start=False,
             phase_before_start=True,

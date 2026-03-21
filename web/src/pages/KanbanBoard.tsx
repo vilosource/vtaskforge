@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useTasksByWorkplan, useTasksByPhase, useWorkplan } from '../api/tasks';
+import { useTasksByWorkplan, useTasksByMilestone, useWorkplan } from '../api/tasks';
 import type { Task } from '../api/tasks';
 import { KanbanColumn } from '../components/KanbanColumn';
 import type { ColumnConfig } from '../components/KanbanColumn';
@@ -60,12 +60,12 @@ function groupTasksByColumn(tasks: Task[], showHidden: boolean): Map<string, Tas
 
 interface KanbanBoardProps {
   workplanId: string;
-  phaseId?: string;
+  milestoneId?: string;
   title?: string;
   onTaskClick?: (task: Task) => void;
 }
 
-export function KanbanBoard({ workplanId, phaseId, title, onTaskClick }: KanbanBoardProps) {
+export function KanbanBoard({ workplanId, milestoneId, title, onTaskClick }: KanbanBoardProps) {
   const [showHidden, setShowHidden] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -107,8 +107,8 @@ export function KanbanBoard({ workplanId, phaseId, title, onTaskClick }: KanbanB
   } = useWorkplan(workplanId);
 
   const workplanTasks = useTasksByWorkplan(workplanId);
-  const phaseTasks = useTasksByPhase(phaseId ?? '');
-  const tasksQuery = phaseId ? phaseTasks : workplanTasks;
+  const milestoneTasks = useTasksByMilestone(milestoneId ?? '');
+  const tasksQuery = milestoneId ? milestoneTasks : workplanTasks;
   const { data: tasksData, isLoading: tasksLoading, error: tasksError, refetch } = tasksQuery;
 
   const isLoading = workplanLoading || tasksLoading;

@@ -2,7 +2,7 @@ from django.db import transaction
 
 from links.models import Link
 from tasks.models import Task
-from workplans.models import Phase, Workplan
+from workplans.models import Milestone, Workplan
 
 
 def _infer_ref_type(ref, ref_map, ref_type_map):
@@ -24,9 +24,9 @@ def perform_bulk_import(payload):
     with transaction.atomic():
         # 1. Validate duplicate refs upfront
         all_refs = []
-        for phase_data in payload.get("phases", []):
-            all_refs.append(phase_data["ref"])
-            for task_data in phase_data.get("tasks", []):
+        for milestone_data in payload.get("milestones", []):
+            all_refs.append(milestone_data["ref"])
+            for task_data in milestone_data.get("tasks", []):
                 all_refs.append(task_data["ref"])
 
         seen = set()
@@ -54,21 +54,21 @@ def perform_bulk_import(payload):
         ref_map["workplan"] = workplan.id
         ref_type_map["workplan"] = "workplan"
 
-        # 3. Create phases and their nested tasks
-        for phase_data in payload.get("phases", []):
-            ref = phase_data["ref"]
-            phase = Phase.objects.create(
+        # 3. Create milestones and their nested tasks
+        for milestone_data in payload.get("milestones", []):
+            ref = milestone_data["ref"]
+            milestone = Milestone.objects.create(
                 workplan=workplan,
-                name=phase_data["name"],
-                description=phase_data.get("description", ""),
+                name=milestone_data["name"],
+                description=milestone_data.get("description", ""),
             )
-            ref_map[ref] = phase.id
-            ref_type_map[ref] = "phase"
+            ref_map[ref] = milestone.id
+            ref_type_map[ref] = "milestone"
 
-            for task_data in phase_data.get("tasks", []):
+            for task_data in milestone_data.get("tasks", []):
                 task_ref = task_data["ref"]
                 task = Task.objects.create(
-                    phase=phase,
+                    milestone=milestone,
                     workplan=workplan,
                     title=task_data["title"],
                     description=task_data.get("description", ""),

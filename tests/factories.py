@@ -9,7 +9,7 @@ from events.models import TaskEvent
 from links.models import Link
 from reviews.models import Review
 from tasks.models import Note, Task
-from workplans.models import Phase, Workplan
+from workplans.models import Milestone, Workplan
 
 
 class WorkplanFactory(factory.django.DjangoModelFactory):
@@ -20,12 +20,12 @@ class WorkplanFactory(factory.django.DjangoModelFactory):
     status = "active"
 
 
-class PhaseFactory(factory.django.DjangoModelFactory):
+class MilestoneFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Phase
+        model = Milestone
 
     workplan = factory.SubFactory(WorkplanFactory)
-    name = factory.Sequence(lambda n: f"Phase {n}")
+    name = factory.Sequence(lambda n: f"Milestone {n}")
     status = "pending"
 
 
@@ -33,8 +33,8 @@ class TaskFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Task
 
-    phase = factory.SubFactory(PhaseFactory)
-    workplan = factory.LazyAttribute(lambda o: o.phase.workplan)
+    milestone = factory.SubFactory(MilestoneFactory)
+    workplan = factory.LazyAttribute(lambda o: o.milestone.workplan)
     title = factory.Sequence(lambda n: f"Task {n}")
     status = "draft"
 

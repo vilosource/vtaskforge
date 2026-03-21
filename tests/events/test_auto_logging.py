@@ -7,7 +7,7 @@ import pytest
 from events.models import TaskEvent
 from tasks.exceptions import InvalidTransition
 from tasks.state_machine import perform_transition
-from tests.factories import AgentFactory, PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import AgentFactory, MilestoneFactory, TaskFactory, WorkplanFactory
 
 
 def make_task(status="draft", **kwargs):
@@ -20,13 +20,13 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db, workplan):
-    return PhaseFactory(name="Test Phase", workplan=workplan)
+def milestone(db, workplan):
+    return MilestoneFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", milestone=phase, workplan=workplan)
 
 
 @pytest.fixture

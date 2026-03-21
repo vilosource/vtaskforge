@@ -98,9 +98,9 @@ def perform_transition(task, new_status: str, triggered_by: str = ""):
 
     if new_status in TERMINAL_STATUSES:
         try:
-            from workplans.completion import maybe_complete_phase
-            maybe_complete_phase(task)
+            from workplans.completion import maybe_complete_milestone
+            maybe_complete_milestone(task)
         except Exception:
-            pass  # don't break transitions if phase completion fails
+            pass  # don't break transitions if milestone completion fails
 
     return task

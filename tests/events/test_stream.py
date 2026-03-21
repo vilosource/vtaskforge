@@ -8,7 +8,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APIRequestFactory
 
 from events.stream import event_stream, format_sse, stream_events
-from tests.factories import PhaseFactory, TaskEventFactory, TaskFactory, WorkplanFactory
+from tests.factories import MilestoneFactory, TaskEventFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -60,13 +60,13 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db, workplan):
-    return PhaseFactory(workplan=workplan)
+def milestone(db, workplan):
+    return MilestoneFactory(workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return TaskFactory(phase=phase, workplan=workplan)
+    return TaskFactory(milestone=phase, workplan=workplan)
 
 
 @pytest.fixture
@@ -235,8 +235,8 @@ class TestStreamFiltering:
 
     def test_filter_by_workplan(self, auth_user, phase, workplan, task):
         other_workplan = WorkplanFactory()
-        other_phase = PhaseFactory(workplan=other_workplan)
-        other_task = TaskFactory(phase=other_phase, workplan=other_workplan)
+        other_phase = MilestoneFactory(workplan=other_workplan)
+        other_task = TaskFactory(milestone=other_phase, workplan=other_workplan)
 
         e_in = TaskEventFactory(task=task, event_type="status_changed", data={})
         e_out = TaskEventFactory(task=other_task, event_type="status_changed", data={})

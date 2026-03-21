@@ -6,7 +6,7 @@ export interface Task {
   id: string;
   title: string;
   status: string;
-  phase: string;
+  milestone: string;
   workplan: string;
   claimed_by: string | null;
   claimed_at: string | null;
@@ -83,11 +83,11 @@ export function useTasksByWorkplan(workplanId: string) {
   });
 }
 
-export function useTasksByPhase(phaseId: string) {
+export function useTasksByMilestone(milestoneId: string) {
   return useQuery({
-    queryKey: ['tasks', 'phase', phaseId],
-    queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?phase=${phaseId}`),
-    enabled: !!phaseId,
+    queryKey: ['tasks', 'milestone', milestoneId],
+    queryFn: () => apiGet<PaginatedResponse<Task>>(`/v1/tasks/?milestone=${milestoneId}`),
+    enabled: !!milestoneId,
   });
 }
 

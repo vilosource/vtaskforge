@@ -19,7 +19,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from links.models import Link
-from tests.factories import AgentFactory, PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import AgentFactory, MilestoneFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +33,8 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db, workplan):
-    return PhaseFactory(name="Test Phase", workplan=workplan)
+def milestone(db, workplan):
+    return MilestoneFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
@@ -47,10 +47,10 @@ def agent_other(db):
     return AgentFactory(name="Agent Other", tags=[])
 
 
-def make_task(phase, workplan, task_status="todo", **kwargs):
+def make_task(milestone, workplan, task_status="todo", **kwargs):
     kwargs.setdefault("title", "Test Task")
     return TaskFactory(
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status=task_status,
         **kwargs,
@@ -65,35 +65,35 @@ def make_task(phase, workplan, task_status="todo", **kwargs):
 @pytest.mark.django_db
 class TestClaimSuccess:
     def test_claim_todo_returns_200(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.status_code == status.HTTP_200_OK
 
     def test_claim_transitions_to_doing(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["status"] == "doing"
 
     def test_claim_sets_claimed_by(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["claimed_by"] == agent1.id
 
     def test_claim_sets_claim_expires_at(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["claim_expires_at"] is not None
 
     def test_claim_persists_to_db(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
@@ -112,17 +112,17 @@ class TestClaimSuccess:
 @pytest.mark.django_db
 class TestClaimMissingAgentId:
     def test_missing_agent_id_returns_400(self, api_client, phase, workplan):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_missing_agent_id_error_code(self, api_client, phase, workplan):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(f"/v1/tasks/{task.id}/claim/", {}, format="json")
         assert response.data["error"]["code"] == "VALIDATION_ERROR"
 
     def test_missing_agent_id_does_not_change_status(self, api_client, phase, workplan):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         api_client.post(f"/v1/tasks/{task.id}/claim/", {}, format="json")
         task.refresh_from_db()
         assert task.status == "todo"
@@ -136,42 +136,42 @@ class TestClaimMissingAgentId:
 @pytest.mark.django_db
 class TestClaimAlreadyClaimed:
     def test_claim_doing_returns_409(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, "doing")
+        task = make_task(milestone, workplan, "doing")
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.status_code == status.HTTP_409_CONFLICT
 
     def test_claim_doing_error_code(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, "doing")
+        task = make_task(milestone, workplan, "doing")
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["error"]["code"] == "ALREADY_CLAIMED"
 
     def test_claim_doing_includes_current_status(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, "doing")
+        task = make_task(milestone, workplan, "doing")
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["error"]["details"]["current_status"] == "doing"
 
     def test_claim_done_returns_409(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, "done")
+        task = make_task(milestone, workplan, "done")
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.status_code == status.HTTP_409_CONFLICT
 
     def test_claim_draft_returns_409(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, "draft")
+        task = make_task(milestone, workplan, "draft")
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.status_code == status.HTTP_409_CONFLICT
 
     def test_claim_blocked_returns_409(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, "blocked")
+        task = make_task(milestone, workplan, "blocked")
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
@@ -208,7 +208,7 @@ class TestClaimForbidden:
     def test_claim_assigned_to_other_returns_403(
         self, api_client, phase, workplan, agent1, agent_other
     ):
-        task = make_task(phase, workplan, assigned_to=agent_other.id)
+        task = make_task(milestone, workplan, assigned_to=agent_other.id)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
@@ -217,21 +217,21 @@ class TestClaimForbidden:
     def test_claim_assigned_to_other_error_code(
         self, api_client, phase, workplan, agent1, agent_other
     ):
-        task = make_task(phase, workplan, assigned_to=agent_other.id)
+        task = make_task(milestone, workplan, assigned_to=agent_other.id)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["error"]["code"] == "FORBIDDEN"
 
     def test_claim_assigned_to_self_succeeds(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, assigned_to=agent1.id)
+        task = make_task(milestone, workplan, assigned_to=agent1.id)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.status_code == status.HTTP_200_OK
 
     def test_claim_unassigned_task_succeeds(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
@@ -246,7 +246,7 @@ class TestClaimForbidden:
 @pytest.mark.django_db
 class TestClaimTagMismatch:
     def test_missing_required_tag_returns_422(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=["executor", "opus"])
+        task = make_task(milestone, workplan, requires=["executor", "opus"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["executor"]},
@@ -255,7 +255,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_missing_required_tag_error_code(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": []},
@@ -264,7 +264,7 @@ class TestClaimTagMismatch:
         assert response.data["error"]["code"] == "VALIDATION_ERROR"
 
     def test_missing_required_tag_includes_details(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["other"]},
@@ -275,7 +275,7 @@ class TestClaimTagMismatch:
         assert "agent_tags" in details
 
     def test_exact_tag_match_succeeds(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["executor"]},
@@ -284,7 +284,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_200_OK
 
     def test_superset_tags_succeed(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["executor", "opus", "extra"]},
@@ -293,7 +293,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_200_OK
 
     def test_empty_requires_any_agent_can_claim(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=[])
+        task = make_task(milestone, workplan, requires=[])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": []},
@@ -302,7 +302,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_200_OK
 
     def test_no_tags_provided_empty_requires_succeeds(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan, requires=[])
+        task = make_task(milestone, workplan, requires=[])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id},
@@ -319,8 +319,8 @@ class TestClaimTagMismatch:
 @pytest.mark.django_db
 class TestClaimDependencyUnmet:
     def test_unmet_dependency_returns_422(self, api_client, phase, workplan, agent1):
-        dep_task = make_task(phase, workplan, "todo")
-        task = make_task(phase, workplan)
+        dep_task = make_task(milestone, workplan, "todo")
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -334,8 +334,8 @@ class TestClaimDependencyUnmet:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_unmet_dependency_error_code(self, api_client, phase, workplan, agent1):
-        dep_task = make_task(phase, workplan, "todo")
-        task = make_task(phase, workplan)
+        dep_task = make_task(milestone, workplan, "todo")
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -349,8 +349,8 @@ class TestClaimDependencyUnmet:
         assert response.data["error"]["code"] == "DEPENDENCY_UNMET"
 
     def test_unmet_dependency_includes_details(self, api_client, phase, workplan, agent1):
-        dep_task = make_task(phase, workplan, "doing")
-        task = make_task(phase, workplan)
+        dep_task = make_task(milestone, workplan, "doing")
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -366,8 +366,8 @@ class TestClaimDependencyUnmet:
         assert details["dependency_status"] == "doing"
 
     def test_done_dependency_allows_claim(self, api_client, phase, workplan, agent1):
-        dep_task = make_task(phase, workplan, "done")
-        task = make_task(phase, workplan)
+        dep_task = make_task(milestone, workplan, "done")
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -381,7 +381,7 @@ class TestClaimDependencyUnmet:
         assert response.status_code == status.HTTP_200_OK
 
     def test_nonexistent_target_dependency_skipped(self, api_client, phase, workplan, agent1):
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -396,9 +396,9 @@ class TestClaimDependencyUnmet:
         assert response.status_code == status.HTTP_200_OK
 
     def test_multiple_deps_all_done_allows_claim(self, api_client, phase, workplan, agent1):
-        dep1 = make_task(phase, workplan, "done")
-        dep2 = make_task(phase, workplan, "done")
-        task = make_task(phase, workplan)
+        dep1 = make_task(milestone, workplan, "done")
+        dep2 = make_task(milestone, workplan, "done")
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -419,9 +419,9 @@ class TestClaimDependencyUnmet:
         assert response.status_code == status.HTTP_200_OK
 
     def test_one_unmet_dep_among_many_blocks_claim(self, api_client, phase, workplan, agent1):
-        dep1 = make_task(phase, workplan, "done")
-        dep2 = make_task(phase, workplan, "todo")
-        task = make_task(phase, workplan)
+        dep1 = make_task(milestone, workplan, "done")
+        dep2 = make_task(milestone, workplan, "todo")
+        task = make_task(milestone, workplan)
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -464,7 +464,7 @@ class TestConcurrentClaim:
 
     def test_concurrent_claim_one_wins_one_gets_409(self, phase, workplan):
         """Two agents race to claim the same task; exactly one should win."""
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         token_key = self._make_token_key()
         agent_a_id, agent_b_id = self._make_agents()
         results = []
@@ -490,7 +490,7 @@ class TestConcurrentClaim:
 
     def test_concurrent_claim_task_ends_in_doing(self, phase, workplan):
         """After concurrent claims, task should be in 'doing' state."""
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         token_key = self._make_token_key()
         agent_a_id, agent_b_id = self._make_agents()
 
@@ -522,44 +522,44 @@ class TestConcurrentClaim:
 @pytest.mark.django_db
 class TestClaimableEndpoint:
     def test_claimable_returns_todo_tasks(self, api_client, phase, workplan):
-        make_task(phase, workplan, "todo", title="Task A")
-        make_task(phase, workplan, "todo", title="Task B")
-        make_task(phase, workplan, "doing", title="Task C")
+        make_task(milestone, workplan, "todo", title="Task A")
+        make_task(milestone, workplan, "todo", title="Task B")
+        make_task(milestone, workplan, "doing", title="Task C")
         response = api_client.get("/v1/tasks/claimable/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2
 
     def test_claimable_excludes_non_todo(self, api_client, phase, workplan):
-        make_task(phase, workplan, "draft")
-        make_task(phase, workplan, "doing")
-        make_task(phase, workplan, "done")
-        make_task(phase, workplan, "blocked")
+        make_task(milestone, workplan, "draft")
+        make_task(milestone, workplan, "doing")
+        make_task(milestone, workplan, "done")
+        make_task(milestone, workplan, "blocked")
         response = api_client.get("/v1/tasks/claimable/")
         assert len(response.data["results"]) == 0
 
     def test_claimable_tag_filter_includes_matching(self, api_client, phase, workplan):
-        make_task(phase, workplan, requires=["executor"])
-        make_task(phase, workplan, requires=[])
+        make_task(milestone, workplan, requires=["executor"])
+        make_task(milestone, workplan, requires=[])
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2
 
     def test_claimable_tag_filter_excludes_non_matching(self, api_client, phase, workplan):
-        make_task(phase, workplan, requires=["opus"])
-        make_task(phase, workplan, requires=["executor"])
+        make_task(milestone, workplan, requires=["opus"])
+        make_task(milestone, workplan, requires=["executor"])
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["requires"] == ["executor"]
 
     def test_claimable_no_tags_returns_all_todo(self, api_client, phase, workplan):
-        make_task(phase, workplan, requires=["executor"])
-        make_task(phase, workplan, requires=[])
+        make_task(milestone, workplan, requires=["executor"])
+        make_task(milestone, workplan, requires=[])
         response = api_client.get("/v1/tasks/claimable/")
         assert len(response.data["results"]) == 2
 
     def test_claimable_excludes_tasks_with_unmet_deps(self, api_client, phase, workplan):
-        dep_task = make_task(phase, workplan, "todo", title="Dep")
-        task = make_task(phase, workplan, title="Dependent")
+        dep_task = make_task(milestone, workplan, "todo", title="Dep")
+        task = make_task(milestone, workplan, title="Dependent")
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -572,8 +572,8 @@ class TestClaimableEndpoint:
         assert task.id not in ids
 
     def test_claimable_includes_tasks_with_met_deps(self, api_client, phase, workplan):
-        dep_task = make_task(phase, workplan, "done", title="Dep")
-        task = make_task(phase, workplan, title="Dependent")
+        dep_task = make_task(milestone, workplan, "done", title="Dep")
+        task = make_task(milestone, workplan, title="Dependent")
         Link.objects.create(
             source_type="task",
             source_id=task.id,
@@ -588,8 +588,8 @@ class TestClaimableEndpoint:
     def test_claimable_agent_id_excludes_other_assigned(
         self, api_client, phase, workplan, agent1, agent_other
     ):
-        make_task(phase, workplan, assigned_to=agent_other.id, title="Other's task")
-        make_task(phase, workplan, assigned_to=None, title="Unassigned")
+        make_task(milestone, workplan, assigned_to=agent_other.id, title="Other's task")
+        make_task(milestone, workplan, assigned_to=None, title="Unassigned")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent1.id}")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["title"] == "Unassigned"
@@ -597,20 +597,20 @@ class TestClaimableEndpoint:
     def test_claimable_agent_id_includes_own_assigned(
         self, api_client, phase, workplan, agent1
     ):
-        make_task(phase, workplan, assigned_to=agent1.id, title="My task")
-        make_task(phase, workplan, assigned_to=None, title="Unassigned")
+        make_task(milestone, workplan, assigned_to=agent1.id, title="My task")
+        make_task(milestone, workplan, assigned_to=None, title="Unassigned")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent1.id}")
         assert len(response.data["results"]) == 2
 
     def test_claimable_no_agent_id_shows_all_todo(self, api_client, phase, workplan, agent_other):
-        make_task(phase, workplan, assigned_to=agent_other.id)
-        make_task(phase, workplan, assigned_to=None)
+        make_task(milestone, workplan, assigned_to=agent_other.id)
+        make_task(milestone, workplan, assigned_to=None)
         response = api_client.get("/v1/tasks/claimable/")
         assert len(response.data["results"]) == 2
 
     def test_claimable_combined_tags_and_deps(self, api_client, phase, workplan):
-        dep = make_task(phase, workplan, "done", title="Dep")
-        task_with_dep = make_task(phase, workplan, requires=["executor"], title="With dep")
+        dep = make_task(milestone, workplan, "done", title="Dep")
+        task_with_dep = make_task(milestone, workplan, requires=["executor"], title="With dep")
         Link.objects.create(
             source_type="task",
             source_id=task_with_dep.id,
@@ -618,7 +618,7 @@ class TestClaimableEndpoint:
             target_id=dep.id,
             link_type="depends_on",
         )
-        task_no_dep = make_task(phase, workplan, requires=["executor"], title="No dep")
+        task_no_dep = make_task(milestone, workplan, requires=["executor"], title="No dep")
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         ids = [t["id"] for t in response.data["results"]]
         assert task_with_dep.id in ids
@@ -635,7 +635,7 @@ class TestClaimDBTagLookup:
     def test_claim_uses_db_tags_when_no_body_tags(self, api_client, phase, workplan):
         """When no tags in request body, agent's DB tags are used for matching."""
         agent = AgentFactory(tags=["executor"])
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent.id},
@@ -646,7 +646,7 @@ class TestClaimDBTagLookup:
     def test_claim_db_tags_mismatch_returns_422(self, api_client, phase, workplan):
         """When agent DB tags don't match task requires, 422 is returned."""
         agent = AgentFactory(tags=["other"])
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent.id},
@@ -658,7 +658,7 @@ class TestClaimDBTagLookup:
     def test_claim_body_tags_override_db_tags(self, api_client, phase, workplan):
         """When tags are provided in request body, they override agent's DB tags."""
         agent = AgentFactory(tags=["other"])
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         # Providing matching tags in the body should succeed even though DB tags don't match
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
@@ -670,7 +670,7 @@ class TestClaimDBTagLookup:
     def test_claim_body_tags_can_cause_mismatch(self, api_client, phase, workplan):
         """Body tags that don't match task requires return 422 even if DB tags would match."""
         agent = AgentFactory(tags=["executor"])
-        task = make_task(phase, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, requires=["executor"])
         # Providing non-matching tags in the body should fail even though DB tags match
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
@@ -681,7 +681,7 @@ class TestClaimDBTagLookup:
 
     def test_claim_nonexistent_agent_returns_404(self, api_client, phase, workplan):
         """Claim with a non-existent agent_id returns 404."""
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": "nonexistent-agent-id"},
@@ -692,7 +692,7 @@ class TestClaimDBTagLookup:
 
     def test_claim_nonexistent_agent_does_not_change_task(self, api_client, phase, workplan):
         """Claim with a non-existent agent_id does not change task status."""
-        task = make_task(phase, workplan)
+        task = make_task(milestone, workplan)
         api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": "nonexistent-agent-id"},
@@ -712,8 +712,8 @@ class TestClaimableDBTagLookup:
     def test_claimable_with_agent_id_uses_db_tags(self, api_client, phase, workplan):
         """claimable?agent_id= uses agent's DB tags for filtering when no tags param."""
         agent = AgentFactory(tags=["executor"])
-        make_task(phase, workplan, requires=["executor"], title="Matching task")
-        make_task(phase, workplan, requires=["opus"], title="Non-matching task")
+        make_task(milestone, workplan, requires=["executor"], title="Matching task")
+        make_task(milestone, workplan, requires=["opus"], title="Non-matching task")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent.id}")
         assert response.status_code == status.HTTP_200_OK
         titles = [t["title"] for t in response.data["results"]]
@@ -723,8 +723,8 @@ class TestClaimableDBTagLookup:
     def test_claimable_tags_param_overrides_db_tags(self, api_client, phase, workplan):
         """Explicit tags param overrides DB agent tags in claimable endpoint."""
         agent = AgentFactory(tags=["executor"])
-        make_task(phase, workplan, requires=["opus"], title="Opus task")
-        make_task(phase, workplan, requires=["executor"], title="Executor task")
+        make_task(milestone, workplan, requires=["opus"], title="Opus task")
+        make_task(milestone, workplan, requires=["executor"], title="Executor task")
         # Explicit tags=opus in query param should override agent's DB tags (executor)
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent.id}&tags=opus")
         titles = [t["title"] for t in response.data["results"]]
@@ -735,8 +735,8 @@ class TestClaimableDBTagLookup:
         self, api_client, phase, workplan
     ):
         """claimable with non-existent agent_id falls back to no tag filtering."""
-        make_task(phase, workplan, requires=[], title="No requires")
-        make_task(phase, workplan, requires=["executor"], title="Needs executor")
+        make_task(milestone, workplan, requires=[], title="No requires")
+        make_task(milestone, workplan, requires=["executor"], title="Needs executor")
         response = api_client.get("/v1/tasks/claimable/?agent_id=nonexistent")
         # With empty tags from failed DB lookup, tag filter is skipped — all todo tasks returned
         assert response.status_code == status.HTTP_200_OK

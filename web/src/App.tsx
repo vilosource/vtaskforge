@@ -85,7 +85,7 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<WorkplanList />} />
               <Route path="/workplans/:id" element={<WorkplanDetail />} />
-              <Route path="/workplans/:id/phases/:phaseId" element={<BoardView />} />
+              <Route path="/workplans/:id/milestones/:milestoneId" element={<BoardView />} />
               <Route path="/tasks/:id" element={<TaskPage />} />
             </Route>
           </Routes>

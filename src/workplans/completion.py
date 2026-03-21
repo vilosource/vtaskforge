@@ -1,24 +1,24 @@
 from tasks.state_machine import TERMINAL_STATUSES
 
 
-def maybe_complete_phase(task):
-    """Auto-complete a phase when all its tasks reach terminal status.
+def maybe_complete_milestone(task):
+    """Auto-complete a milestone when all its tasks reach terminal status.
 
-    Returns the phase if it was completed, None otherwise.
+    Returns the milestone if it was completed, None otherwise.
     """
-    phase = getattr(task, "phase", None)
-    if phase is None:
+    milestone = getattr(task, "milestone", None)
+    if milestone is None:
         return None
 
-    if phase.status != "active":
+    if milestone.status != "active":
         return None
 
-    if not phase.tasks.exists():
+    if not milestone.tasks.exists():
         return None
 
-    if phase.tasks.exclude(status__in=TERMINAL_STATUSES).exists():
+    if milestone.tasks.exclude(status__in=TERMINAL_STATUSES).exists():
         return None
 
-    phase.status = "completed"
-    phase.save(update_fields=["status", "updated_at"])
-    return phase
+    milestone.status = "completed"
+    milestone.save(update_fields=["status", "updated_at"])
+    return milestone

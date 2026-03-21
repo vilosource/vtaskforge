@@ -11,7 +11,7 @@ from core.bulk_import import perform_bulk_import
 
 
 class BulkImportView(APIView):
-    """POST /v1/bulk/import — create workplan + phases + tasks + links atomically."""
+    """POST /v1/bulk/import — create workplan + milestones + tasks + links atomically."""
 
     def post(self, request):
         payload = request.data
@@ -28,27 +28,27 @@ class BulkImportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Validate phases
-        for i, phase in enumerate(payload.get("phases", [])):
+        # Validate milestones
+        for i, phase in enumerate(payload.get("milestones", [])):
             if "ref" not in phase:
                 return Response(
-                    {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].ref is required"}},
+                    {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].ref is required"}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             if "name" not in phase:
                 return Response(
-                    {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].name is required"}},
+                    {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].name is required"}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             for j, task in enumerate(phase.get("tasks", [])):
                 if "ref" not in task:
                     return Response(
-                        {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].tasks[{j}].ref is required"}},
+                        {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].tasks[{j}].ref is required"}},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 if "title" not in task:
                     return Response(
-                        {"error": {"code": "VALIDATION_ERROR", "message": f"phases[{i}].tasks[{j}].title is required"}},
+                        {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].tasks[{j}].title is required"}},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -61,8 +61,8 @@ class BulkImportView(APIView):
             )
 
         # Build created counts
-        phases_count = len(payload.get("phases", []))
-        tasks_count = sum(len(p.get("tasks", [])) for p in payload.get("phases", []))
+        milestones_count = len(payload.get("milestones", []))
+        tasks_count = sum(len(p.get("tasks", [])) for p in payload.get("milestones", []))
         links_count = len(payload.get("links", []))
 
         return Response(
@@ -70,7 +70,7 @@ class BulkImportView(APIView):
                 "ref_map": ref_map,
                 "created": {
                     "workplans": 1,
-                    "phases": phases_count,
+                    "milestones": milestones_count,
                     "tasks": tasks_count,
                     "links": links_count,
                 },

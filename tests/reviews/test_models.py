@@ -4,7 +4,7 @@ Tests for Review model.
 import pytest
 
 from reviews.models import Review
-from tests.factories import PhaseFactory, ReviewFactory, TaskFactory, WorkplanFactory
+from tests.factories import MilestoneFactory, ReviewFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -17,15 +17,15 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db, workplan):
-    return PhaseFactory(name="Test Phase", workplan=workplan)
+def milestone(db, workplan):
+    return MilestoneFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
     return TaskFactory(
         title="Test Task",
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status="pending_start_review",
     )

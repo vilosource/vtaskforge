@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from tests.factories import AgentFactory, TaskFactory, WorkplanFactory, PhaseFactory
+from tests.factories import AgentFactory, TaskFactory, WorkplanFactory, MilestoneFactory
 
 
 @pytest.fixture(scope="session")
@@ -46,8 +46,8 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db):
-    return PhaseFactory()
+def milestone(db):
+    return MilestoneFactory()
 
 
 @pytest.fixture

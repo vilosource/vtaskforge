@@ -1,7 +1,7 @@
 import pytest
 
 from tasks.models import Task
-from tests.factories import TaskFactory, WorkplanFactory, PhaseFactory
+from tests.factories import TaskFactory, WorkplanFactory, MilestoneFactory
 
 
 @pytest.mark.django_db
@@ -38,7 +38,7 @@ class TestTaskModel:
     def test_cascade_delete_from_phase(self):
         task = TaskFactory()
         task_id = task.id
-        task.phase.delete()
+        task.milestone.delete()
         assert not Task.objects.filter(id=task_id).exists()
 
     def test_cascade_delete_from_workplan(self):
@@ -53,9 +53,9 @@ class TestTaskModel:
 
     def test_nanoid_primary_key(self):
         wp = WorkplanFactory()
-        phase = PhaseFactory(workplan=wp)
-        task1 = TaskFactory(title="Task 1", phase=phase, workplan=wp)
-        task2 = TaskFactory(title="Task 2", phase=phase, workplan=wp)
+        phase = MilestoneFactory(workplan=wp)
+        task1 = TaskFactory(title="Task 1", milestone=phase, workplan=wp)
+        task2 = TaskFactory(title="Task 2", milestone=phase, workplan=wp)
         assert task1.id != task2.id
         assert len(task1.id) == 21
         assert len(task2.id) == 21

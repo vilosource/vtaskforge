@@ -5,7 +5,7 @@ import pytest
 
 from links.models import Link
 from tasks.models import Task
-from workplans.models import Phase, Workplan
+from workplans.models import Milestone, Workplan
 
 
 BULK_IMPORT_URL = "/v1/bulk/import"
@@ -19,7 +19,7 @@ def minimal_payload(**kwargs):
     """Return a minimal valid payload, optionally overriding top-level keys."""
     base = {
         "workplan": {"name": "Test Workplan", "description": "desc", "tags": ["test"]},
-        "phases": [],
+        "milestones": [],
         "links": [],
     }
     base.update(kwargs)
@@ -50,7 +50,7 @@ def test_bulk_import_workplan_only(api_client):
     assert "workplan" in data["ref_map"]
     assert "created" in data
     assert data["created"]["workplans"] == 1
-    assert data["created"]["phases"] == 0
+    assert data["created"]["milestones"] == 0
     assert data["created"]["tasks"] == 0
     assert data["created"]["links"] == 0
 
@@ -68,14 +68,14 @@ def test_bulk_import_workplan_created_in_db(api_client):
 
 
 # ---------------------------------------------------------------------------
-# Happy-path: full import with phases, tasks, links
+# Happy-path: full import with milestones, tasks, links
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 def test_bulk_import_full_payload(api_client):
     payload = {
         "workplan": {"name": "Auth rewrite", "description": "Big project", "tags": ["backend"]},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
                 "name": "Core auth",
@@ -121,22 +121,22 @@ def test_bulk_import_full_payload(api_client):
 
     # Counts
     assert data["created"]["workplans"] == 1
-    assert data["created"]["phases"] == 2
+    assert data["created"]["milestones"] == 2
     assert data["created"]["tasks"] == 3
     assert data["created"]["links"] == 1
 
 
 @pytest.mark.django_db
-def test_bulk_import_phases_linked_to_workplan(api_client):
+def test_bulk_import_milestones_linked_to_workplan(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [{"ref": "phase-1", "name": "Phase One"}],
+        "milestones": [{"ref": "phase-1", "name": "Milestone One"}],
         "links": [],
     }
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
     assert response.status_code == 201
     ref_map = response.json()["ref_map"]
-    phase = Phase.objects.get(id=ref_map["phase-1"])
+    phase = Milestone.objects.get(id=ref_map["phase-1"])
     assert phase.workplan_id == ref_map["workplan"]
 
 
@@ -144,10 +144,10 @@ def test_bulk_import_phases_linked_to_workplan(api_client):
 def test_bulk_import_tasks_linked_to_phase_and_workplan(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"ref": "task-1", "title": "Do something"}],
             }
         ],
@@ -165,10 +165,10 @@ def test_bulk_import_tasks_linked_to_phase_and_workplan(api_client):
 def test_bulk_import_tasks_fields_stored_correctly(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [
                     {
                         "ref": "task-1",
@@ -196,10 +196,10 @@ def test_bulk_import_tasks_fields_stored_correctly(api_client):
 def test_bulk_import_links_resolved_from_refs(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [
                     {"ref": "task-1", "title": "Task One"},
                     {"ref": "task-2", "title": "Task Two"},
@@ -226,10 +226,10 @@ def test_bulk_import_link_phase_to_task(api_client):
     """Links can reference any entity type, including phase -> task."""
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"ref": "task-1", "title": "Task One"}],
             }
         ],
@@ -253,10 +253,10 @@ def test_bulk_import_link_phase_to_task(api_client):
 def test_bulk_import_unresolved_source_ref_returns_400(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"ref": "task-1", "title": "Task One"}],
             }
         ],
@@ -276,10 +276,10 @@ def test_bulk_import_unresolved_source_ref_returns_400(api_client):
 def test_bulk_import_unresolved_target_ref_returns_400(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"ref": "task-1", "title": "Task One"}],
             }
         ],
@@ -298,10 +298,10 @@ def test_bulk_import_transaction_rollback_on_error(api_client):
     """On any error nothing should be persisted."""
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"ref": "task-1", "title": "Task One"}],
             }
         ],
@@ -310,7 +310,7 @@ def test_bulk_import_transaction_rollback_on_error(api_client):
         ],
     }
     wp_before = Workplan.objects.count()
-    phase_before = Phase.objects.count()
+    phase_before = Milestone.objects.count()
     task_before = Task.objects.count()
     link_before = Link.objects.count()
 
@@ -318,7 +318,7 @@ def test_bulk_import_transaction_rollback_on_error(api_client):
     assert response.status_code == 400
 
     assert Workplan.objects.count() == wp_before
-    assert Phase.objects.count() == phase_before
+    assert Milestone.objects.count() == phase_before
     assert Task.objects.count() == task_before
     assert Link.objects.count() == link_before
 
@@ -331,10 +331,10 @@ def test_bulk_import_transaction_rollback_on_error(api_client):
 def test_bulk_import_duplicate_refs_rejected(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [
                     {"ref": "same-ref", "title": "Task One"},
                     {"ref": "same-ref", "title": "Task Two"},
@@ -354,7 +354,7 @@ def test_bulk_import_duplicate_refs_rejected(api_client):
 
 @pytest.mark.django_db
 def test_bulk_import_missing_workplan_field(api_client):
-    response = api_client.post(BULK_IMPORT_URL, data={"phases": [], "links": []}, format="json")
+    response = api_client.post(BULK_IMPORT_URL, data={"milestones": [], "links": []}, format="json")
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
@@ -363,7 +363,7 @@ def test_bulk_import_missing_workplan_field(api_client):
 def test_bulk_import_missing_workplan_name(api_client):
     response = api_client.post(
         BULK_IMPORT_URL,
-        data={"workplan": {"description": "no name"}, "phases": [], "links": []},
+        data={"workplan": {"description": "no name"}, "milestones": [], "links": []},
         format="json",
     )
     assert response.status_code == 400
@@ -374,7 +374,7 @@ def test_bulk_import_missing_workplan_name(api_client):
 def test_bulk_import_missing_phase_ref(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [{"name": "Phase without ref"}],
+        "milestones": [{"name": "Milestone without ref"}],
         "links": [],
     }
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
@@ -386,10 +386,10 @@ def test_bulk_import_missing_phase_ref(api_client):
 def test_bulk_import_missing_task_ref(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"title": "Task without ref"}],
             }
         ],
@@ -404,10 +404,10 @@ def test_bulk_import_missing_task_ref(api_client):
 def test_bulk_import_missing_task_title(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [
+        "milestones": [
             {
                 "ref": "phase-1",
-                "name": "Phase One",
+                "name": "Milestone One",
                 "tasks": [{"ref": "task-1"}],
             }
         ],
@@ -423,9 +423,9 @@ def test_bulk_import_missing_task_title(api_client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_bulk_import_empty_phases_list(api_client):
-    """A workplan-only import with no phases is valid."""
-    payload = {"workplan": {"name": "Solo WP"}, "phases": [], "links": []}
+def test_bulk_import_empty_milestones_list(api_client):
+    """A workplan-only import with no milestones is valid."""
+    payload = {"workplan": {"name": "Solo WP"}, "milestones": [], "links": []}
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
     assert response.status_code == 201
     assert Workplan.objects.filter(id=response.json()["ref_map"]["workplan"]).exists()
@@ -435,7 +435,7 @@ def test_bulk_import_empty_phases_list(api_client):
 def test_bulk_import_phase_with_no_tasks(api_client):
     payload = {
         "workplan": {"name": "WP"},
-        "phases": [{"ref": "phase-1", "name": "Empty Phase"}],
+        "milestones": [{"ref": "phase-1", "name": "Empty Milestone"}],
         "links": [],
     }
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
@@ -444,8 +444,8 @@ def test_bulk_import_phase_with_no_tasks(api_client):
 
 
 @pytest.mark.django_db
-def test_bulk_import_no_phases_key(api_client):
-    """Omitting phases key entirely is also valid."""
+def test_bulk_import_no_milestones_key(api_client):
+    """Omitting milestones key entirely is also valid."""
     payload = {"workplan": {"name": "WP"}}
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
     assert response.status_code == 201

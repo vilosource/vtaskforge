@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useWorkplans, useWorkplanStats, type Workplan } from '../api/workplans';
-import { usePhases } from '../api/phases';
+import { useMilestones } from '../api/milestones';
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'badge-active',
@@ -11,7 +11,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 function WorkplanRow({ wp }: { wp: Workplan }) {
   const { data: stats } = useWorkplanStats(wp.id);
-  const { data: phases } = usePhases(wp.id);
+  const { data: milestones } = useMilestones(wp.id);
 
   return (
     <tr>
@@ -23,7 +23,7 @@ function WorkplanRow({ wp }: { wp: Workplan }) {
           {wp.status}
         </span>
       </td>
-      <td>{phases?.length ?? '\u2014'}</td>
+      <td>{milestones?.length ?? '\u2014'}</td>
       <td>{stats?.total_tasks ?? '\u2014'}</td>
       <td>
         {stats ? (
@@ -75,7 +75,7 @@ export function WorkplanList() {
           <tr>
             <th>Name</th>
             <th>Status</th>
-            <th>Phases</th>
+            <th>Milestones</th>
             <th>Tasks</th>
             <th>Progress</th>
             <th>Tags</th>

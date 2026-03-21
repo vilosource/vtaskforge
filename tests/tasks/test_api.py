@@ -8,8 +8,8 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from tasks.models import Task
-from tests.factories import LinkFactory, PhaseFactory, ReviewFactory, TaskEventFactory, TaskFactory, WorkplanFactory
-from workplans.models import Phase
+from tests.factories import LinkFactory, MilestoneFactory, ReviewFactory, TaskEventFactory, TaskFactory, WorkplanFactory
+from workplans.models import Milestone
 
 
 # ---------------------------------------------------------------------------
@@ -22,20 +22,20 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db, workplan):
-    return PhaseFactory(name="Test Phase", workplan=workplan)
+def milestone(db, workplan):
+    return MilestoneFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task(db, phase, workplan):
-    return TaskFactory(title="Test Task", phase=phase, workplan=workplan)
+    return TaskFactory(title="Test Task", milestone=phase, workplan=workplan)
 
 
 @pytest.fixture
 def doing_task(db, phase, workplan):
     return TaskFactory(
         title="Doing Task",
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status="doing",
         claimed_by="agent-1",
@@ -67,8 +67,8 @@ class TestTaskList:
         assert all(t["status"] == "doing" for t in response.data["results"])
         assert len(response.data["results"]) == 1
 
-    def test_filter_by_phase(self, api_client, task, phase):
-        response = api_client.get(f"/v1/tasks/?phase={phase.id}")
+    def test_filter_by_phase(self, api_client, task, milestone):
+        response = api_client.get(f"/v1/tasks/?milestone={phase.id}")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
 
@@ -78,8 +78,8 @@ class TestTaskList:
         assert len(response.data["results"]) == 1
 
     def test_filter_by_assigned_to(self, api_client, phase, workplan):
-        TaskFactory(title="Assigned", phase=phase, workplan=workplan, assigned_to="bob")
-        TaskFactory(title="Unassigned", phase=phase, workplan=workplan)
+        TaskFactory(title="Assigned", milestone=phase, workplan=workplan, assigned_to="bob")
+        TaskFactory(title="Unassigned", milestone=phase, workplan=workplan)
         response = api_client.get("/v1/tasks/?assigned_to=bob")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
@@ -135,7 +135,7 @@ class TestTaskCreate:
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_create_without_workplan_returns_400(self, api_client, phase):
+    def test_create_without_workplan_returns_400(self, api_client, milestone):
         payload = {"title": "Task", "phase": phase.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -318,7 +318,7 @@ class TestPhaseTasksNested:
         response = api_client.post("/v1/phases/nonexistentid12345678/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_create_without_title_returns_400(self, api_client, phase):
+    def test_create_without_title_returns_400(self, api_client, milestone):
         response = api_client.post(f"/v1/phases/{phase.id}/tasks/", {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -330,15 +330,15 @@ class TestPhaseTasksNested:
         assert task.workplan_id == workplan.id
 
     def test_list_filters_by_status(self, api_client, phase, workplan):
-        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
-        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Draft Task", milestone=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", milestone=phase, workplan=workplan, status="doing")
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/?status=draft")
         assert response.status_code == status.HTTP_200_OK
         assert all(t["status"] == "draft" for t in response.data["results"])
 
     def test_list_does_not_include_tasks_from_other_phases(self, api_client, workplan, phase, task):
-        other_phase = PhaseFactory(name="Other Phase", workplan=workplan)
-        TaskFactory(title="Other Task", phase=other_phase, workplan=workplan)
+        other_phase = MilestoneFactory(name="Other Phase", workplan=workplan)
+        TaskFactory(title="Other Task", milestone=other_phase, workplan=workplan)
         response = api_client.get(f"/v1/phases/{phase.id}/tasks/")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["id"] == task.id
@@ -459,17 +459,17 @@ class TestMultiStatusFilter:
     """Verify comma-separated ?status= filter."""
 
     def test_single_status_filter_works(self, api_client, phase, workplan):
-        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
-        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Draft Task", milestone=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", milestone=phase, workplan=workplan, status="doing")
         response = api_client.get("/v1/tasks/?status=doing")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["status"] == "doing"
 
     def test_multi_status_filter_returns_all_matching(self, api_client, phase, workplan):
-        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
-        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
-        TaskFactory(title="Blocked Task", phase=phase, workplan=workplan, status="blocked")
+        TaskFactory(title="Draft Task", milestone=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", milestone=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Blocked Task", milestone=phase, workplan=workplan, status="blocked")
         response = api_client.get("/v1/tasks/?status=doing,blocked")
         assert response.status_code == status.HTTP_200_OK
         statuses = {t["status"] for t in response.data["results"]}
@@ -477,17 +477,17 @@ class TestMultiStatusFilter:
         assert len(response.data["results"]) == 2
 
     def test_multi_status_excludes_non_matching(self, api_client, phase, workplan):
-        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
-        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Draft Task", milestone=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", milestone=phase, workplan=workplan, status="doing")
         response = api_client.get("/v1/tasks/?status=doing,blocked")
         assert response.status_code == status.HTTP_200_OK
         assert all(t["status"] != "draft" for t in response.data["results"])
 
     def test_multi_status_three_values(self, api_client, phase, workplan):
-        TaskFactory(title="Draft Task", phase=phase, workplan=workplan, status="draft")
-        TaskFactory(title="Doing Task", phase=phase, workplan=workplan, status="doing")
-        TaskFactory(title="Blocked Task", phase=phase, workplan=workplan, status="blocked")
-        TaskFactory(title="Done Task", phase=phase, workplan=workplan, status="done")
+        TaskFactory(title="Draft Task", milestone=phase, workplan=workplan, status="draft")
+        TaskFactory(title="Doing Task", milestone=phase, workplan=workplan, status="doing")
+        TaskFactory(title="Blocked Task", milestone=phase, workplan=workplan, status="blocked")
+        TaskFactory(title="Done Task", milestone=phase, workplan=workplan, status="done")
         response = api_client.get("/v1/tasks/?status=draft,doing,blocked")
         assert response.status_code == status.HTTP_200_OK
         statuses = {t["status"] for t in response.data["results"]}

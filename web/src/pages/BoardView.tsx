@@ -1,15 +1,15 @@
 import { useParams, Link } from 'react-router-dom';
 import { KanbanBoard } from './KanbanBoard';
-import { usePhase } from '../api/phases';
+import { useMilestone } from '../api/milestones';
 import { useWorkplan } from '../api/tasks';
 
 export function BoardView() {
-  const { id, phaseId } = useParams<{ id: string; phaseId: string }>();
-  const { data: phase } = usePhase(phaseId);
+  const { id, milestoneId } = useParams<{ id: string; milestoneId: string }>();
+  const { data: milestone } = useMilestone(milestoneId);
   const { data: workplan } = useWorkplan(id!);
 
-  if (!id || !phaseId) {
-    return <div className="error">Invalid workplan or phase ID.</div>;
+  if (!id || !milestoneId) {
+    return <div className="error">Invalid workplan or milestone ID.</div>;
   }
 
   return (
@@ -18,13 +18,13 @@ export function BoardView() {
         <Link to={`/workplans/${id}`} style={{ color: 'var(--color-text-secondary)', textDecoration: 'none', fontSize: 14 }}>
           {workplan?.name ?? 'Back'}
         </Link>
-        {phase && (
+        {milestone && (
           <span style={{ color: 'var(--color-text)', fontSize: 14 }}>
-            / {phase.name}
+            / {milestone.name}
           </span>
         )}
       </div>
-      <KanbanBoard workplanId={id} phaseId={phaseId} />
+      <KanbanBoard workplanId={id} milestoneId={milestoneId} />
     </div>
   );
 }

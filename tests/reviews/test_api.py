@@ -6,7 +6,7 @@ from rest_framework import status
 
 from reviews.models import Review
 from tasks.models import Task
-from tests.factories import PhaseFactory, ReviewFactory, TaskFactory, WorkplanFactory
+from tests.factories import MilestoneFactory, ReviewFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -19,15 +19,15 @@ def workplan(db):
 
 
 @pytest.fixture
-def phase(db, workplan):
-    return PhaseFactory(name="Test Phase", workplan=workplan)
+def milestone(db, workplan):
+    return MilestoneFactory(name="Test Phase", workplan=workplan)
 
 
 @pytest.fixture
 def task_pending_start(db, phase, workplan):
     return TaskFactory(
         title="Start Review Task",
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status="pending_start_review",
     )
@@ -37,7 +37,7 @@ def task_pending_start(db, phase, workplan):
 def task_pending_completion(db, phase, workplan):
     return TaskFactory(
         title="Completion Review Task",
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status="pending_completion_review",
     )
@@ -47,7 +47,7 @@ def task_pending_completion(db, phase, workplan):
 def task_todo(db, phase, workplan):
     return TaskFactory(
         title="Todo Task",
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status="todo",
     )
@@ -87,7 +87,7 @@ class TestReviewList:
 
     def test_list_only_returns_reviews_for_task(self, api_client, phase, workplan, task_pending_start):
         other_task = TaskFactory(
-            title="Other Task", phase=phase, workplan=workplan, status="pending_start_review"
+            title="Other Task", milestone=phase, workplan=workplan, status="pending_start_review"
         )
         ReviewFactory(task=task_pending_start, decision="approved", reviewer_id="user-1")
         ReviewFactory(task=other_task, decision="rejected", reviewer_id="user-2")

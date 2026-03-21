@@ -8,7 +8,7 @@ import pytest
 from rest_framework import status
 
 from tasks.models import Task
-from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import MilestoneFactory, TaskFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ def workplan_review_both(db):
 
 @pytest.fixture
 def phase_no_override(db, workplan_no_review):
-    return PhaseFactory(
+    return MilestoneFactory(
         name="Phase No Override",
         workplan=workplan_no_review,
         default_needs_review_before_start=None,
@@ -45,7 +45,7 @@ def phase_no_override(db, workplan_no_review):
 
 @pytest.fixture
 def phase_review_both(db, workplan_no_review):
-    return PhaseFactory(
+    return MilestoneFactory(
         name="Phase Review Both",
         workplan=workplan_no_review,
         default_needs_review_before_start=True,
@@ -56,7 +56,7 @@ def phase_review_both(db, workplan_no_review):
 @pytest.fixture
 def phase_no_review(db, workplan_review_both):
     """Phase that disables review even though workplan enables it."""
-    return PhaseFactory(
+    return MilestoneFactory(
         name="Phase No Review",
         workplan=workplan_review_both,
         default_needs_review_before_start=False,
@@ -64,10 +64,10 @@ def phase_no_review(db, workplan_review_both):
     )
 
 
-def make_task(phase, workplan, task_status="draft", **kwargs):
+def make_task(milestone, workplan, task_status="draft", **kwargs):
     return TaskFactory(
         title="Test Task",
-        phase=phase,
+        milestone=phase,
         workplan=workplan,
         status=task_status,
         **kwargs,
@@ -89,13 +89,13 @@ class TestSubmitReviewCascading:
     def test_submit_workplan_before_start_true_goes_to_pending_start_review(
         self, api_client, workplan_review_both, db
     ):
-        phase = PhaseFactory(
+        phase = MilestoneFactory(
             name="Phase",
             workplan=workplan_review_both,
             default_needs_review_before_start=None,
             default_needs_review_on_completion=None,
         )
-        task = make_task(phase, workplan_review_both, "draft")
+        task = make_task(milestone, workplan_review_both, "draft")
         response = api_client.post(f"/v1/tasks/{task.id}/submit/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == "pending_start_review"
@@ -124,7 +124,7 @@ class TestSubmitReviewCascading:
     def test_submit_task_false_overrides_phase_true(
         self, api_client, phase_review_both, workplan_no_review
     ):
-        """Explicit False on task overrides phase=True."""
+        """Explicit False on task overrides milestone=True."""
         task = make_task(
             phase_review_both,
             workplan_no_review,
@@ -181,13 +181,13 @@ class TestCompleteReviewCascading:
     def test_complete_workplan_on_completion_true_goes_to_pending_completion_review(
         self, api_client, workplan_review_both, db
     ):
-        phase = PhaseFactory(
+        phase = MilestoneFactory(
             name="Phase",
             workplan=workplan_review_both,
             default_needs_review_before_start=None,
             default_needs_review_on_completion=None,
         )
-        task = make_task(phase, workplan_review_both, "doing")
+        task = make_task(milestone, workplan_review_both, "doing")
         response = api_client.post(f"/v1/tasks/{task.id}/complete/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == "pending_completion_review"
@@ -216,7 +216,7 @@ class TestCompleteReviewCascading:
     def test_complete_task_false_overrides_phase_true(
         self, api_client, phase_review_both, workplan_no_review
     ):
-        """Explicit False on task overrides phase=True."""
+        """Explicit False on task overrides milestone=True."""
         task = make_task(
             phase_review_both,
             workplan_no_review,

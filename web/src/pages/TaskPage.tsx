@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTaskDetail, useDownstreamLinks } from '../api/tasks';
 import { useWorkplan } from '../api/tasks';
-import { usePhase } from '../api/phases';
+import { useMilestone } from '../api/milestones';
 import { parseSpec } from '../utils/parseSpec';
 import { SpecSection } from '../components/SpecSection';
 import { DependencyChain } from '../components/DependencyChain';
@@ -21,7 +21,7 @@ export function TaskPage() {
   const { data: task, isLoading, isError } = useTaskDetail(id ?? null);
   const { data: downstream } = useDownstreamLinks(id ?? null);
   const { data: workplan } = useWorkplan(task?.workplan ?? '');
-  const { data: phase } = usePhase(task?.phase ?? undefined);
+  const { data: milestone } = useMilestone(task?.milestone ?? undefined);
   const [eventsExpanded, setEventsExpanded] = useState(false);
 
   if (isLoading) {

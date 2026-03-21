@@ -1,7 +1,7 @@
 import pytest
 from rest_framework import status
 
-from tests.factories import PhaseFactory, TaskFactory, WorkplanFactory
+from tests.factories import MilestoneFactory, TaskFactory, WorkplanFactory
 from workplans.models import Workplan
 
 
@@ -251,11 +251,11 @@ class TestWorkplanStats:
         assert response.data["by_status"] == {}
 
     def test_stats_counts_tasks_by_status(self, api_client, workplan):
-        phase = PhaseFactory(workplan=workplan)
-        TaskFactory(workplan=workplan, phase=phase, status="todo")
-        TaskFactory(workplan=workplan, phase=phase, status="todo")
-        TaskFactory(workplan=workplan, phase=phase, status="doing")
-        TaskFactory(workplan=workplan, phase=phase, status="done")
+        phase = MilestoneFactory(workplan=workplan)
+        TaskFactory(workplan=workplan, milestone=phase, status="todo")
+        TaskFactory(workplan=workplan, milestone=phase, status="todo")
+        TaskFactory(workplan=workplan, milestone=phase, status="doing")
+        TaskFactory(workplan=workplan, milestone=phase, status="done")
         response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
         assert response.data["total_tasks"] == 4
         assert response.data["by_status"]["todo"] == 2
@@ -263,27 +263,27 @@ class TestWorkplanStats:
         assert response.data["by_status"]["done"] == 1
 
     def test_stats_completed_percentage(self, api_client, workplan):
-        phase = PhaseFactory(workplan=workplan)
-        TaskFactory(workplan=workplan, phase=phase, status="done")
-        TaskFactory(workplan=workplan, phase=phase, status="done")
-        TaskFactory(workplan=workplan, phase=phase, status="todo")
-        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        phase = MilestoneFactory(workplan=workplan)
+        TaskFactory(workplan=workplan, milestone=phase, status="done")
+        TaskFactory(workplan=workplan, milestone=phase, status="done")
+        TaskFactory(workplan=workplan, milestone=phase, status="todo")
+        TaskFactory(workplan=workplan, milestone=phase, status="todo")
         response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
         assert response.data["completed_percentage"] == 50.0
 
     def test_stats_completed_percentage_is_float(self, api_client, workplan):
-        phase = PhaseFactory(workplan=workplan)
-        TaskFactory(workplan=workplan, phase=phase, status="done")
-        TaskFactory(workplan=workplan, phase=phase, status="todo")
-        TaskFactory(workplan=workplan, phase=phase, status="todo")
+        phase = MilestoneFactory(workplan=workplan)
+        TaskFactory(workplan=workplan, milestone=phase, status="done")
+        TaskFactory(workplan=workplan, milestone=phase, status="todo")
+        TaskFactory(workplan=workplan, milestone=phase, status="todo")
         response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
         assert isinstance(response.data["completed_percentage"], float)
 
     def test_stats_only_counts_own_workplan_tasks(self, api_client, workplan):
         other_workplan = WorkplanFactory()
-        phase = PhaseFactory(workplan=workplan)
-        other_phase = PhaseFactory(workplan=other_workplan)
-        TaskFactory(workplan=workplan, phase=phase, status="done")
-        TaskFactory(workplan=other_workplan, phase=other_phase, status="done")
+        phase = MilestoneFactory(workplan=workplan)
+        other_phase = MilestoneFactory(workplan=other_workplan)
+        TaskFactory(workplan=workplan, milestone=phase, status="done")
+        TaskFactory(workplan=other_workplan, milestone=other_phase, status="done")
         response = api_client.get(f"/v1/workplans/{workplan.id}/stats/")
         assert response.data["total_tasks"] == 1
