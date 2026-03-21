@@ -7,9 +7,18 @@ from agents.models import Agent
 from core.mixins import generate_nanoid
 from events.models import TaskEvent
 from links.models import Link
+from projects.models import Project
 from reviews.models import Review
 from tasks.models import Note, Task
 from workplans.models import Milestone, Workplan
+
+
+class ProjectFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Project
+
+    name = factory.Sequence(lambda n: f"Project {n}")
+    status = "active"
 
 
 class WorkplanFactory(factory.django.DjangoModelFactory):

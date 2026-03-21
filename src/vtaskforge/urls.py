@@ -93,6 +93,7 @@ urlpatterns = [
     path('v1/auth/logout', api_logout, name='api-logout'),
     path('v1/health', HealthCheckView.as_view(), name='health-check'),
     path('v1/bulk/import', BulkImportView.as_view(), name='bulk-import'),
+    path('v1/', include('projects.urls')),
     path('v1/', include('workplans.urls')),
     path('v1/', include('agents.urls')),
     path('v1/', include('tasks.urls')),
