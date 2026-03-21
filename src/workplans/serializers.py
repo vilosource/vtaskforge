@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Phase, Workplan
+from .models import Milestone, Phase, Workplan
 
 
 class WorkplanSerializer(serializers.ModelSerializer):

@@ -8,7 +8,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import VTFCursorPagination
 from tasks.models import Task
-from .models import Milestone, Workplan
+from .models import Milestone, Phase, Workplan
 from .serializers import PhaseSerializer, WorkplanSerializer
 
 

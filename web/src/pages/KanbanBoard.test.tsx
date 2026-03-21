@@ -23,14 +23,14 @@ function makeTask(overrides: Partial<{
   id: string;
   title: string;
   status: string;
-  phase: string;
+  milestone: string;
   claimed_by: string | null;
 }>) {
   return {
     id: overrides.id ?? 'task-1',
     title: overrides.title ?? 'Task One',
     status: overrides.status ?? 'todo',
-    phase: overrides.phase ?? 'phase-1',
+    milestone: overrides.milestone ?? 'milestone-1',
     workplan: 'test-wp',
     claimed_by: overrides.claimed_by ?? null,
     claimed_at: null,

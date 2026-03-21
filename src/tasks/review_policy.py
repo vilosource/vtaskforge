@@ -5,7 +5,7 @@ Determines the effective review flags for a task by cascading:
     task -> milestone -> workplan
 
 A task-level flag (even if False) always overrides milestone/workplan.
-Phase-level None means "fall through to workplan".
+Milestone-level None means "fall through to workplan".
 Workplan defaults are never null (BooleanField with default=False).
 """
 

@@ -8,7 +8,7 @@ const baseTask: Task = {
   id: 'task-1',
   title: 'Implement login form',
   status: 'todo',
-  phase: 'phase-1',
+  milestone: 'milestone-1',
   workplan: 'wp-1',
   claimed_by: null,
   claimed_at: null,
@@ -85,8 +85,8 @@ describe('TaskCard', () => {
     expect(screen.getByText('pending_start_review')).toBeInTheDocument();
   });
 
-  it('renders phase', () => {
+  it('renders milestone', () => {
     render(<TaskCard task={baseTask} />);
-    expect(screen.getByText('phase-1')).toBeInTheDocument();
+    expect(screen.getByText('milestone-1')).toBeInTheDocument();
   });
 });

@@ -29,18 +29,18 @@ class BulkImportView(APIView):
             )
 
         # Validate milestones
-        for i, phase in enumerate(payload.get("milestones", [])):
-            if "ref" not in phase:
+        for i, milestone in enumerate(payload.get("milestones", [])):
+            if "ref" not in milestone:
                 return Response(
                     {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].ref is required"}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if "name" not in phase:
+            if "name" not in milestone:
                 return Response(
                     {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].name is required"}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            for j, task in enumerate(phase.get("tasks", [])):
+            for j, task in enumerate(milestone.get("tasks", [])):
                 if "ref" not in task:
                     return Response(
                         {"error": {"code": "VALIDATION_ERROR", "message": f"milestones[{i}].tasks[{j}].ref is required"}},

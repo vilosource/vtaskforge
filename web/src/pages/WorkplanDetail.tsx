@@ -2,55 +2,55 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useWorkplan } from '../api/tasks';
 import { useWorkplanStats } from '../api/workplans';
-import { usePhases, usePhaseStats, useActivatePhase, useCompletePhase } from '../api/phases';
+import { useMilestones, useMilestoneStats, useActivateMilestone, useCompleteMilestone } from '../api/milestones';
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
-import { PhasePipeline } from '../components/PhasePipeline';
+import { MilestonePipeline } from '../components/MilestonePipeline';
 
-function PhaseCard({ phase, workplanId }: { phase: { id: string; name: string; description: string; status: string }; workplanId: string }) {
-  const { data: stats } = usePhaseStats(phase.id);
-  const activateMutation = useActivatePhase();
-  const completeMutation = useCompletePhase();
+function MilestoneCard({ milestone, workplanId }: { milestone: { id: string; name: string; description: string; status: string }; workplanId: string }) {
+  const { data: stats } = useMilestoneStats(milestone.id);
+  const activateMutation = useActivateMilestone();
+  const completeMutation = useCompleteMilestone();
   const total = stats?.total_tasks ?? 0;
   const done = stats?.by_status?.done ?? 0;
   const pct = stats?.completed_percentage ?? 0;
 
-  const statusColor = phase.status === 'completed' ? 'var(--color-done)'
-    : phase.status === 'active' ? 'var(--color-doing)'
+  const statusColor = milestone.status === 'completed' ? 'var(--color-done)'
+    : milestone.status === 'active' ? 'var(--color-doing)'
     : 'var(--color-draft)';
 
   return (
     <Link
-      to={`/workplans/${workplanId}/phases/${phase.id}`}
-      className="phase-card"
+      to={`/workplans/${workplanId}/milestones/${milestone.id}`}
+      className="milestone-card"
       style={{ borderLeftColor: statusColor }}
     >
-      <div className="phase-card-header">
-        <div className="phase-card-title">{phase.name}</div>
+      <div className="milestone-card-header">
+        <div className="milestone-card-title">{milestone.name}</div>
         <span
           className={`badge ${
-            phase.status === 'completed' ? 'badge-completed' :
-            phase.status === 'active' ? 'badge-active' :
+            milestone.status === 'completed' ? 'badge-completed' :
+            milestone.status === 'active' ? 'badge-active' :
             'badge-draft'
           }`}
         >
-          {phase.status}
+          {milestone.status}
         </span>
       </div>
-      {phase.description && (
-        <div className="phase-card-desc">{phase.description}</div>
+      {milestone.description && (
+        <div className="milestone-card-desc">{milestone.description}</div>
       )}
-      <div className="phase-card-footer">
-        <span className="phase-card-stats">{total} tasks &middot; {done} done</span>
-        <div className="phase-card-progress">
-          <div className="phase-card-progress-bar">
-            <div className="phase-card-progress-fill" style={{ width: `${pct}%`, background: statusColor }} />
+      <div className="milestone-card-footer">
+        <span className="milestone-card-stats">{total} tasks &middot; {done} done</span>
+        <div className="milestone-card-progress">
+          <div className="milestone-card-progress-bar">
+            <div className="milestone-card-progress-fill" style={{ width: `${pct}%`, background: statusColor }} />
           </div>
-          <span className="phase-card-progress-text">{pct}%</span>
+          <span className="milestone-card-progress-text">{pct}%</span>
         </div>
-        {phase.status === 'pending' && (
+        {milestone.status === 'pending' && (
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); activateMutation.mutate(phase.id); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); activateMutation.mutate(milestone.id); }}
             disabled={activateMutation.isPending}
             className="btn btn-primary"
             style={{ padding: '4px 12px', minHeight: 28, fontSize: 12 }}
@@ -58,9 +58,9 @@ function PhaseCard({ phase, workplanId }: { phase: { id: string; name: string; d
             {activateMutation.isPending ? 'Activating...' : 'Activate'}
           </button>
         )}
-        {phase.status === 'active' && (
+        {milestone.status === 'active' && (
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); completeMutation.mutate(phase.id); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); completeMutation.mutate(milestone.id); }}
             disabled={completeMutation.isPending}
             className="btn btn-success"
             style={{ padding: '4px 12px', minHeight: 28, fontSize: 12 }}
@@ -73,20 +73,20 @@ function PhaseCard({ phase, workplanId }: { phase: { id: string; name: string; d
   );
 }
 
-function PhaseGroup({ title, phases, workplanId, defaultCollapsed = false }: {
+function MilestoneGroup({ title, milestones, workplanId, defaultCollapsed = false }: {
   title: string;
-  phases: { id: string; name: string; description: string; status: string }[];
+  milestones: { id: string; name: string; description: string; status: string }[];
   workplanId: string;
   defaultCollapsed?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
-  if (phases.length === 0) return null;
+  if (milestones.length === 0) return null;
 
   return (
-    <div className="phase-group">
+    <div className="milestone-group">
       <button
-        className="phase-group-header"
+        className="milestone-group-header"
         onClick={() => setCollapsed(!collapsed)}
       >
         <svg
@@ -95,13 +95,13 @@ function PhaseGroup({ title, phases, workplanId, defaultCollapsed = false }: {
         >
           <path d="M3 4.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        <span className="phase-group-title">{title}</span>
-        <span className="phase-group-count">{phases.length}</span>
+        <span className="milestone-group-title">{title}</span>
+        <span className="milestone-group-count">{milestones.length}</span>
       </button>
       {!collapsed && (
-        <div className="phase-group-grid">
-          {phases.map((phase) => (
-            <PhaseCard key={phase.id} phase={phase} workplanId={workplanId} />
+        <div className="milestone-group-grid">
+          {milestones.map((milestone) => (
+            <MilestoneCard key={milestone.id} milestone={milestone} workplanId={workplanId} />
           ))}
         </div>
       )}
@@ -113,7 +113,7 @@ export function WorkplanDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: workplan, isLoading: wpLoading } = useWorkplan(id!);
   const { data: wpStats } = useWorkplanStats(id!);
-  const { data: phases, isLoading: phLoading } = usePhases(id!);
+  const { data: milestones, isLoading: phLoading } = useMilestones(id!);
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
   const { status: sseStatus } = useSSE({
     url: `/v1/events/stream/?workplan=${id}`,
@@ -123,9 +123,9 @@ export function WorkplanDetail() {
 
   if (wpLoading || phLoading) return <div className="loading">Loading...</div>;
 
-  const activePhases = (phases ?? []).filter((p) => p.status === 'active');
-  const pendingPhases = (phases ?? []).filter((p) => p.status === 'pending');
-  const completedPhases = (phases ?? []).filter((p) => p.status === 'completed');
+  const activeMilestones = (milestones ?? []).filter((p) => p.status === 'active');
+  const pendingMilestones = (milestones ?? []).filter((p) => p.status === 'pending');
+  const completedMilestones = (milestones ?? []).filter((p) => p.status === 'completed');
 
   const totalTasks = wpStats?.total_tasks ?? 0;
   const doneTasks = wpStats?.by_status?.done ?? 0;
@@ -192,22 +192,22 @@ export function WorkplanDetail() {
               onClick={() => setViewMode(mode)}
               className={`workplan-view-toggle-btn ${viewMode === mode ? 'workplan-view-toggle-btn--active' : ''}`}
             >
-              {mode === 'list' ? 'Phases' : 'Pipeline'}
+              {mode === 'list' ? 'Milestones' : 'Pipeline'}
             </button>
           ))}
         </div>
-        <span className="workplan-phase-count">{phases?.length ?? 0} phases</span>
+        <span className="workplan-milestone-count">{milestones?.length ?? 0} milestones</span>
       </div>
 
-      {/* Phase content */}
+      {/* Milestone content */}
       {viewMode === 'list' ? (
-        <div className="workplan-phases">
-          <PhaseGroup title="Active" phases={activePhases} workplanId={id!} />
-          <PhaseGroup title="Pending" phases={pendingPhases} workplanId={id!} />
-          <PhaseGroup title="Completed" phases={completedPhases} workplanId={id!} defaultCollapsed />
+        <div className="workplan-milestones">
+          <MilestoneGroup title="Active" milestones={activeMilestones} workplanId={id!} />
+          <MilestoneGroup title="Pending" milestones={pendingMilestones} workplanId={id!} />
+          <MilestoneGroup title="Completed" milestones={completedMilestones} workplanId={id!} defaultCollapsed />
         </div>
       ) : (
-        <PhasePipeline phases={phases ?? []} workplanId={id!} />
+        <MilestonePipeline milestones={milestones ?? []} workplanId={id!} />
       )}
     </div>
   );

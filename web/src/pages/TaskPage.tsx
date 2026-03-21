@@ -49,14 +49,14 @@ export function TaskPage() {
             </Link>
           </>
         )}
-        {phase && (
+        {milestone && (
           <>
             {' > '}
             <Link
-              to={`/workplans/${task.workplan}/phases/${task.phase}`}
+              to={`/workplans/${task.workplan}/milestones/${task.milestone}`}
               style={{ color: '#1976d2', textDecoration: 'none' }}
             >
-              {phase.name}
+              {milestone.name}
             </Link>
           </>
         )}
@@ -184,13 +184,13 @@ export function TaskPage() {
           }}>
             <h4 style={{ margin: '0 0 12px 0', fontSize: 13, color: '#666' }}>Context</h4>
             <dl style={{ margin: 0, fontSize: 13 }}>
-              {phase && (
+              {milestone && (
                 <>
-                  <dt style={{ color: '#888' }}>Phase</dt>
+                  <dt style={{ color: '#888' }}>Milestone</dt>
                   <dd style={{ margin: '2px 0 0 0' }}>
-                    <Link to={`/workplans/${task.workplan}/phases/${task.phase}`}
+                    <Link to={`/workplans/${task.workplan}/milestones/${task.milestone}`}
                       style={{ color: '#1976d2', textDecoration: 'none' }}>
-                      {phase.name}
+                      {milestone.name}
                     </Link>
                   </dd>
                 </>

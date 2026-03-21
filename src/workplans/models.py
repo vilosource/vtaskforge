@@ -65,4 +65,5 @@ class Milestone(NanoIDMixin, TimestampMixin):
         return self.name
 
 
-
+# Temporary alias for backwards compatibility - will be removed in task 8.3
+Phase = Milestone
