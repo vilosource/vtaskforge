@@ -30,7 +30,7 @@ def event_stream(request, max_iterations=None):
     # --- parse filters ---
     params = request.GET
     workplan = params.get("workplan")
-    phase = params.get("phase")
+    milestone = params.get("milestone")
     event_type_filter = params.get("type")
 
     # --- reconnection support via Last-Event-ID header ---
@@ -58,8 +58,8 @@ def event_stream(request, max_iterations=None):
         if workplan:
             qs = qs.filter(task__workplan_id=workplan)
 
-        if phase:
-            qs = qs.filter(task__phase_id=phase)
+        if milestone:
+            qs = qs.filter(task__milestone_id=milestone)
 
         if event_type_filter:
             qs = qs.filter(event_type=event_type_filter)

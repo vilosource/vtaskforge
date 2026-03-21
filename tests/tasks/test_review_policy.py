@@ -1,8 +1,8 @@
 """
 Unit tests for get_effective_review_flags cascade logic.
 
-Cascade order: task -> phase -> workplan
-Task flag=False OVERRIDES phase/workplan flag=True (explicit False is not null).
+Cascade order: task -> milestone -> workplan
+Task flag=False OVERRIDES milestone/workplan flag=True (explicit False is not null).
 """
 from unittest.mock import MagicMock
 
@@ -14,8 +14,8 @@ from tasks.review_policy import get_effective_review_flags
 def make_task(
     task_before_start=None,
     task_on_completion=None,
-    phase_before_start=None,
-    phase_on_completion=None,
+    milestone_before_start=None,
+    milestone_on_completion=None,
     workplan_before_start=False,
     workplan_on_completion=False,
 ):
@@ -24,14 +24,14 @@ def make_task(
     workplan.default_needs_review_before_start = workplan_before_start
     workplan.default_needs_review_on_completion = workplan_on_completion
 
-    phase = MagicMock()
-    phase.default_needs_review_before_start = phase_before_start
-    phase.default_needs_review_on_completion = phase_on_completion
+    milestone = MagicMock()
+    milestone.default_needs_review_before_start = milestone_before_start
+    milestone.default_needs_review_on_completion = milestone_on_completion
 
     task = MagicMock()
     task.needs_review_before_start = task_before_start
     task.needs_review_on_completion = task_on_completion
-    task.phase = phase
+    task.milestone = milestone
     task.workplan = workplan
 
     return task
@@ -45,7 +45,7 @@ class TestBeforeStartCascade:
     def test_task_true_overrides_all(self):
         task = make_task(
             task_before_start=True,
-            phase_before_start=False,
+            milestone_before_start=False,
             workplan_before_start=False,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -55,7 +55,7 @@ class TestBeforeStartCascade:
         """Explicit False on task must win over milestone=True."""
         task = make_task(
             task_before_start=False,
-            phase_before_start=True,
+            milestone_before_start=True,
             workplan_before_start=True,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -64,7 +64,7 @@ class TestBeforeStartCascade:
     def test_task_none_falls_through_to_phase_true(self):
         task = make_task(
             task_before_start=None,
-            phase_before_start=True,
+            milestone_before_start=True,
             workplan_before_start=False,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -73,7 +73,7 @@ class TestBeforeStartCascade:
     def test_task_none_falls_through_to_phase_false(self):
         task = make_task(
             task_before_start=None,
-            phase_before_start=False,
+            milestone_before_start=False,
             workplan_before_start=True,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -82,7 +82,7 @@ class TestBeforeStartCascade:
     def test_task_none_phase_none_falls_through_to_workplan_true(self):
         task = make_task(
             task_before_start=None,
-            phase_before_start=None,
+            milestone_before_start=None,
             workplan_before_start=True,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -91,7 +91,7 @@ class TestBeforeStartCascade:
     def test_task_none_phase_none_falls_through_to_workplan_false(self):
         task = make_task(
             task_before_start=None,
-            phase_before_start=None,
+            milestone_before_start=None,
             workplan_before_start=False,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -101,7 +101,7 @@ class TestBeforeStartCascade:
         """When workplan is False (its default), result is False."""
         task = make_task(
             task_before_start=None,
-            phase_before_start=None,
+            milestone_before_start=None,
             workplan_before_start=False,
         )
         before_start, _ = get_effective_review_flags(task)
@@ -116,7 +116,7 @@ class TestOnCompletionCascade:
     def test_task_true_overrides_all(self):
         task = make_task(
             task_on_completion=True,
-            phase_on_completion=False,
+            milestone_on_completion=False,
             workplan_on_completion=False,
         )
         _, on_completion = get_effective_review_flags(task)
@@ -125,7 +125,7 @@ class TestOnCompletionCascade:
     def test_task_false_overrides_phase_true(self):
         task = make_task(
             task_on_completion=False,
-            phase_on_completion=True,
+            milestone_on_completion=True,
             workplan_on_completion=True,
         )
         _, on_completion = get_effective_review_flags(task)
@@ -134,7 +134,7 @@ class TestOnCompletionCascade:
     def test_task_none_falls_through_to_phase_true(self):
         task = make_task(
             task_on_completion=None,
-            phase_on_completion=True,
+            milestone_on_completion=True,
             workplan_on_completion=False,
         )
         _, on_completion = get_effective_review_flags(task)
@@ -143,7 +143,7 @@ class TestOnCompletionCascade:
     def test_task_none_phase_none_falls_through_to_workplan_true(self):
         task = make_task(
             task_on_completion=None,
-            phase_on_completion=None,
+            milestone_on_completion=None,
             workplan_on_completion=True,
         )
         _, on_completion = get_effective_review_flags(task)
@@ -152,7 +152,7 @@ class TestOnCompletionCascade:
     def test_task_none_phase_none_workplan_false_returns_false(self):
         task = make_task(
             task_on_completion=None,
-            phase_on_completion=None,
+            milestone_on_completion=None,
             workplan_on_completion=False,
         )
         _, on_completion = get_effective_review_flags(task)
@@ -169,8 +169,8 @@ class TestFlagIndependence:
         task = make_task(
             task_before_start=True,
             task_on_completion=None,
-            phase_before_start=None,
-            phase_on_completion=None,
+            milestone_before_start=None,
+            milestone_on_completion=None,
             workplan_before_start=False,
             workplan_on_completion=True,
         )

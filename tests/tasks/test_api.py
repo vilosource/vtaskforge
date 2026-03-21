@@ -184,7 +184,7 @@ class TestTaskRetrieve:
     def test_retrieve_returns_all_fields(self, api_client, task):
         response = api_client.get(f"/v1/tasks/{task.id}/")
         expected_fields = [
-            "id", "title", "description", "status", "phase", "workplan",
+            "id", "title", "description", "status", "milestone", "workplan",
             "acceptance_criteria", "needs_review_before_start",
             "needs_review_on_completion", "review_return_to", "requires",
             "assigned_to", "claimed_by", "claimed_at", "claim_timeout",
@@ -288,43 +288,43 @@ class TestTaskDelete:
 
 
 # ---------------------------------------------------------------------------
-# Nested endpoint: /v1/phases/{phase_id}/tasks/
+# Nested endpoint: /v1/milestones/{milestone_id}/tasks/
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 class TestPhaseTasksNested:
     def test_list_returns_200(self, api_client, milestone, task):
-        response = api_client.get(f"/v1/phases/{milestone.id}/tasks/")
+        response = api_client.get(f"/v1/milestones/{milestone.id}/tasks/")
         assert response.status_code == status.HTTP_200_OK
 
     def test_list_returns_tasks_in_phase(self, api_client, milestone, task):
-        response = api_client.get(f"/v1/phases/{milestone.id}/tasks/")
+        response = api_client.get(f"/v1/milestones/{milestone.id}/tasks/")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["id"] == task.id
 
     def test_list_returns_404_for_unknown_phase(self, api_client):
-        response = api_client.get("/v1/phases/nonexistentid12345678/tasks/")
+        response = api_client.get("/v1/milestones/nonexistentid12345678/tasks/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_create_auto_sets_phase_and_workplan(self, api_client, milestone, workplan):
         payload = {"title": "Nested Task"}
-        response = api_client.post(f"/v1/phases/{milestone.id}/tasks/", payload, format="json")
+        response = api_client.post(f"/v1/milestones/{milestone.id}/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["milestone"] == milestone.id
         assert response.data["workplan"] == workplan.id
 
     def test_create_returns_404_for_unknown_phase(self, api_client):
         payload = {"title": "Task"}
-        response = api_client.post("/v1/phases/nonexistentid12345678/tasks/", payload, format="json")
+        response = api_client.post("/v1/milestones/nonexistentid12345678/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_create_without_title_returns_400(self, api_client, milestone):
-        response = api_client.post(f"/v1/phases/{milestone.id}/tasks/", {}, format="json")
+        response = api_client.post(f"/v1/milestones/{milestone.id}/tasks/", {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_create_persists_with_correct_relationships(self, api_client, milestone, workplan):
         payload = {"title": "Nested Task"}
-        response = api_client.post(f"/v1/phases/{milestone.id}/tasks/", payload, format="json")
+        response = api_client.post(f"/v1/milestones/{milestone.id}/tasks/", payload, format="json")
         task = Task.objects.get(id=response.data["id"])
         assert task.milestone_id == milestone.id
         assert task.workplan_id == workplan.id
@@ -332,14 +332,14 @@ class TestPhaseTasksNested:
     def test_list_filters_by_status(self, api_client, milestone, workplan):
         TaskFactory(title="Draft Task", milestone=milestone, workplan=workplan, status="draft")
         TaskFactory(title="Doing Task", milestone=milestone, workplan=workplan, status="doing")
-        response = api_client.get(f"/v1/phases/{milestone.id}/tasks/?status=draft")
+        response = api_client.get(f"/v1/milestones/{milestone.id}/tasks/?status=draft")
         assert response.status_code == status.HTTP_200_OK
         assert all(t["status"] == "draft" for t in response.data["results"])
 
     def test_list_does_not_include_tasks_from_other_milestones(self, api_client, workplan, milestone, task):
         other_milestone = MilestoneFactory(name="Other Phase", workplan=workplan)
         TaskFactory(title="Other Task", milestone=other_milestone, workplan=workplan)
-        response = api_client.get(f"/v1/phases/{milestone.id}/tasks/")
+        response = api_client.get(f"/v1/milestones/{milestone.id}/tasks/")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["id"] == task.id
 

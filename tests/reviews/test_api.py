@@ -24,7 +24,7 @@ def milestone(db, workplan):
 
 
 @pytest.fixture
-def task_pending_start(db, phase, workplan):
+def task_pending_start(db, milestone, workplan):
     return TaskFactory(
         title="Start Review Task",
         milestone=milestone,
@@ -34,7 +34,7 @@ def task_pending_start(db, phase, workplan):
 
 
 @pytest.fixture
-def task_pending_completion(db, phase, workplan):
+def task_pending_completion(db, milestone, workplan):
     return TaskFactory(
         title="Completion Review Task",
         milestone=milestone,
@@ -44,7 +44,7 @@ def task_pending_completion(db, phase, workplan):
 
 
 @pytest.fixture
-def task_todo(db, phase, workplan):
+def task_todo(db, milestone, workplan):
     return TaskFactory(
         title="Todo Task",
         milestone=milestone,
@@ -85,7 +85,7 @@ class TestReviewList:
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["decision"] == "approved"
 
-    def test_list_only_returns_reviews_for_task(self, api_client, phase, workplan, task_pending_start):
+    def test_list_only_returns_reviews_for_task(self, api_client, milestone, workplan, task_pending_start):
         other_task = TaskFactory(
             title="Other Task", milestone=milestone, workplan=workplan, status="pending_start_review"
         )

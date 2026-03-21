@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Milestone, Phase, Workplan
+from .models import Milestone, Workplan
 
 
 class WorkplanSerializer(serializers.ModelSerializer):
@@ -23,9 +23,9 @@ class WorkplanSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
-class PhaseSerializer(serializers.ModelSerializer):
+class MilestoneSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Phase
+        model = Milestone
         fields = [
             "id",
             "name",

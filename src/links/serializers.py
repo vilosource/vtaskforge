@@ -32,11 +32,11 @@ class LinkSerializer(serializers.ModelSerializer):
                 return Task.objects.values_list("title", flat=True).get(pk=obj.target_id)
             except Task.DoesNotExist:
                 return None
-        if obj.target_type == "phase":
-            from workplans.models import Phase
+        if obj.target_type == "milestone":
+            from workplans.models import Milestone
             try:
-                return Phase.objects.values_list("name", flat=True).get(pk=obj.target_id)
-            except Phase.DoesNotExist:
+                return Milestone.objects.values_list("name", flat=True).get(pk=obj.target_id)
+            except Milestone.DoesNotExist:
                 return None
         if obj.target_type == "workplan":
             from workplans.models import Workplan
@@ -53,11 +53,11 @@ class LinkSerializer(serializers.ModelSerializer):
                 return Task.objects.values_list("title", flat=True).get(pk=obj.source_id)
             except Task.DoesNotExist:
                 return None
-        if obj.source_type == "phase":
-            from workplans.models import Phase
+        if obj.source_type == "milestone":
+            from workplans.models import Milestone
             try:
-                return Phase.objects.values_list("name", flat=True).get(pk=obj.source_id)
-            except Phase.DoesNotExist:
+                return Milestone.objects.values_list("name", flat=True).get(pk=obj.source_id)
+            except Milestone.DoesNotExist:
                 return None
         if obj.source_type == "workplan":
             from workplans.models import Workplan

@@ -16,7 +16,7 @@ LINK_TYPE_CHOICES = [
 
 SOURCE_TYPE_CHOICES = [
     ("workplan", "Workplan"),
-    ("phase", "Phase"),
+    ("milestone", "Milestone"),
     ("task", "Task"),
 ]
 

@@ -1,16 +1,16 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import NoteViewSet, PhaseTasksView, TaskViewSet
+from .views import NoteViewSet, MilestoneTasksView, TaskViewSet
 
 router = DefaultRouter()
 router.register(r"tasks", TaskViewSet, basename="task")
 
 urlpatterns = router.urls + [
     path(
-        "phases/<str:phase_id>/tasks/",
-        PhaseTasksView.as_view(),
-        name="phase-tasks",
+        "milestones/<str:milestone_id>/tasks/",
+        MilestoneTasksView.as_view(),
+        name="milestone-tasks",
     ),
     path(
         "tasks/<str:task_id>/notes/",

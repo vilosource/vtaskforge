@@ -96,7 +96,7 @@ class TestLinkModel:
     def test_source_type_choices(self):
         choices = dict(SOURCE_TYPE_CHOICES)
         assert "workplan" in choices
-        assert "phase" in choices
+        assert "milestone" in choices
         assert "task" in choices
 
     def test_target_type_is_free_form(self):

@@ -136,8 +136,8 @@ def test_bulk_import_milestones_linked_to_workplan(api_client):
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
     assert response.status_code == 201
     ref_map = response.json()["ref_map"]
-    phase = Milestone.objects.get(id=ref_map["phase-1"])
-    assert phase.workplan_id == ref_map["workplan"]
+    milestone = Milestone.objects.get(id=ref_map["phase-1"])
+    assert milestone.workplan_id == ref_map["workplan"]
 
 
 @pytest.mark.django_db
@@ -223,7 +223,7 @@ def test_bulk_import_links_resolved_from_refs(api_client):
 
 @pytest.mark.django_db
 def test_bulk_import_link_phase_to_task(api_client):
-    """Links can reference any entity type, including phase -> task."""
+    """Links can reference any entity type, including milestone -> task."""
     payload = {
         "workplan": {"name": "WP"},
         "milestones": [

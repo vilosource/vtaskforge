@@ -8,8 +8,8 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import VTFCursorPagination
 from tasks.models import Task
-from .models import Milestone, Phase, Workplan
-from .serializers import PhaseSerializer, WorkplanSerializer
+from .models import Milestone, Workplan
+from .serializers import MilestoneSerializer, WorkplanSerializer
 
 
 class WorkplanViewSet(ModelViewSet):
@@ -80,8 +80,8 @@ class WorkplanViewSet(ModelViewSet):
         return Response(stats_data)
 
 
-class WorkplanPhasesView(APIView):
-    """Nested endpoint: list and create phases under a workplan."""
+class WorkplanMilestonesView(APIView):
+    """Nested endpoint: list and create milestones under a workplan."""
 
     def get_workplan(self, workplan_id):
         try:
@@ -93,13 +93,13 @@ class WorkplanPhasesView(APIView):
         workplan = self.get_workplan(workplan_id)
         if workplan is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        phases = Phase.objects.filter(workplan=workplan)
+        phases = Milestone.objects.filter(workplan=workplan)
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(phases, request)
         if page is not None:
-            serializer = PhaseSerializer(page, many=True)
+            serializer = MilestoneSerializer(page, many=True)
             return paginator.get_paginated_response(serializer.data)
-        serializer = PhaseSerializer(phases, many=True)
+        serializer = MilestoneSerializer(phases, many=True)
         return Response(serializer.data)
 
     def post(self, request, workplan_id):
@@ -108,16 +108,16 @@ class WorkplanPhasesView(APIView):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         data = request.data.copy()
         data["workplan"] = workplan.id
-        serializer = PhaseSerializer(data=data)
+        serializer = MilestoneSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class PhaseViewSet(ModelViewSet):
-    queryset = Phase.objects.all()
-    serializer_class = PhaseSerializer
+class MilestoneViewSet(ModelViewSet):
+    queryset = Milestone.objects.all()
+    serializer_class = MilestoneSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def update(self, request, *args, **kwargs):
@@ -131,34 +131,34 @@ class PhaseViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
-        phase = self.get_object()
-        if phase.status != "pending":
+        milestone = self.get_object()
+        if milestone.status != "pending":
             return Response(
-                {"detail": "Only pending phases can be activated."},
+                {"detail": "Only pending milestones can be activated."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        phase.status = "active"
-        phase.save()
-        serializer = self.get_serializer(phase)
+        milestone.status = "active"
+        milestone.save()
+        serializer = self.get_serializer(milestone)
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
-        phase = self.get_object()
-        if phase.status != "active":
+        milestone = self.get_object()
+        if milestone.status != "active":
             return Response(
-                {"detail": "Only active phases can be completed."},
+                {"detail": "Only active milestones can be completed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        phase.status = "completed"
-        phase.save()
-        serializer = self.get_serializer(phase)
+        milestone.status = "completed"
+        milestone.save()
+        serializer = self.get_serializer(milestone)
         return Response(serializer.data)
 
     @action(detail=True, methods=["get"])
     def stats(self, request, pk=None):
-        phase = self.get_object()
-        tasks = Task.objects.filter(milestone=phase)
+        milestone = self.get_object()
+        tasks = Task.objects.filter(milestone=milestone)
         total = tasks.count()
         status_counts = {
             row["status"]: row["count"]
@@ -167,7 +167,7 @@ class PhaseViewSet(ModelViewSet):
         done_count = status_counts.get("done", 0)
         completed_percentage = round(done_count / total * 100, 1) if total > 0 else 0.0
         stats_data = {
-            "phase_id": phase.id,
+            "milestone_id": milestone.id,
             "total_tasks": total,
             "by_status": status_counts,
             "completed_percentage": completed_percentage,

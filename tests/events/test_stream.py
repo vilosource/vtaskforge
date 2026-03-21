@@ -65,7 +65,7 @@ def milestone(db, workplan):
 
 
 @pytest.fixture
-def task(db, phase, workplan):
+def task(db, milestone, workplan):
     return TaskFactory(milestone=milestone, workplan=workplan)
 
 
@@ -233,10 +233,10 @@ class TestStreamFiltering:
         assert e_claimed.id in returned_ids
         assert e_status.id not in returned_ids
 
-    def test_filter_by_workplan(self, auth_user, phase, workplan, task):
+    def test_filter_by_workplan(self, auth_user, milestone, workplan, task):
         other_workplan = WorkplanFactory()
-        other_phase = MilestoneFactory(workplan=other_workplan)
-        other_task = TaskFactory(milestone=other_phase, workplan=other_workplan)
+        other_milestone = MilestoneFactory(workplan=other_workplan)
+        other_task = TaskFactory(milestone=other_milestone, workplan=other_workplan)
 
         e_in = TaskEventFactory(task=task, event_type="status_changed", data={})
         e_out = TaskEventFactory(task=other_task, event_type="status_changed", data={})

@@ -10,7 +10,7 @@ from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
 from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
-from workplans.models import Milestone, Phase
+from workplans.models import Milestone
 
 from .exceptions import InvalidTransition
 from .models import Note, Task
@@ -66,9 +66,9 @@ class TaskViewSet(ModelViewSet):
             statuses = [s.strip() for s in task_status.split(",") if s.strip()]
             qs = qs.filter(status__in=statuses)
 
-        phase = params.get("phase")
-        if phase:
-            qs = qs.filter(phase_id=phase)
+        milestone = params.get("milestone")
+        if milestone:
+            qs = qs.filter(milestone_id=milestone)
 
         workplan = params.get("workplan")
         if workplan:
@@ -471,22 +471,22 @@ class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet
         return super().create(request, *args, **kwargs)
 
 
-class PhaseTasksView(APIView):
-    """Nested endpoint: list and create tasks under a phase.
-    Auto-sets phase and workplan from phase.workplan on create.
+class MilestoneTasksView(APIView):
+    """Nested endpoint: list and create tasks under a milestone.
+    Auto-sets milestone and workplan from milestone.workplan on create.
     """
 
-    def get_phase(self, phase_id):
+    def get_milestone(self, milestone_id):
         try:
-            return Phase.objects.get(pk=phase_id)
-        except Phase.DoesNotExist:
+            return Milestone.objects.get(pk=milestone_id)
+        except Milestone.DoesNotExist:
             return None
 
-    def get(self, request, phase_id):
-        phase = self.get_phase(phase_id)
-        if phase is None:
+    def get(self, request, milestone_id):
+        milestone = self.get_milestone(milestone_id)
+        if milestone is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        tasks = Task.objects.filter(milestone=phase)
+        tasks = Task.objects.filter(milestone=milestone)
         # Apply same query filters as the viewset
         task_status = request.query_params.get("status")
         if task_status:
@@ -502,13 +502,13 @@ class PhaseTasksView(APIView):
         serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
 
-    def post(self, request, phase_id):
-        phase = self.get_phase(phase_id)
-        if phase is None:
+    def post(self, request, milestone_id):
+        milestone = self.get_milestone(milestone_id)
+        if milestone is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         data = request.data.copy()
-        data["milestone"] = phase.id
-        data["workplan"] = phase.workplan_id
+        data["milestone"] = milestone.id
+        data["workplan"] = milestone.workplan_id
         serializer = TaskSerializer(data=data)
         if serializer.is_valid():
             serializer.save()

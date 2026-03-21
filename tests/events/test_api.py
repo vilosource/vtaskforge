@@ -16,12 +16,12 @@ def milestone(db, workplan):
 
 
 @pytest.fixture
-def task(db, phase, workplan):
+def task(db, milestone, workplan):
     return TaskFactory(title="Test Task", milestone=milestone, workplan=workplan)
 
 
 @pytest.fixture
-def task2(db, phase, workplan):
+def task2(db, milestone, workplan):
     return TaskFactory(title="Test Task 2", milestone=milestone, workplan=workplan)
 
 

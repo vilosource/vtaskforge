@@ -53,9 +53,9 @@ class TestTaskModel:
 
     def test_nanoid_primary_key(self):
         wp = WorkplanFactory()
-        phase = MilestoneFactory(workplan=wp)
-        task1 = TaskFactory(title="Task 1", milestone=phase, workplan=wp)
-        task2 = TaskFactory(title="Task 2", milestone=phase, workplan=wp)
+        milestone = MilestoneFactory(workplan=wp)
+        task1 = TaskFactory(title="Task 1", milestone=milestone, workplan=wp)
+        task2 = TaskFactory(title="Task 2", milestone=milestone, workplan=wp)
         assert task1.id != task2.id
         assert len(task1.id) == 21
         assert len(task2.id) == 21
