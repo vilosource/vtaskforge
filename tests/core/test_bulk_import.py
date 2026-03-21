@@ -131,6 +131,7 @@ def test_bulk_import_full_payload(api_client):
 @pytest.mark.django_db
 def test_bulk_import_milestones_linked_to_workplan(api_client):
     payload = {
+        "project": {"name": "Test Project"},
         "workplan": {"name": "WP"},
         "milestones": [{"ref": "phase-1", "name": "Milestone One"}],
         "links": [],
@@ -145,6 +146,7 @@ def test_bulk_import_milestones_linked_to_workplan(api_client):
 @pytest.mark.django_db
 def test_bulk_import_tasks_linked_to_phase_and_workplan(api_client):
     payload = {
+        "project": {"name": "Test Project"},
         "workplan": {"name": "WP"},
         "milestones": [
             {
@@ -166,6 +168,7 @@ def test_bulk_import_tasks_linked_to_phase_and_workplan(api_client):
 @pytest.mark.django_db
 def test_bulk_import_tasks_fields_stored_correctly(api_client):
     payload = {
+        "project": {"name": "Test Project"},
         "workplan": {"name": "WP"},
         "milestones": [
             {
@@ -197,6 +200,7 @@ def test_bulk_import_tasks_fields_stored_correctly(api_client):
 @pytest.mark.django_db
 def test_bulk_import_links_resolved_from_refs(api_client):
     payload = {
+        "project": {"name": "Test Project"},
         "workplan": {"name": "WP"},
         "milestones": [
             {
@@ -227,6 +231,7 @@ def test_bulk_import_links_resolved_from_refs(api_client):
 def test_bulk_import_link_phase_to_task(api_client):
     """Links can reference any entity type, including milestone -> task."""
     payload = {
+        "project": {"name": "Test Project"},
         "workplan": {"name": "WP"},
         "milestones": [
             {
@@ -427,7 +432,7 @@ def test_bulk_import_missing_task_title(api_client):
 @pytest.mark.django_db
 def test_bulk_import_empty_milestones_list(api_client):
     """A workplan-only import with no milestones is valid."""
-    payload = {"workplan": {"name": "Solo WP"}, "milestones": [], "links": []}
+    payload = {"project": {"name": "Test Project"}, "workplan": {"name": "Solo WP"}, "milestones": [], "links": []}
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
     assert response.status_code == 201
     assert Workplan.objects.filter(id=response.json()["ref_map"]["workplan"]).exists()
@@ -436,6 +441,7 @@ def test_bulk_import_empty_milestones_list(api_client):
 @pytest.mark.django_db
 def test_bulk_import_phase_with_no_tasks(api_client):
     payload = {
+        "project": {"name": "Test Project"},
         "workplan": {"name": "WP"},
         "milestones": [{"ref": "phase-1", "name": "Empty Milestone"}],
         "links": [],
@@ -448,7 +454,7 @@ def test_bulk_import_phase_with_no_tasks(api_client):
 @pytest.mark.django_db
 def test_bulk_import_no_milestones_key(api_client):
     """Omitting milestones key entirely is also valid."""
-    payload = {"workplan": {"name": "WP"}}
+    payload = {"project": {"name": "Test Project"}, "workplan": {"name": "WP"}}
     response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
     assert response.status_code == 201
 
