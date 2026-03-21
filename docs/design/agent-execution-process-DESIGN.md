@@ -22,10 +22,66 @@ reject/rework cycle will all be automated.
 | Actor | Role | Board Operations | Analogy |
 |-------|------|-----------------|---------|
 | **Supervisor** | Orchestrate work, manage milestones, handle escalations | Submit (draft→todo), cancel, defer, unblock | Engineering Manager |
-| **Executor** | Write code, implement specs | Claim (todo→doing), complete (doing→pending_completion_review) | Developer |
-| **Judge** | Verify quality, enforce standards | Submit review (approved→done or changes_requested) | Code Reviewer |
+| **Executor** | Perform the work defined in the task spec | Claim (todo→doing), complete (doing→pending_completion_review) | Worker (developer, ops engineer, etc.) |
+| **Judge** | Verify the work is correct for this task type | Submit review (approved→done or changes_requested) | Verifier (code reviewer, smoke tester, etc.) |
 
 Each actor owns only their natural transitions. No actor does another's job.
+
+### Important: vtaskforge is not just for software development
+
+vtaskforge is a **task execution system for agents**. Tasks can be code, ops,
+infrastructure, data, integration, monitoring, or documentation work. The
+three-actor process (supervisor → executor → judge) applies to ALL task types.
+What changes is the *kind* of executor and *kind* of judge — the process flow
+and state machine are universal.
+
+**"Judge" does not mean "code reviewer."** It means "the agent that verifies
+the work is correct, whatever that means for this task type."
+
+## Task Types and Verification Strategies
+
+vtaskforge must support different types of work, each with appropriate
+executors and verification:
+
+| Task Type | Executor does | Judge verifies |
+|-----------|--------------|----------------|
+| **Code** | Write code in a git repo | Code review + test suite |
+| **Ops** | SSH to servers, restart services, rotate certs | Smoke test — is the service up? |
+| **Infrastructure** | Terraform apply, DNS changes, firewall rules | Verify resources exist and are configured |
+| **Data** | Run migrations, seed data, ETL jobs | Data validation — row counts, checksums |
+| **Integration** | Call external APIs, configure webhooks | Verify endpoints respond correctly |
+| **Docs** | Write/update documentation | Light review or none |
+| **Monitoring** | Set up alerts, dashboards | Verify alerts fire on test condition |
+
+### How the supervisor routes work
+
+The supervisor selects the right executor and judge based on the task type:
+
+```
+1. Supervisor reads task spec → determines task type
+2. Supervisor dispatches appropriate executor:
+   - code task → code executor (git worktree, writes code)
+   - ops task → ops executor (SSH access, runs commands)
+   - infra task → infra executor (cloud CLI, Terraform)
+3. Executor finishes → pending_completion_review
+4. Supervisor dispatches appropriate judge:
+   - code task → code review judge (run tests, review against spec)
+   - ops task → smoke test judge (health checks, verify service state)
+   - infra task → infrastructure judge (verify resources exist)
+5. Judge approves or rejects
+```
+
+### Current state
+
+Today we only have code executors and a code review judge. The task type
+field doesn't exist yet on the Task model. All tasks are implicitly code
+tasks. This is fine for now — we add task types when we need non-code
+executors (likely when building vf-agents or the ops agent).
+
+The key design principle: **the process is generic, the actors are
+specialized.** The state machine (draft → todo → doing → pending_review
+→ done) works for all task types. Only the executor and judge
+implementations change.
 
 ## Diagram 1: Task Lifecycle — Who Owns Each Transition
 
