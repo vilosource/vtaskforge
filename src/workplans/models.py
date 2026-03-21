@@ -31,26 +31,26 @@ class Workplan(NanoIDMixin, TimestampMixin):
         return self.name
 
 
-PHASE_STATUS_CHOICES = [
+MILESTONE_STATUS_CHOICES = [
     ("pending", "Pending"),
     ("active", "Active"),
     ("completed", "Completed"),
 ]
 
 
-class Phase(NanoIDMixin, TimestampMixin):
-    STATUS_CHOICES = PHASE_STATUS_CHOICES
+class Milestone(NanoIDMixin, TimestampMixin):
+    STATUS_CHOICES = MILESTONE_STATUS_CHOICES
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     workplan = models.ForeignKey(
         Workplan,
         on_delete=models.CASCADE,
-        related_name="phases",
+        related_name="milestones",
     )
     status = models.CharField(
         max_length=20,
-        choices=PHASE_STATUS_CHOICES,
+        choices=MILESTONE_STATUS_CHOICES,
         default="pending",
     )
     order = models.IntegerField(default=0)
@@ -63,3 +63,7 @@ class Phase(NanoIDMixin, TimestampMixin):
 
     def __str__(self):
         return self.name
+
+
+# Temporary alias for backwards compatibility - will be removed in task 8.3
+Phase = Milestone

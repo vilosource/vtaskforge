@@ -27,8 +27,8 @@ class Task(NanoIDMixin, TimestampMixin):
         choices=TASK_STATUS_CHOICES,
         default="draft",
     )
-    phase = models.ForeignKey(
-        "workplans.Phase",
+    milestone = models.ForeignKey(
+        "workplans.Milestone",
         on_delete=models.CASCADE,
         related_name="tasks",
     )
