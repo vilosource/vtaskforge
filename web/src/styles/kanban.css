@@ -225,7 +225,7 @@
 }
 
 .task-card-agent,
-.task-card-phase {
+.task-card-milestone {
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
   background: var(--color-bg-secondary);

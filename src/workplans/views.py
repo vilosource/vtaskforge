@@ -158,7 +158,7 @@ class PhaseViewSet(ModelViewSet):
     @action(detail=True, methods=["get"])
     def stats(self, request, pk=None):
         phase = self.get_object()
-        tasks = Task.objects.filter(phase=phase)
+        tasks = Task.objects.filter(milestone=phase)
         total = tasks.count()
         status_counts = {
             row["status"]: row["count"]

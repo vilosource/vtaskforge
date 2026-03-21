@@ -37,6 +37,25 @@ const server = setupServer(
       results: mockWorkplans,
     }),
   ),
+  http.get('/v1/workplans/:id/stats/', () =>
+    HttpResponse.json({
+      total_tasks: 10,
+      by_status: { draft: 2, todo: 3, doing: 1, done: 4 },
+      completed_percentage: 40,
+    }),
+  ),
+  http.get('/v1/workplans/:id/milestones/', () =>
+    HttpResponse.json({
+      count: 3,
+      next: null,
+      previous: null,
+      results: [
+        { id: 'milestone-1', name: 'Setup', status: 'completed' },
+        { id: 'milestone-2', name: 'Implementation', status: 'active' },
+        { id: 'milestone-3', name: 'Testing', status: 'pending' },
+      ],
+    }),
+  ),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

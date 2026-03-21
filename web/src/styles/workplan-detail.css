@@ -147,19 +147,19 @@
   box-shadow: var(--shadow-card);
 }
 
-.workplan-phase-count {
+.workplan-milestone-count {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
 }
 
 /* ----- Phase groups ----- */
-.workplan-phases {
+.workplan-milestones {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.phase-group-header {
+.milestone-group-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -172,18 +172,18 @@
   color: var(--color-text-secondary);
 }
 
-.phase-group-header:hover {
+.milestone-group-header:hover {
   color: var(--color-text);
 }
 
-.phase-group-title {
+.milestone-group-title {
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.phase-group-count {
+.milestone-group-count {
   font-size: 0.625rem;
   font-weight: 500;
   padding: 0 5px;
@@ -194,14 +194,14 @@
 }
 
 /* ----- Phase cards grid ----- */
-.phase-group-grid {
+.milestone-group-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
 }
 
 /* ----- Phase card ----- */
-.phase-card {
+.milestone-card {
   display: block;
   padding: 10px 14px;
   background: var(--color-bg);
@@ -213,11 +213,11 @@
   transition: box-shadow 0.2s;
 }
 
-.phase-card:hover {
+.milestone-card:hover {
   box-shadow: var(--shadow-card-hover);
 }
 
-.phase-card-header {
+.milestone-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -225,12 +225,12 @@
   margin-bottom: 4px;
 }
 
-.phase-card-title {
+.milestone-card-title {
   font-weight: 600;
   font-size: 0.8125rem;
 }
 
-.phase-card-desc {
+.milestone-card-desc {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   margin-bottom: 8px;
@@ -241,25 +241,25 @@
   line-height: 1.4;
 }
 
-.phase-card-footer {
+.milestone-card-footer {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.phase-card-stats {
+.milestone-card-stats {
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
 }
 
-.phase-card-progress {
+.milestone-card-progress {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
 }
 
-.phase-card-progress-bar {
+.milestone-card-progress-bar {
   flex: 1;
   max-width: 80px;
   height: 3px;
@@ -268,13 +268,13 @@
   overflow: hidden;
 }
 
-.phase-card-progress-fill {
+.milestone-card-progress-fill {
   height: 100%;
   border-radius: 2px;
   transition: width 0.3s;
 }
 
-.phase-card-progress-text {
+.milestone-card-progress-text {
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
 }

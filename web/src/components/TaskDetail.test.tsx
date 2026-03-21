@@ -14,7 +14,7 @@ const baseTaskDetail: TaskDetailType = {
   id: 'task-1',
   title: 'Implement login form',
   status: 'draft',
-  phase: 'phase-1',
+  milestone: 'milestone-1',
   workplan: 'wp-1',
   claimed_by: null,
   claimed_at: null,

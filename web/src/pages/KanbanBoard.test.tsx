@@ -102,14 +102,13 @@ describe('KanbanBoard', () => {
     });
   });
 
-  it('renders all 6 columns', async () => {
+  it('renders all 5 columns', async () => {
     renderBoard();
     await waitFor(() => {
       expect(screen.getByText('Test Workplan')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Draft')).toBeInTheDocument();
-    expect(screen.getByText('Review')).toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
     expect(screen.getByText('In Progress')).toBeInTheDocument();
     expect(screen.getByText('Attention')).toBeInTheDocument();
@@ -123,7 +122,6 @@ describe('KanbanBoard', () => {
     });
 
     expect(document.querySelector('[data-column="draft"]')).toBeInTheDocument();
-    expect(document.querySelector('[data-column="review"]')).toBeInTheDocument();
     expect(document.querySelector('[data-column="ready"]')).toBeInTheDocument();
     expect(document.querySelector('[data-column="in-progress"]')).toBeInTheDocument();
     expect(document.querySelector('[data-column="attention"]')).toBeInTheDocument();
@@ -141,8 +139,8 @@ describe('KanbanBoard', () => {
     const draftColumn = document.querySelector('[data-column="draft"]');
     expect(draftColumn?.querySelector('[data-task-id="task-1"]')).toBeInTheDocument();
 
-    const reviewColumn = document.querySelector('[data-column="review"]');
-    expect(reviewColumn?.querySelector('[data-task-id="task-2"]')).toBeInTheDocument();
+    // task-2 (pending_start_review) also goes to draft column
+    expect(draftColumn?.querySelector('[data-task-id="task-2"]')).toBeInTheDocument();
 
     const readyColumn = document.querySelector('[data-column="ready"]');
     expect(readyColumn?.querySelector('[data-task-id="task-3"]')).toBeInTheDocument();
@@ -233,7 +231,7 @@ describe('KanbanBoard', () => {
 
     const draftColumn = document.querySelector('[data-column="draft"]');
     const draftCount = draftColumn?.querySelector('.kanban-column-count');
-    expect(draftCount).toHaveTextContent('1');
+    expect(draftCount).toHaveTextContent('2');
   });
 
   it('clicking a task card calls onTaskClick handler', async () => {

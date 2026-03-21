@@ -10,7 +10,7 @@ from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
 from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
-from workplans.models import Phase
+from workplans.models import Milestone, Phase
 
 from .exceptions import InvalidTransition
 from .models import Note, Task
@@ -58,7 +58,7 @@ class TaskViewSet(ModelViewSet):
         return context
 
     def get_queryset(self):
-        qs = Task.objects.select_related("phase", "workplan").all()
+        qs = Task.objects.select_related("milestone", "workplan").all()
         params = self.request.query_params
 
         task_status = params.get("status")
@@ -486,7 +486,7 @@ class PhaseTasksView(APIView):
         phase = self.get_phase(phase_id)
         if phase is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        tasks = Task.objects.filter(phase=phase)
+        tasks = Task.objects.filter(milestone=phase)
         # Apply same query filters as the viewset
         task_status = request.query_params.get("status")
         if task_status:
@@ -507,7 +507,7 @@ class PhaseTasksView(APIView):
         if phase is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         data = request.data.copy()
-        data["phase"] = phase.id
+        data["milestone"] = phase.id
         data["workplan"] = phase.workplan_id
         serializer = TaskSerializer(data=data)
         if serializer.is_valid():
