@@ -29,6 +29,7 @@ def event_stream(request, max_iterations=None):
     """
     # --- parse filters ---
     params = request.GET
+    project = params.get("project")
     workplan = params.get("workplan")
     milestone = params.get("milestone")
     event_type_filter = params.get("type")
@@ -54,6 +55,9 @@ def event_stream(request, max_iterations=None):
 
         if last_timestamp is not None:
             qs = qs.filter(timestamp__gt=last_timestamp)
+
+        if project:
+            qs = qs.filter(task__project_id=project)
 
         if workplan:
             qs = qs.filter(task__workplan_id=workplan)
