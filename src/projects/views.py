@@ -46,18 +46,20 @@ class ProjectViewSet(ModelViewSet):
 
         from tasks.models import Task
 
-        # Get all tasks from workplans belonging to this project
-        tasks = Task.objects.filter(workplan__project=project)
+        # Get all tasks in this project (both workplan and backlog)
+        all_tasks = Task.objects.filter(project=project)
+        backlog_tasks = all_tasks.filter(workplan__isnull=True)
+        workplan_tasks = all_tasks.filter(workplan__isnull=False)
 
-        total = tasks.count()
+        total = all_tasks.count()
         status_counts = {
             row["status"]: row["count"]
-            for row in tasks.values("status").annotate(count=Count("id"))
+            for row in all_tasks.values("status").annotate(count=Count("id"))
         }
         done_count = status_counts.get("done", 0)
         completed_percentage = round(done_count / total * 100, 1) if total > 0 else 0.0
 
-        # Count workplans by status using the now-existing Workplan.project FK
+        # Count workplans by status
         workplan_queryset = Workplan.objects.filter(project=project)
         workplan_counts = {
             row["status"]: row["count"]
@@ -67,8 +69,8 @@ class ProjectViewSet(ModelViewSet):
         stats_data = {
             "project_id": project.id,
             "total_tasks": total,
-            "backlog_tasks": 0,  # Will be > 0 after task 9.3 adds Task.project FK
-            "workplan_tasks": total,  # For now, all tasks are workplan tasks
+            "backlog_tasks": backlog_tasks.count(),
+            "workplan_tasks": workplan_tasks.count(),
             "by_status": status_counts,
             "completed_percentage": completed_percentage,
             "workplans": workplan_counts,
@@ -116,13 +118,10 @@ class ProjectBacklogView(APIView):
         if project is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # For now, since Task.project FK doesn't exist yet (comes in task 9.3),
-        # we'll return empty results. This endpoint will work once that FK is added
-        # and we can filter Task.objects.filter(project=project, workplan__isnull=True).
         from tasks.models import Task
         from tasks.serializers import TaskSerializer
 
-        backlog_tasks = Task.objects.none()
+        backlog_tasks = Task.objects.filter(project=project, workplan__isnull=True)
 
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(backlog_tasks, request)
