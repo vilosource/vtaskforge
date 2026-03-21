@@ -76,8 +76,11 @@ class TaskViewSet(ModelViewSet):
             qs = qs.filter(milestone_id=milestone)
 
         workplan = params.get("workplan")
+        workplan_isnull = params.get("workplan__isnull")
         if workplan:
             qs = qs.filter(workplan_id=workplan)
+        elif workplan_isnull and workplan_isnull.lower() == "true":
+            qs = qs.filter(workplan__isnull=True)
 
         assigned_to = params.get("assigned_to")
         if assigned_to:
