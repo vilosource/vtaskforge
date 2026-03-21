@@ -2,19 +2,19 @@
 
 ## Where We Are
 
-vtaskforge has been built across Phases 0-4 in a single marathon session. Phase 5 specs are written and imported into the dogfood instance, but execution hasn't started.
+vtaskforge has been built across Milestones 0-4 in a single marathon session. Milestone 5 specs are written and imported into the dogfood instance, but execution hasn't started.
 
 ### What Exists
 
 **Backend API** (Django/DRF, 669 tests):
-- Workplan → Phase → Task hierarchy with full CRUD
+- Workplan → Milestone → Task hierarchy with full CRUD
 - 11-status task state machine with transition enforcement
 - Atomic claiming with tag matching and dependency checking
 - Review gates (before start + on completion) with flag cascading
 - Append-only event audit log with auto-logging on state changes
 - Claim expiry via Celery periodic task
 - Token + Session authentication
-- Bulk import endpoint (accepts workplan_id for adding phases to existing workplans)
+- Bulk import endpoint (accepts workplan_id for adding milestones to existing workplans)
 - Cursor pagination on all list endpoints
 - SSE event stream (polling-based)
 - `?expand=links,reviews,events` on task detail
@@ -23,15 +23,15 @@ vtaskforge has been built across Phases 0-4 in a single marathon session. Phase 
 - `vtf workplan create/list/show/archive/complete`
 - `vtf task list/show/submit/claim/complete/fail/claimable/events`
 - `vtf agent register/list/show/status`
-- `vtf workplan stats`, `vtf phase stats`
-- `vtf import <phase-dir> [--workplan <id>]`
+- `vtf workplan stats`, `vtf milestone stats`
+- `vtf import <milestone-dir> [--workplan <id>]`
 - `vtf config set/show`, `vtf health`
 
 **Web UI** (React + TypeScript + Vite, 78 tests):
 - Login page (session auth via Django)
 - Workplan list page
-- Workplan detail page with phase overview (progress bars, status badges)
-- Kanban board scoped per phase (6 columns)
+- Workplan detail page with milestone overview (progress bars, status badges)
+- Kanban board scoped per milestone (6 columns)
 - Task detail modal with context-sensitive action buttons
 - SSE live indicator (Live/Reconnecting)
 - CSS styling with status colors
@@ -46,9 +46,9 @@ vtaskforge has been built across Phases 0-4 in a single marathon session. Phase 
 - `vtf-executor.md` — implements tasks from YAML specs with blast radius discovery
 - `vtf-judge.md` — code reviewer checking design alignment and blast radius coverage
 - `vtf-blackbox-tester.md` — E2E scenario tester via curl
-- `vtf-supervisor.md` — phase orchestrator (not yet tested end-to-end)
+- `vtf-supervisor.md` — milestone orchestrator (not yet tested end-to-end)
 
-**Process Documentation** (at `docs/guides/phase-process-GUIDE.md`):
+**Process Documentation** (at `docs/guides/milestone-process-GUIDE.md`):
 - Iteration 4 — Gate 1c deployment smoke test
 - Blast radius discovery for executors and judges
 - Web testing strategy (Vitest + Playwright)
@@ -58,24 +58,24 @@ vtaskforge has been built across Phases 0-4 in a single marathon session. Phase 
 
 ```
 Workplan: vtaskforge (TPAfZO6_Ue6OaCaSIIYit)
-  Phase 0 — Project Setup        (6 tasks, pending)
-  Phase 1 — Core Models & CRUD   (11 tasks, pending)
-  Phase 2 — Auth, CLI            (9 tasks, pending)
-  Phase 3 — Polish & Fixes       (6 tasks, pending)
-  Phase 4 — Web UI               (9 tasks, pending)
-  Phase 5 — Polish & DAG View    (6 tasks, pending)  ← NEWLY IMPORTED
+  Milestone 0 — Project Setup        (6 tasks, pending)
+  Milestone 1 — Core Models & CRUD   (11 tasks, pending)
+  Milestone 2 — Auth, CLI            (9 tasks, pending)
+  Milestone 3 — Polish & Fixes       (6 tasks, pending)
+  Milestone 4 — Web UI               (9 tasks, pending)
+  Milestone 5 — Polish & DAG View    (6 tasks, pending)  ← NEWLY IMPORTED
 
 Workplan: vf-agents (JQg01rY-kVM2KnQeEZpVr)
-  Phase 1 — Core Runner          (5 tasks, pending)
+  Milestone 1 — Core Runner          (5 tasks, pending)
 ```
 
-Note: Phase 0-4 tasks show as "pending" because the fake data didn't fully transition all tasks through claim/complete. The code is all done — it's just the dogfood tracking data that's incomplete.
+Note: Milestone 0-4 tasks show as "pending" because the fake data didn't fully transition all tasks through claim/complete. The code is all done — it's just the dogfood tracking data that's incomplete.
 
-Phase 5 tasks are real and ready to execute:
+Milestone 5 tasks are real and ready to execute:
 - 5.1: Fix Invalid Date in event timeline
-- 5.2: Workplan list — show phase count + progress
-- 5.3: Phase status management (activate/complete buttons)
-- 5.4: Kanban board title shows phase name
+- 5.2: Workplan list — show milestone count + progress
+- 5.3: Milestone status management (activate/complete buttons)
+- 5.4: Kanban board title shows milestone name
 - 5.5: DAG pipeline view (simplified)
 - 5.6: Deployment smoke test
 
@@ -95,15 +95,15 @@ EventTimeline component parses timestamps incorrectly. The API returns ISO 8601 
 ### 3. Test isolation
 Dev database accumulates data from manual testing (black-box tester, Playwright). Some Django tests fail because they see stale data. Fix: ensure all tests use proper transaction isolation, or flush dev DB before test runs.
 
-### 4. Phase ordering
-Phases display in reverse creation order (newest first). Should respect the `order` field or creation order.
+### 4. Milestone ordering
+Milestones display in reverse creation order (newest first). Should respect the `order` field or creation order.
 
 ### 5. Deployment smoke test
 `web/tests/deployment-smoke.spec.ts` exists but hasn't been run against the dogfood instance yet. Should be run after every dogfood rebuild.
 
 ## How to Continue
 
-### Option A: Execute Phase 5
+### Option A: Execute Milestone 5
 
 ```bash
 # 1. Resume workspace
@@ -113,16 +113,16 @@ kb work start tasktracker
 # 3. Check the dogfood board
 vtf task list --workplan TPAfZO6_Ue6OaCaSIIYit
 
-# 4. Submit Phase 5 tasks
+# 4. Submit Milestone 5 tasks
 for id in tq57yHC285MXA8g-CLQOp -XOgaHVWGLybuxXgJFavc -OsfDphMdcIIh_QWNI7-e Rq8hR9--syS_mGdkUNcRv 5EtcZ4fXBM2IkluBaH0ba rbCWhr-k4mIiLAwPByyOz; do
   vtf task submit $id
 done
 
-# 5. Fix SSE properly FIRST (task 0 — before Phase 5)
+# 5. Fix SSE properly FIRST (task 0 — before Milestone 5)
 # Options: gevent workers, uvicorn, or async Django
 
-# 6. Execute Phase 5 tasks using standardized executor prompts
-# Specs at: ~/GitHub/vtaskforge/phases/phase5/tasks/
+# 6. Execute Milestone 5 tasks using standardized executor prompts
+# Specs at: ~/GitHub/vtaskforge/milestones/milestone5/tasks/
 # Parallel: 5.1, 5.2, 5.3, 5.4 (step 1)
 # Sequential: 5.5 (step 2), 5.6 (step 3)
 
@@ -136,7 +136,7 @@ docker compose -f docker-compose.dogfood.yml up -d
 Pick an actual project and track it through vtf:
 ```bash
 vtf workplan create --name "my-project" --tags infra
-vtf import phases/my-project-phase1/ --workplan <id>
+vtf import milestones/my-project-milestone1/ --workplan <id>
 ```
 
 ### Key Files
@@ -144,10 +144,10 @@ vtf import phases/my-project-phase1/ --workplan <id>
 | File | Purpose |
 |---|---|
 | `~/GitHub/vtaskforge/` | Main repo (develop branch) |
-| `docs/guides/phase-process-GUIDE.md` | Process guide (Iteration 4) |
+| `docs/guides/milestone-process-GUIDE.md` | Process guide (Iteration 4) |
 | `docs/design/process-retrospective-ANALYSIS.md` | Full retrospective |
 | `docs/design/simulation-gap-ANALYSIS.md` | Manual vs automated execution |
-| `phases/phase5/` | Phase 5 specs (ready to execute) |
+| `milestones/milestone5/` | Milestone 5 specs (ready to execute) |
 | `web/` | React SPA |
 | `cli/` | CLI package |
 | `Dockerfile.prod` | Production build |
@@ -160,5 +160,5 @@ vtf import phases/my-project-phase1/ --workplan <id>
 2. **pytest is the primary gate** — everything else is optional
 3. **Blast radius discovery** — executor must search for all consumers of changed interfaces, including mocks
 4. **Gate 1c (deployment smoke)** — test the built artifact, not just the dev server
-5. **Design drift** — task specs individually correct but collectively wrong (import created workplans instead of phases)
+5. **Design drift** — task specs individually correct but collectively wrong (import created workplans instead of milestones)
 6. **Environment boundaries** — things that work in dev break in production (MIME types, SSE, auth flow)

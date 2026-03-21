@@ -4,7 +4,7 @@ Status: Idea (2026-03-19)
 
 ## Context
 
-vtaskforge manages task lifecycle (workplans, phases, tasks, reviews, events). It needs a counterpart system that manages **agent lifecycle** — claiming tasks, executing them, capturing session telemetry, and reporting results back.
+vtaskforge manages task lifecycle (workplans, milestones, tasks, reviews, events). It needs a counterpart system that manages **agent lifecycle** — claiming tasks, executing them, capturing session telemetry, and reporting results back.
 
 ## Proposal: Evolve vf-agents
 
@@ -48,7 +48,7 @@ VFF's factory loop and judge/satisfaction model would NOT be carried over — th
 vtaskforge                              vf-agents (agent pool manager)
 ┌─────────────────────┐                ┌──────────────────────────────┐
 │ Workplans           │                │ Agent Registry               │
-│ Phases              │   RPC/Events   │ Runtime Adapters             │
+│ Milestones              │   RPC/Events   │ Runtime Adapters             │
 │ Tasks (pool)        │◄──────────────►│ Pool Manager (new)           │
 │ Links & Dependencies│                │ Task Claimer (new)           │
 │ Review Gates        │                │ Instruction Materializer(new)│

@@ -5,14 +5,14 @@
 
 ## Problem
 
-vtaskforge was designed for planned, structured execution: Workplan → Phase → Task.
+vtaskforge was designed for planned, structured execution: Workplan → Milestone → Task.
 This model breaks for real-world usage:
 
 - **Ad-hoc work** (bugfixes, ops tasks) has no natural home — forcing it into a
-  phase feels wrong and pollutes the planned structure.
+  milestone feels wrong and pollutes the planned structure.
 - **Multiple initiatives** on the same codebase require separate workplans that
   have no shared context (repo, conventions, backlog).
-- **"Phase" implies sequential execution**, but groups of tasks often run in
+- **"Milestone" implies sequential execution**, but groups of tasks often run in
   parallel. The term is misleading.
 - **Agent scoping** is implicit — an agent working on vtaskforge might
   accidentally claim a task from an unrelated project.
@@ -21,12 +21,12 @@ This model breaks for real-world usage:
 
 A typical session might include:
 1. Fix dogfood auto-restart on boot (ops)
-2. Implement phase auto-completion (planned feature)
+2. Implement milestone auto-completion (planned feature)
 3. Redesign the sidebar (UI improvement)
 4. Debug CSS alignment (bugfix)
 
 Items 2-4 are vtaskforge work, but only item 2 belongs in a workplan/milestone.
-The rest are ad-hoc tasks with no phase, no milestone, no workplan — yet they
+The rest are ad-hoc tasks with no milestone, no milestone, no workplan — yet they
 clearly belong to the vtaskforge project.
 
 ## Proposal
@@ -50,7 +50,7 @@ Project (permanent home)
 | Change | Detail |
 |--------|--------|
 | New model: **Project** | Permanent container for all work on a codebase/product |
-| Rename: Phase → **Milestone** | Removes sequential implication, goal-oriented |
+| Rename: Milestone → **Milestone** | Removes sequential implication, goal-oriented |
 | Task.workplan becomes **optional** | Tasks without a workplan sit in the project backlog |
 | Task.milestone becomes **optional** | Tasks can belong to a workplan without a milestone |
 | New field: **Task.labels** | Flexible tagging for ad-hoc grouping (ops, bugfix, ui) |
@@ -103,14 +103,14 @@ explicitly on the task itself.
 
 All other fields unchanged.
 
-### Milestone (renamed from Phase)
+### Milestone (renamed from Milestone)
 
 | Field | Change |
 |-------|--------|
-| Model name | Phase → Milestone |
-| DB table | Can keep `workplans_phase` or migrate to `workplans_milestone` |
-| related_name on Workplan | `phases` → `milestones` |
-| related_name on Task | `phase` → `milestone` |
+| Model name | Milestone → Milestone |
+| DB table | Can keep `workplans_milestone` or migrate to `workplans_milestone` |
+| related_name on Workplan | `milestones` → `milestones` |
+| related_name on Task | `milestone` → `milestone` |
 
 All other fields unchanged (name, description, workplan, status, order, etc).
 
@@ -120,7 +120,7 @@ All other fields unchanged (name, description, workplan, status, order, etc).
 |-------|--------|
 | project | **New** — required FK to Project (CASCADE) |
 | workplan | **Nullable** — FK to Workplan (CASCADE), default null |
-| phase → milestone | **Renamed + Nullable** — FK to Milestone (CASCADE), default null |
+| milestone → milestone | **Renamed + Nullable** — FK to Milestone (CASCADE), default null |
 | labels | **New** — JSONField, default [] |
 
 ### Impact on other models
@@ -131,7 +131,7 @@ All other fields unchanged (name, description, workplan, status, order, etc).
 | Note | No change — FK to Task |
 | TaskEvent | No change — FK to Task |
 | Link | No change — links reference task IDs directly |
-| Link serializer | Rename: title resolution references `phase` → `milestone` |
+| Link serializer | Rename: title resolution references `milestone` → `milestone` |
 | Agent | No change — agents are project-agnostic (supervisor handles scoping) |
 
 ## Affected Code Inventory
@@ -156,15 +156,15 @@ all tests before moving to the next.
 
 | File | Why |
 |------|-----|
-| `src/workplans/completion.py` | New file from today — `maybe_complete_phase()` → `maybe_complete_milestone()` |
-| `src/tasks/review_policy.py` | Review flag cascade: Phase → Workplan. Must handle nullable milestone — backlog tasks with no milestone/workplan get no cascaded defaults |
-| `src/links/serializers.py` | Title resolution looks up phase names for link display |
-| `src/events/stream.py` | SSE filtering uses `phase` references |
-| `src/core/bulk_import.py` | Creates phases nested under workplans — rename + add project support |
-| `tests/factories.py` | `PhaseFactory` → `MilestoneFactory`, used by every test file |
-| `web/src/components/PhasePipeline.tsx` | Rename to `MilestonePipeline.tsx` |
-| `web/src/api/phases.ts` | Rename to `milestones.ts`, update all hooks |
-| `.claude/agents/*.md` | Supervisor and executor prompts reference "phase" |
+| `src/workplans/completion.py` | New file from today — `maybe_complete_milestone()` → `maybe_complete_milestone()` |
+| `src/tasks/review_policy.py` | Review flag cascade: Milestone → Workplan. Must handle nullable milestone — backlog tasks with no milestone/workplan get no cascaded defaults |
+| `src/links/serializers.py` | Title resolution looks up milestone names for link display |
+| `src/events/stream.py` | SSE filtering uses `milestone` references |
+| `src/core/bulk_import.py` | Creates milestones nested under workplans — rename + add project support |
+| `tests/factories.py` | `MilestoneFactory` → `MilestoneFactory`, used by every test file |
+| `web/src/components/MilestonePipeline.tsx` | Rename to `MilestonePipeline.tsx` |
+| `web/src/api/milestones.ts` | Rename to `milestones.ts`, update all hooks |
+| `.claude/agents/*.md` | Supervisor and executor prompts reference "milestone" |
 
 ## API Changes
 
@@ -207,12 +207,12 @@ This counts ALL tasks in the project — both workplan tasks and backlog tasks.
 ### Renamed endpoints
 
 ```
-/v1/workplans/:id/phases/     →  /v1/workplans/:id/milestones/
-/v1/phases/:id/               →  /v1/milestones/:id/
-/v1/phases/:id/tasks/         →  /v1/milestones/:id/tasks/
-/v1/phases/:id/activate/      →  /v1/milestones/:id/activate/
-/v1/phases/:id/complete/      →  /v1/milestones/:id/complete/
-/v1/phases/:id/stats/         →  /v1/milestones/:id/stats/
+/v1/workplans/:id/milestones/     →  /v1/workplans/:id/milestones/
+/v1/milestones/:id/               →  /v1/milestones/:id/
+/v1/milestones/:id/tasks/         →  /v1/milestones/:id/tasks/
+/v1/milestones/:id/activate/      →  /v1/milestones/:id/activate/
+/v1/milestones/:id/complete/      →  /v1/milestones/:id/complete/
+/v1/milestones/:id/stats/         →  /v1/milestones/:id/stats/
 ```
 
 ### Modified endpoints
@@ -221,7 +221,7 @@ This counts ALL tasks in the project — both workplan tasks and backlog tasks.
 POST /v1/tasks/
   - project: required (was implicit via workplan)
   - workplan: optional (was required)
-  - milestone: optional (was phase, required)
+  - milestone: optional (was milestone, required)
   - labels: optional (new, default [])
 
 GET /v1/tasks/?project=:id
@@ -235,13 +235,13 @@ POST /v1/workplans/
 
 POST /v1/bulk/import
   - project_id or project: required in payload
-  - phases → milestones (renamed in payload)
+  - milestones → milestones (renamed in payload)
   - New: backlog_tasks section for tasks without milestone
 ```
 
 ### Backwards compatibility
 
-Old `phase` field names in API responses should be aliased to `milestone` during
+Old `milestone` field names in API responses should be aliased to `milestone` during
 a transition period, or we do a clean break since we control all consumers
 (web UI, vtf CLI, agents).
 
@@ -266,7 +266,7 @@ vtf task list --project <id> --status todo
 vtf task claimable --project <id> --tags executor
 
 # Renamed
-vtf milestone list --workplan <id>         # was: vtf phase list (if it existed)
+vtf milestone list --workplan <id>         # was: vtf milestone list (if it existed)
 
 # Workplan scoped to project
 vtf workplan create --name "v2.0" --project <id>
@@ -278,11 +278,11 @@ vtf import milestones/core/ --workplan <id> --project <id>
 
 ### Spec directory convention
 
-The existing spec files live in `phases/phase1/`, `phases/phase2/`, etc.
+The existing spec files live in `milestones/milestone1/`, `milestones/milestone2/`, etc.
 After the rename:
-- Directory: `phases/` → `milestones/`
+- Directory: `milestones/` → `milestones/`
 - Subdirectories: `milestones/core/`, `milestones/ui/`, etc.
-- Phase description: `PHASE.md` → `MILESTONE.md`
+- Milestone description: `MILESTONE.md` → `MILESTONE.md`
 - Import command: `vtf import milestones/core/ --workplan <id> --project <id>`
 
 ## Web UI Changes
@@ -332,7 +332,7 @@ vtaskforge
 
 Same as today — milestones grouped by status (active/pending/completed),
 click through to Kanban board per milestone.
-Rename: "Phases" toggle → "Milestones", PhaseCard → MilestoneCard, etc.
+Rename: "Milestones" toggle → "Milestones", MilestoneCard → MilestoneCard, etc.
 
 ### Kanban board
 
@@ -341,7 +341,7 @@ Works for both:
 - Backlog board: `/projects/:pid/backlog` (ad-hoc tasks, filterable by labels)
 
 **Backlog board changes:** The current `KanbanBoard` component requires `workplanId`
-and optionally `phaseId` for SSE subscriptions and task queries. The backlog board
+and optionally `milestoneId` for SSE subscriptions and task queries. The backlog board
 needs a new mode:
 - Query: `GET /v1/tasks/?project=:id&workplan__isnull=true` (tasks without workplan)
 - SSE: `GET /v1/events/stream/?project=:id` (project-scoped events)
@@ -361,7 +361,7 @@ needs a new mode:
 
 ### Pipeline view
 
-`PhasePipeline.tsx` → `MilestonePipeline.tsx`. Shows milestones within a
+`MilestonePipeline.tsx` → `MilestonePipeline.tsx`. Shows milestones within a
 workplan in the zigzag flow layout. No functional change beyond the rename.
 The pipeline view is NOT shown on the project dashboard — it only appears
 on the workplan detail page.
@@ -381,7 +381,7 @@ continue using workplan-scoped events.
 
 ## Review Policy Changes
 
-The review flag cascade is currently: Task → Phase → Workplan.
+The review flag cascade is currently: Task → Milestone → Workplan.
 
 With optional milestone/workplan:
 
@@ -393,7 +393,7 @@ With optional milestone/workplan:
 
 `src/tasks/review_policy.py` (`get_effective_review_flags`) must handle
 `task.milestone is None` and `task.workplan is None` gracefully. Currently
-it always accesses `task.phase` — this will crash on backlog tasks if not
+it always accesses `task.milestone` — this will crash on backlog tasks if not
 guarded.
 
 ## Bulk Import Changes
@@ -402,7 +402,7 @@ Current payload structure:
 ```json
 {
   "workplan_id": "abc",
-  "phases": [
+  "milestones": [
     {
       "ref": "p1",
       "name": "Core API",
@@ -434,10 +434,10 @@ New payload structure:
 
 Changes:
 - `project_id` required (or `project` object to create one)
-- `phases` → `milestones`
+- `milestones` → `milestones`
 - New `backlog_tasks` section for tasks without milestone
 - Backlog tasks get `project` set, `workplan` and `milestone` null
-- `ref_type_map` entries: `"phase"` → `"milestone"`
+- `ref_type_map` entries: `"milestone"` → `"milestone"`
 
 ## Task Creation Paths
 
@@ -450,7 +450,7 @@ With the new model there are multiple ways to create a task:
 | `POST /v1/tasks/` | Any task — caller provides project + optional workplan/milestone |
 | `POST /v1/bulk/import` | Batch creation with milestone and/or backlog tasks |
 
-The `POST /v1/milestones/:id/tasks/` endpoint (currently `PhaseTasksView`)
+The `POST /v1/milestones/:id/tasks/` endpoint (currently `MilestoneTasksView`)
 auto-sets milestone, workplan (from milestone.workplan), and project (from
 workplan.project). This is the most convenient path for structured work.
 
@@ -514,16 +514,16 @@ With the project model, this context is explicit:
 
 ### Agent prompt updates
 
-The following agent definitions reference "phase" and need updating:
-- `.claude/agents/vtf-supervisor.md` — dispatches by phase
-- `.claude/agents/vtf-executor.md` — receives phase context
-- `.claude/agents/vtf-judge.md` — reviews within phase context
+The following agent definitions reference "milestone" and need updating:
+- `.claude/agents/vtf-supervisor.md` — dispatches by milestone
+- `.claude/agents/vtf-executor.md` — receives milestone context
+- `.claude/agents/vtf-judge.md` — reviews within milestone context
 
 These are markdown prompt files, not code — the rename is textual only.
 
 ## Milestone Auto-Completion
 
-The `maybe_complete_phase()` function (built today in `src/workplans/completion.py`)
+The `maybe_complete_milestone()` function (built today in `src/workplans/completion.py`)
 becomes `maybe_complete_milestone()`. Logic is unchanged:
 
 - Guard: task has a milestone, milestone is `active`, milestone has tasks
@@ -545,13 +545,13 @@ auto-complete.
 3. Add `project` FK to Workplan, populate from step 2
 4. Add `project` FK to Task, populate from task's workplan's project
 5. Make `workplan` nullable on Task
-6. Rename Phase → Milestone (model, table, FKs, related_names)
-7. Make `milestone` (formerly `phase`) nullable on Task
+6. Rename Milestone → Milestone (model, table, FKs, related_names)
+7. Make `milestone` (formerly `milestone`) nullable on Task
 8. Add `labels` JSONField to Task (default [])
 
 ### Code migration
 
-1. Rename all `phase` references to `milestone` across:
+1. Rename all `milestone` references to `milestone` across:
    - Models, serializers, views, URLs
    - Tests and factories (947 occurrences — largest area)
    - CLI commands and client
@@ -635,12 +635,12 @@ This demonstrates:
 
 | Step | Scope | Risk | Notes |
 |------|-------|------|-------|
-| 1 | Phase → Milestone rename (backend models, views, serializers, URLs) | High | Touches 19 files, 134 occurrences |
-| 2 | Phase → Milestone rename (tests + factories) | High | 21 files, 947 occurrences — must pass full suite |
-| 3 | Phase → Milestone rename (completion.py, review_policy.py, state_machine.py) | Medium | Small files but critical logic |
-| 4 | Phase → Milestone rename (CLI) | Low | 8 files, 84 occurrences |
-| 5 | Phase → Milestone rename (web UI) | Medium | 15 files, 153 occurrences, includes component renames |
-| 6 | Phase → Milestone rename (docs, CLAUDE.md, agent prompts) | Low | Textual only, no test risk |
+| 1 | Milestone → Milestone rename (backend models, views, serializers, URLs) | High | Touches 19 files, 134 occurrences |
+| 2 | Milestone → Milestone rename (tests + factories) | High | 21 files, 947 occurrences — must pass full suite |
+| 3 | Milestone → Milestone rename (completion.py, review_policy.py, state_machine.py) | Medium | Small files but critical logic |
+| 4 | Milestone → Milestone rename (CLI) | Low | 8 files, 84 occurrences |
+| 5 | Milestone → Milestone rename (web UI) | Medium | 15 files, 153 occurrences, includes component renames |
+| 6 | Milestone → Milestone rename (docs, CLAUDE.md, agent prompts) | Low | Textual only, no test risk |
 | 7 | Project model + API + tests | Medium | New Django app, standard CRUD |
 | 8 | Workplan.project FK + data migration | Low | One FK, one migration script |
 | 9 | Task.project FK + nullable workplan/milestone + labels + validation | Medium | Core model change, review policy update |

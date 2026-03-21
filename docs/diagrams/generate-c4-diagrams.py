@@ -33,7 +33,7 @@ with Diagram(
 
     vtf = System(
         name="vtaskforge",
-        description="Distributed task execution system. Manages workplans, phases, tasks, reviews, links, and events.",
+        description="Distributed task execution system. Manages workplans, milestones, tasks, reviews, links, and events.",
         external=False,
     )
 
@@ -69,7 +69,7 @@ with Diagram(
 
     intake = System(
         name="Intake Tooling",
-        description="Converts markdown plans into structured workplans, phases, and tasks.",
+        description="Converts markdown plans into structured workplans, milestones, and tasks.",
         external=True,
     )
 
@@ -112,7 +112,7 @@ with Diagram(
         db = Database(
             name="Postgres",
             technology="PostgreSQL, Port 5432",
-            description="Workplans, phases, tasks, links, reviews, events",
+            description="Workplans, milestones, tasks, links, reviews, events",
         )
         events = Container(
             name="Event Bus",

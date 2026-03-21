@@ -4,7 +4,7 @@ Status: Ideation (started 2026-03-18)
 
 ## Problem
 
-When working on implementation plans, we go through: design docs + diagrams, then an implementation plan refined into phases and tasks. Today there is no structured way for an LLM agent to know what's been done, what's next, or to hand off work to another session or agent. Workspace journals capture narrative but aren't machine-parseable.
+When working on implementation plans, we go through: design docs + diagrams, then an implementation plan refined into milestones and tasks. Today there is no structured way for an LLM agent to know what's been done, what's next, or to hand off work to another session or agent. Workspace journals capture narrative but aren't machine-parseable.
 
 ## Vision
 
@@ -16,8 +16,8 @@ The core idea: each task is an **agent work packet** — it contains enough cont
 
 | Concept | Description |
 |---------|-------------|
-| Workplan | A refined implementation plan with phases and tasks. Born from design/planning collaboration. |
-| Phase | Ordered grouping within a workplan. Sequential execution. |
+| Workplan | A refined implementation plan with milestones and tasks. Born from design/planning collaboration. |
+| Milestone | Ordered grouping within a workplan. Sequential execution. |
 | Task | An agent-executable work packet. Full context for cold handoff. |
 | Agent | An LLM worker (local or remote) that claims and executes tasks. Roles: executor, reviewer, architect, scrum_master. |
 
@@ -25,7 +25,7 @@ The core idea: each task is an **agent work packet** — it contains enough cont
 
 ```
 Workplan(s)
- └── Phase(s)
+ └── Milestone(s)
       └── Task(s)
 ```
 
@@ -61,7 +61,7 @@ Workplan:
   tags: ["backend", "security"]
   target_date: ISO 8601 | null
 
-  # Review defaults (cascade to phases → tasks)
+  # Review defaults (cascade to milestones → tasks)
   default_needs_review_before_start: true | false
   default_needs_review_on_completion: true | false
 
@@ -72,15 +72,15 @@ Workplan:
   # All references via link system (docs, jira, areas, etc.)
 ```
 
-- Status is independently set, not auto-derived (except: completing the last phase auto-completes the workplan)
+- Status is independently set, not auto-derived (except: completing the last milestone auto-completes the workplan)
 - Tags are freeform strings for filtering and search
 
-### Phase
+### Milestone
 
 ```
-Phase:
+Milestone:
   id: nanoid
-  name: "Phase 1 — Core filtering"
+  name: "Milestone 1 — Core filtering"
   description: "Implement zone-based filtering across all query paths"
   workplan_id: <workplan-nanoid>
   status: pending | active | completed
@@ -93,14 +93,14 @@ Phase:
   created_at: ISO 8601
   created_by: <actor_id>
 
-  # Dependencies via link system (DAG — phases can depend on other phases)
+  # Dependencies via link system (DAG — milestones can depend on other milestones)
   # No depends_on links = no dependencies (can start immediately)
 ```
 
-- Phase dependencies form a **DAG** via the link system, not a linear sequence
-- Multiple phases can be `active` simultaneously
-- A phase becomes activatable when all its `depends_on` phase links are `completed`
-- Completing the last phase auto-completes the workplan
+- Milestone dependencies form a **DAG** via the link system, not a linear sequence
+- Multiple milestones can be `active` simultaneously
+- A milestone becomes activatable when all its `depends_on` milestone links are `completed`
+- Completing the last milestone auto-completes the workplan
 
 ### Task
 
@@ -109,7 +109,7 @@ Task:
   id: nanoid
   title: "Filter archived entries from kb load output"
   status: draft | pending_start_review | todo | doing | pending_completion_review | changes_requested | needs_attention | blocked | deferred | cancelled | done
-  phase_id: <phase-nanoid>
+  milestone_id: <milestone-nanoid>
   workplan_id: <workplan-nanoid>
 
   # Agent context (core fields on the task itself)
@@ -118,7 +118,7 @@ Task:
   spec: <full implementation contract as YAML/JSON text>  # see "Task Spec" decision below
   notes: []
 
-  # Review flags (null = inherit from phase → workplan)
+  # Review flags (null = inherit from milestone → workplan)
   needs_review_before_start: true | false | null
   needs_review_on_completion: true | false | null
   review_return_to: pending_start_review | pending_completion_review | null
@@ -128,7 +128,7 @@ Task:
   assigned_to: <agent_id> | null          # pinned to specific agent (optional)
   claimed_by: <agent_id> | null           # currently claimed by
   claimed_at: ISO 8601 | null
-  claim_timeout: duration | null          # null = inherit from phase/workplan (default: 30m)
+  claim_timeout: duration | null          # null = inherit from milestone/workplan (default: 30m)
   claim_expires_at: ISO 8601 | null       # set on claim, extended on heartbeat
 
   # All relationships are links (separate table)
@@ -137,7 +137,7 @@ Task:
 
 ### Links (Universal)
 
-Links connect any entity (workplan, phase, or task) to other entities or external references. All stored in a single generic table.
+Links connect any entity (workplan, milestone, or task) to other entities or external references. All stored in a single generic table.
 
 ```
 Link:
@@ -152,8 +152,8 @@ Link:
 
 | Type | Meaning | Applies to | Execution constraint |
 |------|---------|-----------|---------------------|
-| `depends_on` | Source depends on target | Tasks, Phases | Source can't start until target is done/completed |
-| `blocks` | Source blocks target | Tasks, Phases | Inverse of depends_on |
+| `depends_on` | Source depends on target | Tasks, Milestones | Source can't start until target is done/completed |
+| `blocks` | Source blocks target | Tasks, Milestones | Inverse of depends_on |
 | `relates_to` | Informational link | All | No constraint |
 | `commit` | Git commit SHA | Tasks | Deliverable tracking |
 | `mr` | Merge request URL | Tasks, Workplans | Deliverable tracking |
@@ -162,14 +162,14 @@ Link:
 | `file` | Source file path | Tasks | Context for agents |
 | `jira` | Jira issue/epic key | All | External tracking |
 
-Review flag cascade precedence: task (explicit) > phase default > workplan default.
+Review flag cascade precedence: task (explicit) > milestone default > workplan default.
 
 ## Open Questions
 
 - **Hooks/automation**: How do status updates get triggered? Explicit commands, hooks, or automatic detection?
 - **Agent capabilities/matching**: How to route the right task to the right agent type.
 - **Concurrency**: What happens when two agents try to claim the same task.
-- **Nesting depth**: Phase > Task is confirmed. Do tasks need subtasks?
+- **Nesting depth**: Milestone > Task is confirmed. Do tasks need subtasks?
 - **Jira integration**: At workplan level? Optional link via link system? TBD.
 - **Postgres hosting**: Local for now, production hosting decided later.
 
@@ -189,10 +189,10 @@ Postgres ← API Server (RPC + Events) → Terminal UI (Python CLI)
 
 Primary view for understanding a workplan's execution plan. Inspired by GitLab's pipeline graph visualization.
 
-- Phases rendered as clusters/groups of nodes
-- Tasks as nodes within phases, connected by dependency arrows
+- Milestones rendered as clusters/groups of nodes
+- Tasks as nodes within milestones, connected by dependency arrows
 - Color-coded by status (green=done, blue=doing, yellow=review, red=needs_attention, grey=todo)
-- Dependency arrows show execution flow across tasks and phases
+- Dependency arrows show execution flow across tasks and milestones
 - Active tasks visually highlighted (animation/pulse)
 
 **Click a task node → Modal view:**
@@ -213,9 +213,9 @@ Primary view for understanding a workplan's execution plan. Inspired by GitLab's
 | `blocked` | Unblock, edit block reason |
 | `done` | View result, linked commits/MRs |
 
-**Click a phase cluster → Phase detail panel:**
-- Phase description, progress bar (tasks done / total)
-- Dependencies on other phases
+**Click a milestone cluster → Milestone detail panel:**
+- Milestone description, progress bar (tasks done / total)
+- Dependencies on other milestones
 - Actions: activate manually, complete manually
 
 #### Kanban Board
@@ -232,7 +232,7 @@ Secondary view for managing work by status. Fixed column layout (v1):
 | **Done** | `done` | Green cards |
 
 - `deferred` and `cancelled` hidden by default, visible via toggle/filter
-- Cards show: task title, assigned agent, phase, status badge, linked KB areas
+- Cards show: task title, assigned agent, milestone, status badge, linked KB areas
 - Status badge within grouped columns preserves granularity without column sprawl
 
 #### View Toggle
@@ -273,7 +273,7 @@ Tasks have a **review mode** that controls whether they can be picked up by exec
 | `auto_approved` | Task is immediately available for agents to claim when status is `todo` |
 | `needs_review` | Task stays in a `pending_review` state until a human approves it |
 
-This gives humans control over the pipeline — high-confidence tasks flow automatically, while complex or risky tasks wait for human eyes. The review mode can be set per-task or as a default at the workplan/phase level.
+This gives humans control over the pipeline — high-confidence tasks flow automatically, while complex or risky tasks wait for human eyes. The review mode can be set per-task or as a default at the workplan/milestone level.
 
 #### Review System Design (SOLID / Pluggable)
 
@@ -281,7 +281,7 @@ The review system is designed behind interfaces so the mechanism is extensible w
 
 **Core interfaces:**
 
-- **ReviewPolicy** — given a task and a transition (e.g., `todo→doing`, `doing→done`), decides whether review is required. Default implementation checks task-level setting, falls back to phase-level, then workplan-level default. Cascading precedence: task > phase > workplan.
+- **ReviewPolicy** — given a task and a transition (e.g., `todo→doing`, `doing→done`), decides whether review is required. Default implementation checks task-level setting, falls back to milestone-level, then workplan-level default. Cascading precedence: task > milestone > workplan.
 - **Reviewer** — resolves who can approve. Default: any authenticated human. Future: role-based, team-based, quorum, automated quality gates.
 - **ReviewDecision** — approve, reject (with reason), or request changes. Decisions are recorded with timestamp, reviewer identity, and reviewer type (human/agent) for audit history.
 
@@ -292,7 +292,7 @@ The review system is designed behind interfaces so the mechanism is extensible w
 | `needs_review_before_start` | Before task enters `todo` pool | Validate task quality, scope, and readiness |
 | `needs_review_on_completion` | After agent marks `doing→done` | Verify deliverable meets acceptance criteria |
 
-Both flags are independently settable per task, with cascading defaults (task > phase > workplan).
+Both flags are independently settable per task, with cascading defaults (task > milestone > workplan).
 
 **State Machine:**
 
@@ -361,12 +361,12 @@ The following topics have been identified but not yet designed. Each should be d
 
 ### 1. ~~Intake — Plan to Workplan~~ (Resolved)
 
-**Decided: Out of scope for vtaskforge.** Intake/parsing of plan documents is a consumer concern — a Claude Code skill, an agent, or a manual process that calls the vtf API. vtaskforge provides CRUD for workplans, phases, and tasks. How they get populated is not vtf's problem.
+**Decided: Out of scope for vtaskforge.** Intake/parsing of plan documents is a consumer concern — a Claude Code skill, an agent, or a manual process that calls the vtf API. vtaskforge provides CRUD for workplans, milestones, and tasks. How they get populated is not vtf's problem.
 
 vtf's API surface for this:
 - `vtf workplan create --name "..."`
-- `vtf phase create --workplan <id> --name "..."`
-- `vtf task create --phase <id> --title "..." [--description, --areas, --files, ...]`
+- `vtf milestone create --workplan <id> --name "..."`
+- `vtf task create --milestone <id> --title "..." [--description, --areas, --files, ...]`
 - `vtf task update <id> [--title, --description, --areas, --files, ...]`
 
 Tasks are rich objects built up incrementally — create with minimal fields, then enrich via update and link commands. Bulk creation supported via `--from <file.yaml>` for intake tools.
@@ -404,7 +404,7 @@ vtf link list <entity-id>
 
 **Storage:** Generic `links` table — `source_id`, `target_id`, `link_type`, `metadata`. Extensible for new link types without schema changes.
 
-**Execution impact:** `depends_on`/`blocks` links form a DAG within a phase. Agents can only claim tasks whose dependencies are all `done`. This unlocks parallel execution — agents grab any unblocked task rather than waiting for the whole phase.
+**Execution impact:** `depends_on`/`blocks` links form a DAG within a milestone. Agents can only claim tasks whose dependencies are all `done`. This unlocks parallel execution — agents grab any unblocked task rather than waiting for the whole milestone.
 
 ### 3. ~~Observability / Activity Log~~ (Resolved)
 
@@ -453,7 +453,7 @@ Named `vtaskforge`. CLI command: `vtaskforge` (alias `vtf` TBD).
 
 The task `spec` field holds the complete implementation contract — references, file lists, constraints, test commands, implementation approach — as structured text (YAML or JSON). This is what an agent needs to execute the task cold.
 
-**Rationale:** Phase spec YAML files in the git repo are an *authoring/intake format*. Once imported via `vtf import` or the bulk API, vtf is the source of truth. A remote agent that claims a task via the API must be able to get the full spec without cloning a repo or accessing a filesystem.
+**Rationale:** Milestone spec YAML files in the git repo are an *authoring/intake format*. Once imported via `vtf import` or the bulk API, vtf is the source of truth. A remote agent that claims a task via the API must be able to get the full spec without cloning a repo or accessing a filesystem.
 
 **Impact:**
 - Bulk import stores `spec` content alongside `title`, `description`, `acceptance_criteria`
@@ -465,11 +465,11 @@ The task `spec` field holds the complete implementation contract — references,
 
 **Decided: vtf is a task coordination engine. Project-level concerns are out of scope.**
 
-vtf owns: workplans, phases, tasks, agents, events, links. It does not own projects, documents, or cross-workplan grouping. These are concerns for a separate project management application that consumes vtf's API.
+vtf owns: workplans, milestones, tasks, agents, events, links. It does not own projects, documents, or cross-workplan grouping. These are concerns for a separate project management application that consumes vtf's API.
 
 | System | Owns | Consumes |
 |--------|------|----------|
-| **vtf** | Workplans, phases, tasks, agents, events, links | Postgres, agents |
+| **vtf** | Workplans, milestones, tasks, agents, events, links | Postgres, agents |
 | **Project layer** (future) | Projects, documents, cross-workplan context | vtf API, git, Jira, wiki |
 | **vf-agents** | Agent pool, sessions, telemetry | vtf API |
 
@@ -589,16 +589,16 @@ Approach B is preferred — it keeps branches short-lived and avoids rebase casc
 - [design-gaps-ANALYSIS.md](design-gaps-ANALYSIS.md) — Identified gaps in the design requiring resolution
 - [../references/gitlab-pipeline-analogy-REFERENCE.md](../references/gitlab-pipeline-analogy-REFERENCE.md) — Mental model: vtf as CI/CD for LLM agents, inspired by GitLab pipelines
 - [api-surface-DESIGN.md](api-surface-DESIGN.md) — Full REST API surface, SSE events, error model, agent liveness
-- [../../WORKPLAN.md](../../WORKPLAN.md) — Phased workplan with links to phase directories
-- [../guides/task-breakdown-GUIDE.md](../guides/task-breakdown-GUIDE.md) — How to decompose phases into tasks with dependency DAGs
-- [../../phases/phase0/findings-ANALYSIS.md](../../phases/phase0/findings-ANALYSIS.md) — Dry run findings: agent capability vs spec detail, isolation, spec errors
+- [../../WORKPLAN.md](../../WORKPLAN.md) — Milestoned workplan with links to milestone directories
+- [../guides/task-breakdown-GUIDE.md](../guides/task-breakdown-GUIDE.md) — How to decompose milestones into tasks with dependency DAGs
+- [../../milestones/milestone0/findings-ANALYSIS.md](../../milestones/milestone0/findings-ANALYSIS.md) — Dry run findings: agent capability vs spec detail, isolation, spec errors
 - [behavioral-verification-DESIGN.md](behavioral-verification-DESIGN.md) — Three-layer verification: behavioral specs, judge agent evaluation, human review (based on VFF)
 
 ## Not Yet Decided
 
 - ~~API surface / RPC methods~~ → see [api-surface-DESIGN.md](api-surface-DESIGN.md)
 - ~~Event types~~ → see [api-surface-DESIGN.md](api-surface-DESIGN.md)
-- ~~Web UI framework~~ → React SPA (implemented Phase 4)
+- ~~Web UI framework~~ → React SPA (implemented Milestone 4)
 - Postgres schema (formal migration plan)
 - Agent registration and identity
 - Authentication / authorization for remote agents

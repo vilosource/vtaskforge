@@ -27,15 +27,15 @@ vtf config set api_url http://localhost:8000
 vtf health
 ```
 
-## 3. Create a workplan with phases and tasks
+## 3. Create a workplan with milestones and tasks
 
 ### Option A: Write YAML specs and import
 
-Create a phase directory:
+Create a milestone directory:
 
 ```
 my-project/
-  PHASE.md          # Phase description (optional)
+  MILESTONE.md          # Milestone description (optional)
   dag.yaml          # Task dependencies
   tasks/
     1.1-first-task.yaml
@@ -94,14 +94,14 @@ Import:
 ```bash
 vtf import my-project/                          # Creates a new workplan
 # or
-vtf import my-project/ --workplan <existing-id>  # Adds phase to existing workplan
+vtf import my-project/ --workplan <existing-id>  # Adds milestone to existing workplan
 ```
 
 ### Option B: Create via CLI
 
 ```bash
 vtf workplan create --name "My Project"
-# Then use the API or web UI to add phases and tasks
+# Then use the API or web UI to add milestones and tasks
 ```
 
 ## 4. Register an agent and execute tasks
@@ -140,9 +140,9 @@ docker compose -f docker-compose.dogfood.yml up -d
 ```
 
 The web UI provides:
-- **Workplan list** with phase counts and progress bars
-- **Phase detail** with list view and pipeline visualization
-- **Kanban board** per phase with task cards
+- **Workplan list** with milestone counts and progress bars
+- **Milestone detail** with list view and pipeline visualization
+- **Kanban board** per milestone with task cards
 - **Task detail modal** (quick glance) with "Open full view" link
 - **Full page task view** at `/tasks/:id` — two-column layout with parsed spec, dependency chain, notes, event timeline
 
@@ -151,7 +151,7 @@ The web UI provides:
 The vtf-supervisor agent orchestrates execution:
 
 ```
-"Run the supervisor for Phase 1"
+"Run the supervisor for Milestone 1"
 ```
 
 It will:
@@ -178,5 +178,5 @@ Full state machine with review gates: see `docs/design/vtaskforge-DESIGN.md`.
 
 - Read the [main design doc](../design/vtaskforge-DESIGN.md) for concepts and decisions
 - Read the [API surface doc](../design/api-surface-DESIGN.md) for all endpoints
-- Read the [phase process guide](phase-process-GUIDE.md) for how to plan phases
+- Read the [milestone process guide](milestone-process-GUIDE.md) for how to plan milestones
 - Read the [task breakdown guide](task-breakdown-GUIDE.md) for writing good task specs

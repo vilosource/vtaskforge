@@ -2,7 +2,7 @@
 
 ## Project Purpose
 
-vtaskforge (vtf) is a distributed task execution system for LLM agents. Django/DRF API server backed by Postgres, with Celery for background processing and a React SPA web UI. See `docs/design/vtaskforge-DESIGN.md` for full design, `WORKPLAN.md` for phase index.
+vtaskforge (vtf) is a distributed task execution system for LLM agents. Django/DRF API server backed by Postgres, with Celery for background processing and a React SPA web UI. See `docs/design/vtaskforge-DESIGN.md` for full design, `WORKPLAN.md` for milestone index.
 
 ## Dev Setup
 
@@ -77,13 +77,13 @@ vtf workplan create --name "My Project"
 vtf workplan show <id>
 vtf workplan stats <id>
 
-# Phases
-vtf phase list --workplan <id>
+# Milestones
+vtf milestone list --workplan <id>
 
-# Importing phases (from YAML specs)
-vtf import phases/phase6/                        # Creates new workplan
-vtf import phases/phase7/ --workplan <id>        # Adds phase to existing workplan
-vtf import phases/phase6/ --dry-run              # Preview without creating
+# Importing milestones (from YAML specs)
+vtf import milestones/milestone6/                        # Creates new workplan
+vtf import milestones/milestone7/ --workplan <id>        # Adds milestone to existing workplan
+vtf import milestones/milestone6/ --dry-run              # Preview without creating
 
 # Tasks
 vtf task list                                    # All tasks
@@ -114,12 +114,12 @@ Tasks store their full implementation contract in the `spec` field (YAML text). 
 - `judge` — whether judge review is required after completion
 - `isolation` — sequential or parallel execution
 
-## Phase Import Workflow
+## Milestone Import Workflow
 
 ```
-1. Write YAML specs in phases/<name>/tasks/*.yaml
+1. Write YAML specs in milestones/<name>/tasks/*.yaml
 2. Write dag.yaml for dependencies
-3. vtf import phases/<name>/ --workplan <id>
+3. vtf import milestones/<name>/ --workplan <id>
 4. Tasks appear on the Kanban board with full specs
 5. Submit tasks (draft → todo), claim, execute, complete
 ```
@@ -151,7 +151,7 @@ Postgres mapped to host port **5436** (not 5432) to avoid conflicts.
 src/
   vtaskforge/          # Django project config (settings, urls, celery, wsgi)
   core/                # Base mixins (NanoIDMixin, TimestampMixin), health, bulk import
-  workplans/           # Workplan + Phase models, stats
+  workplans/           # Workplan + Milestone models, stats
   tasks/               # Task model, state machine, claiming, lifecycle actions
   links/               # Universal link system (depends_on, blocks, area, doc, etc.)
   reviews/             # Review decisions at review gates
@@ -162,9 +162,9 @@ cli/vtf/               # CLI tool (Click), commands for workplan/task/agent/impo
 web/                   # React 18 SPA (Vite, TypeScript, TanStack Query, React Router)
   src/pages/           # WorkplanList, WorkplanDetail, BoardView, TaskPage
   src/components/      # TaskDetail modal, TaskCard, DependencyChain, SpecSection, etc.
-  src/api/             # API hooks (useTaskDetail, usePhases, etc.)
+  src/api/             # API hooks (useTaskDetail, useMilestones, etc.)
   src/utils/           # parseSpec (YAML → structured data)
-phases/                # Phase spec directories (YAML task specs, dag.yaml)
+milestones/            # Milestone spec directories (YAML task specs, dag.yaml)
 docs/
   design/              # Design docs, analysis, session handoff
   guides/              # Process guides, task breakdown, quickstart
@@ -188,7 +188,7 @@ Four agents in `~/.claude/agents/`:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
-| `vtf-supervisor` | opus | Orchestrates phases, dispatches executors, runs verification gates |
+| `vtf-supervisor` | opus | Orchestrates milestones, dispatches executors, runs verification gates |
 | `vtf-executor` | sonnet | Implements a single task from spec, tests, commits |
 | `vtf-judge` | opus | Code review for design compliance |
 | `vtf-blackbox-tester` | sonnet | End-to-end API testing via HTTP |

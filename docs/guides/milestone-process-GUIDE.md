@@ -1,9 +1,9 @@
-# vtaskforge — Phase Execution Process Guide
+# vtaskforge — Milestone Execution Process Guide
 
 Status: Active (2026-03-20)
-Iteration: 2 (post-Phase 1 deep retrospective)
+Iteration: 2 (post-Milestone 1 deep retrospective)
 
-This guide defines how phases are planned, executed, and verified. It is a living document — each phase execution produces findings that improve the process for the next phase.
+This guide defines how milestones are planned, executed, and verified. It is a living document — each milestone execution produces findings that improve the process for the next milestone.
 
 ## Roles
 
@@ -15,10 +15,10 @@ This guide defines how phases are planned, executed, and verified. It is a livin
 
 ## Task Spec Template
 
-Every task in a phase follows this structure:
+Every task in a milestone follows this structure:
 
 ```yaml
-id: <phase>.<sequence>
+id: <milestone>.<sequence>
 name: "<short name>"
 depends_on: [<task-ids>]
 agent_model: sonnet  # or opus for complex reasoning tasks
@@ -194,7 +194,7 @@ The deployment smoke test verifies:
 5. Kanban board loads without console errors
 6. SSE endpoint accepts browser connections (no 406 from content negotiation)
 
-**Why this gate exists:** Phase 4 shipped three production bugs that all tests passed on:
+**Why this gate exists:** Milestone 4 shipped three production bugs that all tests passed on:
 - SPA asset MIME types (Vite serves correctly, Django's catch-all returned HTML)
 - Missing login page (dev uses localStorage token, real users have no way in)
 - SSE 406 (DRF content negotiation rejects text/event-stream from EventSource)
@@ -222,7 +222,7 @@ Different parts of the system require different testing approaches. The gate str
 |---|---|---|---|
 | Unit | pytest + pytest-django | Models, state machine, business logic | Gate 1a |
 | Integration | pytest + DRF test client | API endpoints, auth, serialization | Gate 1a |
-| E2E | vtf-blackbox-tester (curl) | Full lifecycle across endpoints | After phase completion |
+| E2E | vtf-blackbox-tester (curl) | Full lifecycle across endpoints | After milestone completion |
 
 ```yaml
 # Task spec for backend tasks
@@ -237,7 +237,7 @@ Gate 1b (full suite): `docker compose exec api pytest tests/ && pytest cli/tests
 |---|---|---|---|
 | Unit | Vitest + React Testing Library | Components in isolation, hooks, utilities | Gate 1a |
 | Integration | Vitest + MSW (Mock Service Worker) | Components with mocked API responses | Gate 1a |
-| E2E | Playwright | Real browser, real clicks, real page loads | Gate 1a + after phase |
+| E2E | Playwright | Real browser, real clicks, real page loads | Gate 1a + after milestone |
 
 ```yaml
 # Task spec for frontend tasks
@@ -286,7 +286,7 @@ test('SSE updates kanban board live', async ({ page, request }) => {
   await page.goto('/workplans/abc123');
 
   // Create a task via API (bypassing the UI)
-  await request.post('/v1/phases/def456/tasks/', {
+  await request.post('/v1/milestones/def456/tasks/', {
     data: { title: 'New task from API' },
     headers: { Authorization: 'Token ...' },
   });
@@ -407,8 +407,8 @@ When to use: All test files.
 conftest.py (tests/ root):
 - Fixture: api_client — DRF APIClient instance
 - Fixture: workplan — creates a default Workplan
-- Fixture: phase — creates a Phase under workplan
-- Fixture: task — creates a Task under phase (status=draft)
+- Fixture: milestone — creates a Milestone under workplan
+- Fixture: task — creates a Task under milestone (status=draft)
 - Fixture: todo_task — creates a Task with status=todo
 - Fixture: doing_task — creates a claimed Task with status=doing
 
@@ -468,46 +468,46 @@ When an executor agent deviates from the spec:
 - If the deviation changes a contract, the contract must be updated and all downstream consumers notified
 - Accepted deviations feed back into the implementation plan for consistency
 
-## Phase Retrospective
+## Milestone Retrospective
 
-After each phase completes, document:
+After each milestone completes, document:
 
 1. **What worked** — process elements that should be kept
 2. **What didn't work** — failures, friction, wasted time
 3. **Spec quality** — were specs detailed enough? Too detailed?
 4. **Gate effectiveness** — did each gate catch real issues? False positives?
 5. **Model performance** — did Sonnet handle the tasks? Which needed escalation?
-6. **Process changes** — concrete changes to this guide for the next phase
+6. **Process changes** — concrete changes to this guide for the next milestone
 
 Append retrospective findings to this document as versioned iterations.
 
 ## Improvement Roadmap
 
-Improvements are phased based on when they can be applied:
+Improvements are milestone-based when they can be applied:
 
-### Do now (before next phase specs)
+### Do now (before next milestone specs)
 - [x] Contract-driven specs (added to template)
 - [x] Gate 1b full suite regression (added to execution flow)
 - [x] Redefine judge as code reviewer (updated gate details)
 - [x] Pattern templates (added DRF patterns)
 
-### Do during Phase 2 (learn by doing)
+### Do during Milestone 2 (learn by doing)
 - [ ] Test factory infrastructure (make it an early task, all subsequent tasks use it)
 - [ ] Try parallel execution with worktree isolation on independent tasks
 - [ ] Validate pattern templates work in practice
 
-### Do when ready (Phase 3+)
+### Do when ready (Milestone 3+)
 - [ ] Design review gate before execution (formalize once enough pattern exists)
-- [ ] Dogfooding — import Phase 3 specs into vtaskforge, execute through the system itself
+- [ ] Dogfooding — import Milestone 3 specs into vtaskforge, execute through the system itself
 - [ ] Extract contracts into shared contracts/ directory
 
 ---
 
 ## Iteration Log
 
-### Iteration 0 — Pre-Phase 1 (2026-03-20)
+### Iteration 0 — Pre-Milestone 1 (2026-03-20)
 
-Based on Phase 0 dry run findings (see `phases/phase0/findings-ANALYSIS.md`):
+Based on Milestone 0 dry run findings (see `milestones/milestone0/findings-ANALYSIS.md`):
 
 - **Issue #1 (Port exposure):** Specs must trace dependency chains. Added constraints field to task template.
 - **Issue #2 (No git isolation):** Added Git Isolation Rules section with worktree vs sequential guidance.
@@ -516,9 +516,9 @@ Based on Phase 0 dry run findings (see `phases/phase0/findings-ANALYSIS.md`):
 - **Issue #5 (Pyright):** No process change needed. Dev tooling concern.
 - **Issue #6 (Review discipline):** Added three-gate verification flow (mechanical → judge → human). Review is structured, not ad-hoc.
 
-### Iteration 1 — Post-Phase 1 (2026-03-20)
+### Iteration 1 — Post-Milestone 1 (2026-03-20)
 
-Phase 1 executed 12 tasks sequentially with Sonnet executors. 568 tests, 0 retries, 2 minor spec deviations, 1 cross-task regression. Full findings in `phases/phase1/execution-LOG.md`.
+Milestone 1 executed 12 tasks sequentially with Sonnet executors. 568 tests, 0 retries, 2 minor spec deviations, 1 cross-task regression. Full findings in `milestones/milestone1/execution-LOG.md`.
 
 Key findings:
 - Sonnet handled everything. Zero escalations.
@@ -529,25 +529,25 @@ Key findings:
 
 ### Iteration 2 — Deep Retrospective (2026-03-20)
 
-Deeper analysis of Phase 1 patterns. Full analysis discussed in session, key changes:
+Deeper analysis of Milestone 1 patterns. Full analysis discussed in session, key changes:
 
 1. **Contract-driven specs.** Root cause of the regression was implicit behavioral contracts between tasks. Made contracts explicit in the task spec template with establishes/modifies/depends_on fields.
 
-2. **Judge repositioned as code reviewer.** Phase 1 used the judge to re-test behaviors via curl — redundant with tests. Redefined: judge verifies design alignment, pattern compliance, and contract maintenance. Tests verify behavior. Different concerns.
+2. **Judge repositioned as code reviewer.** Milestone 1 used the judge to re-test behaviors via curl — redundant with tests. Redefined: judge verifies design alignment, pattern compliance, and contract maintenance. Tests verify behavior. Different concerns.
 
-3. **Gate 1b (full suite regression).** Formalized running the entire test suite after every task, not just task-specific tests. The Phase 1 regression was caught this way; now it's mandatory.
+3. **Gate 1b (full suite regression).** Formalized running the entire test suite after every task, not just task-specific tests. The Milestone 1 regression was caught this way; now it's mandatory.
 
 4. **Pattern templates.** Created canonical patterns (drf-crud, nested-endpoint, test-fixtures) to prevent dead code propagation. Agents reference patterns instead of copying from prior tasks.
 
 5. **files.affected field.** Specs now list files from prior tasks that might need updating, not just files this task creates/modifies. Catches cross-task impact at spec time.
 
-6. **Parallel execution planned.** Phase 1 was fully sequential. Phase 2 will try worktree isolation on independent tasks to test vtaskforge's core value proposition.
+6. **Parallel execution planned.** Milestone 1 was fully sequential. Milestone 2 will try worktree isolation on independent tasks to test vtaskforge's core value proposition.
 
-7. **Dogfooding planned.** Once CLI + bulk import exist, Phase 3 specs will be imported into vtaskforge and executed through the system itself.
+7. **Dogfooding planned.** Once CLI + bulk import exist, Milestone 3 specs will be imported into vtaskforge and executed through the system itself.
 
-### Iteration 3 — Post-Phase 3 (2026-03-20)
+### Iteration 3 — Post-Milestone 3 (2026-03-20)
 
-Phase 3 executed 6/7 tasks with standardized executor prompts (no hand-crafted glue). All passed first attempt. Dogfooding via vtf-dogfood release stack validated.
+Milestone 3 executed 6/7 tasks with standardized executor prompts (no hand-crafted glue). All passed first attempt. Dogfooding via vtf-dogfood release stack validated.
 
 Key finding: **Blast Radius Discovery**
 
@@ -567,9 +567,9 @@ Process changes:
 
 4. **vtf-dogfood release stack.** Production Docker image (built, not mounted) running on port 8001 with separate Postgres. Dogfood data survives dev test runs. The DB wipe issue was specific to self-hosting (same DB for tracking and development), not a product deficiency.
 
-### Iteration 4 — Post-Phase 4 (2026-03-20)
+### Iteration 4 — Post-Milestone 4 (2026-03-20)
 
-Phase 4 built the web UI (React SPA). Three production bugs were found by a human user, not by any automated test:
+Milestone 4 built the web UI (React SPA). Three production bugs were found by a human user, not by any automated test:
 
 1. **SPA asset MIME types** — Django's catch-all URL returned index.html for /assets/*.js requests
 2. **Missing login page** — unauthenticated users saw blank page with 401 console errors

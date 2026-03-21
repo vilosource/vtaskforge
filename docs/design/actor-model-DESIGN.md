@@ -83,7 +83,7 @@ actor_role: executor | reviewer | architect | scrum_master
 |---|---|---|
 | **vf-agents** (pool manager) | Spins up executor agents, manages containers, retries, session capture | RPC API + event stream |
 | **Scrum Master Agent** | Watches events, triages blockers, nudges slow reviews, generates reports | Event stream (read) + RPC API (write) |
-| **Intake Tooling** | Converts plan documents into workplans/phases/tasks | RPC API |
+| **Intake Tooling** | Converts plan documents into workplans/milestones/tasks | RPC API |
 | **Web UI** | Human interaction — kanban board, task editing, agent chat | RPC API + event stream |
 | **Terminal UI** | Human monitoring — kanban view, CLI task management | RPC API + event stream |
 
@@ -433,9 +433,9 @@ sequenceDiagram
     Note over H,SM: Task Lifecycle Flow
 
     alt Workplan Creation
-        H->>VT: Create workplan/phases/tasks
+        H->>VT: Create workplan/milestones/tasks
     else Automated Intake
-        IT->>VT: Create workplan/phases/tasks
+        IT->>VT: Create workplan/milestones/tasks
     end
 
     VT->>VT: Queue tasks for review

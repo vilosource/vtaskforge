@@ -11,7 +11,7 @@ vtaskforge's execution model is analogous to GitLab CI/CD pipelines. This is int
 | vtaskforge | GitLab CI | Behavior |
 |---|---|---|
 | **Workplan** | Pipeline | The whole execution plan |
-| **Phase** | Stage | Grouping that can depend on other groups |
+| **Milestone** | Stage | Grouping that can depend on other groups |
 | **Task** | Job | Individual unit of work, runs in a container |
 | **`depends_on` links** | `needs:` keyword | DAG dependencies — start as soon as specific dependencies are met |
 | **`needs_review_before_start`** | `when: manual` | Gate — waits for human/reviewer approval before entering pool |
@@ -67,7 +67,7 @@ Areas where we can draw from GitLab's implementation:
 
 ### Pipeline Visualization
 - GitLab's pipeline graph shows stages as columns, jobs as nodes, with dependency arrows. Status is color-coded.
-- The kanban board is our equivalent, but we should also consider a pipeline/graph view for workplans — showing phases and task dependencies visually.
+- The kanban board is our equivalent, but we should also consider a pipeline/graph view for workplans — showing milestones and task dependencies visually.
 
 ### Retry and Failure Handling
 - GitLab has auto-retry (configurable count), manual retry, and `allow_failure`.

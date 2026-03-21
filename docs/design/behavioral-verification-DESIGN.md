@@ -28,7 +28,7 @@ Source: `vilo-forge-factory/tests/judge-eval/scenarios/` and `internal/scenario/
 
 ## The Problem
 
-Phase 0 dry run revealed that review discipline breaks down without enforcement. Acceptance criteria written as prose ("health endpoint returns 200 with correct JSON") are:
+Milestone 0 dry run revealed that review discipline breaks down without enforcement. Acceptance criteria written as prose ("health endpoint returns 200 with correct JSON") are:
 - Subjectively interpreted by reviewers
 - Inconsistently verified (some tasks got thorough review, others got rubber-stamped)
 - Not machine-verifiable
@@ -151,7 +151,7 @@ Queryable for metrics: "what percentage of tasks pass judge evaluation on first 
 
 ## Spec Detail vs Agent Capability (Revisited)
 
-The behavioral spec also addresses the agent capability issue from Phase 0 findings:
+The behavioral spec also addresses the agent capability issue from Milestone 0 findings:
 
 | Agent capability | Behavioral spec role |
 |---|---|

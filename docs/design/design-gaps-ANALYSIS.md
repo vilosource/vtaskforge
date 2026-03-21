@@ -6,14 +6,14 @@ Identified gaps in the current design that need resolution before or during impl
 
 ## Gaps
 
-### 1. ~~Workplan & Phase Shape — Not Defined~~ (Resolved)
+### 1. ~~Workplan & Milestone Shape — Not Defined~~ (Resolved)
 
 **Decided:**
 
-- **Workplan**: id, name, description, status (active/completed/archived), owner, tags, target_date, default review flags. Completing last phase auto-completes the workplan.
-- **Phase**: id, name, description, workplan_id, status (pending/active/completed), review flag overrides (null = inherit). Dependencies are a DAG via the link system — multiple phases can be active simultaneously.
-- **Links are universal** — workplans, phases, and tasks can all be link sources. Added `jira` link type.
-- **Review flag cascade**: task (explicit) > phase default > workplan default.
+- **Workplan**: id, name, description, status (active/completed/archived), owner, tags, target_date, default review flags. Completing last milestone auto-completes the workplan.
+- **Milestone**: id, name, description, workplan_id, status (pending/active/completed), review flag overrides (null = inherit). Dependencies are a DAG via the link system — multiple milestones can be active simultaneously.
+- **Links are universal** — workplans, milestones, and tasks can all be link sources. Added `jira` link type.
+- **Review flag cascade**: task (explicit) > milestone default > workplan default.
 
 Full shapes documented in vtaskforge-DESIGN.md under "Entity Shapes".
 
@@ -123,7 +123,7 @@ Key decisions:
 
 **Decided:** Full event type list defined in [api-surface-DESIGN.md](api-surface-DESIGN.md) under the Event Stream section.
 
-Event types cover: task lifecycle (created, updated, status_changed, claimed, unclaimed, completed, failed, blocked, unblocked, heartbeat), reviews (submitted), links (added, removed), workplans (created, updated, completed, archived), phases (created, updated, activated, completed), agents (registered, deregistered, status_changed).
+Event types cover: task lifecycle (created, updated, status_changed, claimed, unclaimed, completed, failed, blocked, unblocked, heartbeat), reviews (submitted), links (added, removed), workplans (created, updated, completed, archived), milestones (created, updated, activated, completed), agents (registered, deregistered, status_changed).
 
 Key decisions:
 - SSE format with event ID, type, and JSON data payload

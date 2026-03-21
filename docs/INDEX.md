@@ -15,21 +15,21 @@ Read these in order when planning a new project:
 ```
 1. Design your system
         ↓
-2. Decompose into phases          → Phase Decomposition Guide
+2. Decompose into milestones      → Milestone Decomposition Guide
         ↓
-3. Break phases into tasks        → Task Breakdown Guide
+3. Break milestones into tasks    → Task Breakdown Guide
         ↓
 4. Write YAML specs + import      → Quickstart Guide
         ↓
-5. Execute with agents            → Phase Process Guide
+5. Execute with agents            → Milestone Process Guide
 ```
 
 | Step | Guide | What it covers |
 |------|-------|---------------|
-| 2 | [Phase Decomposition Guide](guides/phase-decomposition-GUIDE.md) | Design doc → ordered phases. Layer identification, splitting heuristics, dependency ordering, validation checklist |
-| 3 | [Task Breakdown Guide](guides/task-breakdown-GUIDE.md) | Phase → tasks + DAG. Task sizing, acceptance criteria, dependency mapping, anti-patterns |
+| 2 | [Milestone Decomposition Guide](guides/milestone-decomposition-GUIDE.md) | Design doc → ordered milestones. Layer identification, splitting heuristics, dependency ordering, validation checklist |
+| 3 | [Task Breakdown Guide](guides/task-breakdown-GUIDE.md) | Milestone → tasks + DAG. Task sizing, acceptance criteria, dependency mapping, anti-patterns |
 | 4 | [Quickstart Guide](guides/quickstart-GUIDE.md) | YAML spec format, `vtf import`, CLI workflow, web UI setup |
-| 5 | [Phase Process Guide](guides/phase-process-GUIDE.md) | Executing phases with agents. Role definitions (supervisor, executor, judge), verification gates, iteration process |
+| 5 | [Milestone Process Guide](guides/milestone-process-GUIDE.md) | Executing milestones with agents. Role definitions (supervisor, executor, judge), verification gates, iteration process |
 
 ## Design documents
 
@@ -48,7 +48,7 @@ Learnings from building and using vtf.
 
 | Document | Purpose |
 |----------|---------|
-| [Process Retrospective](design/process-retrospective-ANALYSIS.md) | What worked and what didn't across Phases 0-4. Blast radius discovery, simulation gap, deployment testing |
+| [Process Retrospective](design/process-retrospective-ANALYSIS.md) | What worked and what didn't across Milestones 0-4. Blast radius discovery, simulation gap, deployment testing |
 | [Design Gaps Analysis](design/design-gaps-ANALYSIS.md) | Identified and resolved gaps in the original design |
 | [Simulation Gap Analysis](design/simulation-gap-ANALYSIS.md) | Gap analysis for testing and simulation capabilities |
 
@@ -81,15 +81,15 @@ Four agents in `~/.claude/agents/` automate the development workflow:
 | `vtf-judge` | opus | Reviews code for design compliance, architectural issues, contract violations |
 | `vtf-blackbox-tester` | sonnet | End-to-end API testing via HTTP requests — no implementation knowledge |
 
-## Phase history
+## Milestone history
 
-| Phase | Status | Summary |
-|-------|--------|---------|
-| [Phase 0](../phases/phase0/) | Complete | Django skeleton, Docker, health endpoint, Celery |
-| [Phase 1](../phases/phase1/) | Complete | Core models, CRUD, state machine, atomic claiming |
-| [Phase 2](../phases/phase2/) | Complete | Auth, claim expiry, bulk import, CLI |
-| [Phase 3](../phases/phase3/) | Complete | Bug fixes, stats, SSE, cursor pagination |
-| [Phase 4](../phases/phase4/) | Complete | React SPA, Kanban board, task detail, SSE live updates |
-| [Phase 5](../phases/phase5/) | Complete | UI polish, phase management, pipeline view, Invalid Date fix |
-| [Phase 6](../phases/phase6/) | Complete | Task spec storage in DB, API exposure, CLI import |
-| [Phase 7](../phases/phase7/) | Complete | Full page task view, spec rendering, dependency chain, modal slim-down |
+| Milestone | Status | Summary |
+|----------|--------|---------|
+| [Milestone 0](../milestones/milestone0/) | Complete | Django skeleton, Docker, health endpoint, Celery |
+| [Milestone 1](../milestones/milestone1/) | Complete | Core models, CRUD, state machine, atomic claiming |
+| [Milestone 2](../milestones/milestone2/) | Complete | Auth, claim expiry, bulk import, CLI |
+| [Milestone 3](../milestones/milestone3/) | Complete | Bug fixes, stats, SSE, cursor pagination |
+| [Milestone 4](../milestones/milestone4/) | Complete | React SPA, Kanban board, task detail, SSE live updates |
+| [Milestone 5](../milestones/milestone5/) | Complete | UI polish, milestone management, pipeline view, Invalid Date fix |
+| [Milestone 6](../milestones/milestone6/) | Complete | Task spec storage in DB, API exposure, CLI import |
+| [Milestone 7](../milestones/milestone7/) | Complete | Full page task view, spec rendering, dependency chain, modal slim-down |

@@ -11,7 +11,7 @@ Designed for these consumers:
 - **Scrum Master Agent** — event stream, triage, metrics
 - **Web UI** (SPA) — full CRUD, live updates, reviews
 - **Terminal UI** (Python) — same operations via CLI
-- **Intake Tooling** — bulk creation of workplans/phases/tasks
+- **Intake Tooling** — bulk creation of workplans/milestones/tasks
 - **External Systems** — unblock tasks, future webhook support
 
 ## API Style Decisions
@@ -59,22 +59,22 @@ POST   /v1/workplans/:id/complete        Complete workplan
 GET    /v1/workplans/:id/stats           Aggregate stats (task counts by status, progress %)
 ```
 
-### Phases
+### Milestones
 
 ```
-POST   /v1/workplans/:id/phases          Create phase in workplan
-GET    /v1/workplans/:id/phases           List phases in workplan
-GET    /v1/phases/:id                     Get phase details
-PATCH  /v1/phases/:id                     Update fields
-POST   /v1/phases/:id/activate            Activate manually
-POST   /v1/phases/:id/complete            Complete manually
-GET    /v1/phases/:id/stats               Aggregate stats
+POST   /v1/workplans/:id/milestones       Create milestone in workplan
+GET    /v1/workplans/:id/milestones       List milestones in workplan
+GET    /v1/milestones/:id                 Get milestone details
+PATCH  /v1/milestones/:id                 Update fields
+POST   /v1/milestones/:id/activate        Activate manually
+POST   /v1/milestones/:id/complete        Complete manually
+GET    /v1/milestones/:id/stats           Aggregate stats
 ```
 
 ### Tasks
 
 ```
-POST   /v1/phases/:id/tasks              Create task in phase
+POST   /v1/milestones/:id/tasks          Create task in milestone
 GET    /v1/tasks                          List/search tasks
 GET    /v1/tasks/:id                      Get details (?expand=links,reviews,events)
 PATCH  /v1/tasks/:id                      Update fields
@@ -82,7 +82,7 @@ PATCH  /v1/tasks/:id                      Update fields
 
 **Task list filters:**
 - `?status=doing,blocked` — multiple statuses
-- `?phase=id` — tasks in a phase
+- `?milestone=id` — tasks in a milestone
 - `?workplan=id` — tasks in a workplan
 - `?assigned_to=agent-id` — pinned to agent
 - `?requires=opus,architect` — matching required tags
@@ -148,7 +148,7 @@ Review body:
 
 ### Links
 
-Universal link system — source can be workplan, phase, or task.
+Universal link system — source can be workplan, milestone, or task.
 
 ```
 POST   /v1/links                         Create link (body: source_id, target_id, link_type)
@@ -172,7 +172,7 @@ Real-time server-sent events for live updates.
 
 ```
 GET    /v1/events/stream                 SSE endpoint
-                                         (?workplan=id, ?phase=id, ?type=x)
+                                         (?workplan=id, ?milestone=id, ?type=x)
 ```
 
 **SSE event format:**
@@ -207,10 +207,10 @@ workplan.updated
 workplan.completed
 workplan.archived
 
-phase.created
-phase.updated
-phase.activated
-phase.completed
+milestone.created
+milestone.updated
+milestone.activated
+milestone.completed
 
 agent.registered
 agent.deregistered
@@ -247,7 +247,7 @@ Agent shape:
 For intake tooling — create an entire workplan structure in one call.
 
 ```
-POST   /v1/bulk/import                    Create workplan + phases + tasks + links
+POST   /v1/bulk/import                    Create workplan + milestones + tasks + links
 ```
 
 Request body:
@@ -258,9 +258,9 @@ Request body:
     "description": "...",
     "tags": ["backend"]
   },
-  "phases": [
+  "milestones": [
     {
-      "ref": "phase-1",
+      "ref": "milestone-1",
       "name": "Core auth",
       "tasks": [
         {
@@ -275,7 +275,7 @@ Request body:
     }
   ],
   "links": [
-    { "source_ref": "task-1", "target_ref": "phase-1", "type": "depends_on" }
+    { "source_ref": "task-1", "target_ref": "milestone-1", "type": "depends_on" }
   ]
 }
 ```
@@ -288,7 +288,7 @@ Critical safety mechanism: prevents tasks from being stuck in `doing` when an ag
 
 ### How it works
 
-1. Tasks have a `claim_timeout` (default configurable at phase/workplan level, e.g., 30 minutes)
+1. Tasks have a `claim_timeout` (default configurable at milestone/workplan level, e.g., 30 minutes)
 2. When a task is claimed, `claim_expires_at` is set to `now + claim_timeout`
 3. Agent extends the timeout by calling `POST /tasks/:id/heartbeat`
 4. A background process in the API server periodically checks for expired claims
@@ -297,7 +297,7 @@ Critical safety mechanism: prevents tasks from being stuck in `doing` when an ag
 ### Task fields
 
 ```
-claim_timeout: duration (default: 30m, configurable per phase/workplan)
+claim_timeout: duration (default: 30m, configurable per milestone/workplan)
 claim_expires_at: ISO 8601 | null (set on claim, extended on heartbeat)
 claimed_by: agent_id | null
 claimed_at: ISO 8601 | null

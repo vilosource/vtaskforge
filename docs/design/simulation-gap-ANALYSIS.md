@@ -4,9 +4,9 @@ Status: Active (2026-03-20)
 
 ## Problem Statement
 
-Phases 0-2 of vtaskforge were executed through a **manual simulation** that diverged significantly from the documented process. The supervisor role was performed by a human-in-the-loop Opus agent that hand-crafted executor prompts, made ad-hoc gating decisions, and applied contextual knowledge that won't be available when the standardized agent pipeline runs autonomously.
+Milestones 0-2 of vtaskforge were executed through a **manual simulation** that diverged significantly from the documented process. The supervisor role was performed by a human-in-the-loop Opus agent that hand-crafted executor prompts, made ad-hoc gating decisions, and applied contextual knowledge that won't be available when the standardized agent pipeline runs autonomously.
 
-The process guide (phase-process-GUIDE.md) describes a systematic flow — supervisor reads board, dispatches standardized executor, runs gates, dispatches judge — but this flow was never tested as an integrated system. Each component was validated in isolation (task specs work, tests pass, judge produces verdicts) but the **orchestration** was always manual.
+The process guide (milestone-process-GUIDE.md) describes a systematic flow — supervisor reads board, dispatches standardized executor, runs gates, dispatches judge — but this flow was never tested as an integrated system. Each component was validated in isolation (task specs work, tests pass, judge produces verdicts) but the **orchestration** was always manual.
 
 This means our retrospective findings are based on a process that doesn't exist yet. The "process improvements" we documented (contracts, affected_files, pattern templates, tiered judge policy) optimize a manual workflow that will be replaced by an automated one. They may or may not transfer.
 
@@ -15,7 +15,7 @@ This means our retrospective findings are based on a process that doesn't exist 
 | Component | Tested? | How |
 |---|---|---|
 | Task spec format (YAML) | Yes | Sonnet agents executed from specs successfully |
-| Behavioral specs | Partially | Judge verified 2 of 12 tasks in Phase 1, 0 in Phase 2 |
+| Behavioral specs | Partially | Judge verified 2 of 12 tasks in Milestone 1, 0 in Milestone 2 |
 | Gate 1 (mechanical tests) | Yes | pytest run after every task |
 | Gate 2 (judge code review) | Partially | Ad-hoc prompts, inconsistent scope |
 | Black-box testing | Yes | 4 scenarios verified end-to-end |
@@ -29,7 +29,7 @@ This means our retrospective findings are based on a process that doesn't exist 
 
 ### 1. Executor Prompt Quality
 
-During Phases 1-2, the supervisor (Opus) added contextual glue to each executor dispatch:
+During Milestones 1-2, the supervisor (Opus) added contextual glue to each executor dispatch:
 - Task-specific "important" notes ("Note inherits NanoIDMixin only, NOT TimestampMixin")
 - Reminders about which files to read first
 - Warnings about tricky parts ("you're REPLACING the existing claim action")
@@ -53,7 +53,7 @@ The supervisor agent needs to make these decisions from rules, not intuition.
 
 ### 3. Judge Consistency
 
-The judge was invoked twice in Phase 1 with different prompts:
+The judge was invoked twice in Milestone 1 with different prompts:
 - Task 1.1: curl-based behavior verification (duplicated tests)
 - Task 1.5: structural code review against design doc (genuinely valuable)
 
@@ -61,19 +61,19 @@ We then redefined the judge as "code reviewer, not behavior tester" in the proce
 
 ### 4. Error Recovery
 
-No task failed during Phases 1-2, so the failure handling path is completely untested:
+No task failed during Milestones 1-2, so the failure handling path is completely untested:
 - Executor retry on Gate 1 failure
 - Judge feedback loop
 - `vtf task fail` and triage
 - Escalation from Sonnet to Opus
 
-## What Phase 3 Validates
+## What Milestone 3 Validates
 
-Phase 3 is the first end-to-end test of the integrated agent pipeline:
+Milestone 3 is the first end-to-end test of the integrated agent pipeline:
 
-| Component | Phase 3 validation |
+| Component | Milestone 3 validation |
 |---|---|
-| vtf-supervisor agent | Drives the entire phase — reads board, dispatches, gates, updates |
+| vtf-supervisor agent | Drives the entire milestone — reads board, dispatches, gates, updates |
 | vtf-executor agent | Receives standardized prompt + YAML spec, no hand-crafted glue |
 | vtf-judge agent | Follows consistent code review format when judge: true |
 | vtf CLI tracking | All task state managed through vtf, not markdown |
@@ -83,7 +83,7 @@ Phase 3 is the first end-to-end test of the integrated agent pipeline:
 ## Expected Outcomes
 
 ### Optimistic case
-The YAML specs are detailed enough that the standardized executor handles everything. The supervisor correctly orchestrates the flow. Phase 3 completes like Phases 1-2 but with less manual intervention.
+The YAML specs are detailed enough that the standardized executor handles everything. The supervisor correctly orchestrates the flow. Milestone 3 completes like Milestones 1-2 but with less manual intervention.
 
 ### Likely case
 Some tasks fail on first attempt because the executor misses context that was previously hand-crafted. The supervisor's retry/escalation path gets exercised. We learn which specs need more detail and which executor prompt elements are essential.
@@ -93,9 +93,9 @@ The standardized executor consistently fails, requiring manual intervention to a
 
 ## Metrics to Track
 
-For each Phase 3 task, compare against Phase 1-2 baselines:
-- **First-attempt success rate**: Phase 1-2 was 100%. Will it hold with standardized prompts?
-- **Retries needed**: Phase 1-2 was 0. How many retries does the automated pipeline need?
+For each Milestone 3 task, compare against Milestone 1-2 baselines:
+- **First-attempt success rate**: Milestone 1-2 was 100%. Will it hold with standardized prompts?
+- **Retries needed**: Milestone 1-2 was 0. How many retries does the automated pipeline need?
 - **Escalations**: How many tasks need Opus instead of Sonnet?
 - **Supervisor interventions**: How many times does the human need to step in?
 - **Spec amendments**: How many specs need updating after the executor fails?
@@ -103,7 +103,7 @@ For each Phase 3 task, compare against Phase 1-2 baselines:
 
 ## Recommendations
 
-1. **Treat Phase 3 as a pipeline validation**, not just a feature delivery. The feature work (fixes, pagination, SSE) is secondary to validating the agent orchestration.
+1. **Treat Milestone 3 as a pipeline validation**, not just a feature delivery. The feature work (fixes, pagination, SSE) is secondary to validating the agent orchestration.
 
 2. **Start with simple tasks** (3.1, 3.2, 3.3 — small fixes) to calibrate the pipeline before the complex ones (3.4, 3.5 — pagination, SSE).
 

@@ -1,23 +1,23 @@
 # vtaskforge — Task Breakdown Guide
 
-How to decompose a phase into tasks with dependencies. This process applies to any workplan in vtaskforge.
+How to decompose a milestone into tasks with dependencies. This process applies to any workplan in vtaskforge.
 
 ## The Process
 
-### Step 1: Define the Phase Goal
+### Step 1: Define the Milestone Goal
 
-Write a single sentence describing what "done" looks like for the phase. If you can't say it in one sentence, the phase is too big — split it.
+Write a single sentence describing what "done" looks like for the milestone. If you can't say it in one sentence, the milestone is too big — split it.
 
-**Example (Phase 0):**
+**Example (Milestone 0):**
 > A Django project skeleton that boots in Docker, responds to a health endpoint, and has Celery connected.
 
 ### Step 2: Identify the Deliverables
 
-List the concrete outputs the phase must produce. These become your completion checklist — the strict criteria that must ALL be met before the phase is declared complete.
+List the concrete outputs the milestone must produce. These become your completion checklist — the strict criteria that must ALL be met before the milestone is declared complete.
 
 Group them by category (infrastructure, API, testing, docs, etc.) for clarity.
 
-**Example (Phase 0):**
+**Example (Milestone 0):**
 - Infrastructure: 5 Docker services boot, healthchecks pass, hot reload works
 - API: health endpoint responds, admin accessible, JSON error responses
 - Testing: pytest passes, smoke tests cover critical paths
@@ -103,12 +103,12 @@ Use this structure for each task:
 
 The `Files` and `Context` fields map directly to vtaskforge's link system (`file` and `doc`/`area` link types).
 
-## Example: Phase 0 Task Breakdown
+## Example: Milestone 0 Task Breakdown
 
-See [phases/phase0/PHASE.md](../../phases/phase0/PHASE.md) for the full breakdown of Phase 0 into 11 tasks with a dependency DAG. This was the first application of this process.
+See [milestones/milestone0/MILESTONE.md](../../milestones/milestone0/MILESTONE.md) for the full breakdown of Milestone 0 into 11 tasks with a dependency DAG. This was the first application of this process.
 
 Summary:
-- **11 tasks** decomposed from the phase goal
+- **11 tasks** decomposed from the milestone goal
 - **Linear chain** for foundational work (scaffolding → requirements → Dockerfile → compose → Django)
 - **4-way parallel** once the foundation is ready (mixins, health endpoint, celery, app stubs)
 - **Convergence** for testing (needs health + celery done first)
@@ -124,4 +124,4 @@ Summary:
 | **False parallelism** | Tasks marked parallel but actually share files | Add the missing dependency edge |
 | **Missing dependency** | Task assumes something exists but doesn't declare it | Walk through "what must exist before I start?" |
 | **Circular dependency** | A needs B, B needs A | One of them is wrong — find the true order |
-| **Gold plating** | Task adds extra features beyond the phase goal | Cut scope to match the phase goal exactly |
+| **Gold plating** | Task adds extra features beyond the milestone goal | Cut scope to match the milestone goal exactly |

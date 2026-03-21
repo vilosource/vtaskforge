@@ -9,7 +9,7 @@ vtaskforge models a development team:
 | Real team role | System equivalent |
 |---|---|
 | **Developer** | vf-agents — claims and executes tasks |
-| **Project board** | vtaskforge — tracks workplans, phases, tasks, reviews, events |
+| **Project board** | vtaskforge — tracks workplans, milestones, tasks, reviews, events |
 | **Product owner** | Human — defines workplans, approves tasks, final say |
 | **Scrum master** | This proposal — facilitates flow, removes blockers, monitors health |
 
@@ -39,14 +39,14 @@ An autonomous process agent that watches vtaskforge's event stream and takes act
 | Rework rate (changes_requested count) | Are tasks well-defined before execution? |
 | Agent throughput | Tasks completed per agent per time period |
 | Blocked task count | How much work is stuck? |
-| Phase progress | Percentage of tasks done per phase |
+| Milestone progress | Percentage of tasks done per milestone |
 
 ### Ceremonies (automated)
 
 | Ceremony | Equivalent |
 |----------|-----------|
 | **Standup summary** | Periodic report: what was done, what's in progress, what's blocked |
-| **Sprint review** | Phase/workplan completion summary with metrics |
+| **Sprint review** | Milestone/workplan completion summary with metrics |
 | **Retrospective** | Analysis of rework rates, failure patterns, bottleneck trends |
 
 ## Architecture
@@ -77,7 +77,7 @@ vtaskforge event stream
 ### Key design principles
 
 - **Read-heavy, write-light** — mostly observes, occasionally nudges. Does not make product decisions (that's the human/product owner).
-- **Configurable thresholds** — "stuck" means different things for different workplans. Thresholds should be settable per workplan or phase.
+- **Configurable thresholds** — "stuck" means different things for different workplans. Thresholds should be settable per workplan or milestone.
 - **Pluggable rules** — the trigger→action mapping should be extensible. New rules without code changes.
 - **High-reasoning model** — triage decisions (especially for `needs_attention` tasks) require understanding context, not just pattern matching. This agent needs a capable model.
 - **Non-blocking** — if the scrum master agent is down, work continues. It's an accelerator, not a gatekeeper.
