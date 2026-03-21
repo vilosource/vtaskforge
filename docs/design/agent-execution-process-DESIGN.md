@@ -105,18 +105,22 @@ sequenceDiagram
     Note over S: Milestone activated, task specs ready
 
     S->>B: Submit task (draft → todo)
+    S->>E: Dispatch executor
     E->>B: Claim task (todo → doing)
     E->>E: Read spec, work in worktree
     E->>E: Write code, run local checks
     E->>E: Commit changes
-    E->>B: Complete (doing → pending_completion_review)
+    E->>B: Submit for review (doing → pending_completion_review)
+    E->>S: Report: "work finished"
 
-    Note over J: Judge watches pending_completion_review queue
-
+    S->>J: Dispatch judge for task
     J->>J: Run test_command from spec
     J->>J: Review code against acceptance_criteria
     J->>B: Submit review: approved
-    B->>B: Task → done
+    Note over B: Task → done
+    J->>S: Report: "approved"
+
+    S->>S: Check DAG — submit next tasks whose deps are met
 
     Note over B: If all milestone tasks done → auto-complete milestone
 ```
@@ -130,28 +134,37 @@ sequenceDiagram
     participant E as 🔧 Executor
     participant J as ⚖️ Judge
 
-    E->>B: Complete (doing → pending_completion_review)
+    E->>B: Submit for review (doing → pending_completion_review)
+    E->>S: Report: "work finished"
 
+    S->>J: Dispatch judge for task
     J->>J: Run test_command
     Note over J: ❌ 262 test failures
 
     J->>B: Submit review: changes_requested
     Note over B: Comment: "262 failures,<br/>fixture 'phase' not found in 16 files"
-    B->>B: Task → changes_requested
+    Note over B: Task → changes_requested
+    J->>S: Report: "rejected — see review comment"
 
+    S->>S: Attempt 1 of 3 failed
+    S->>E: Dispatch executor for rework
+    Note over S: "Task rejected. Read review<br/>comments and fix the issues."
+
+    E->>E: Read review comments from API
+    E->>E: Fix issues, commit
     E->>B: Resubmit (changes_requested → pending_completion_review)
-    Note over E: Executor reads judge feedback,<br/>fixes the issues
+    E->>S: Report: "rework finished"
 
+    S->>J: Dispatch judge again
     J->>J: Run test_command
     Note over J: ✅ All tests pass
-
     J->>J: Review code against spec
     Note over J: ✅ Acceptance criteria met
-
     J->>B: Submit review: approved
-    B->>B: Task → done
+    Note over B: Task → done
+    J->>S: Report: "approved"
 
-    Note over S: After 3 failed attempts:<br/>Supervisor escalates to human
+    Note over S: If 3 attempts all fail:<br/>escalate to human
 ```
 
 ## Diagram 4: Supervisor Orchestration — Full Milestone Execution
@@ -169,28 +182,46 @@ sequenceDiagram
     S->>B: Activate milestone
     S->>B: Submit tasks with no deps (draft → todo)
 
-    par Parallel execution
+    par Supervisor dispatches executors in parallel
+        S->>E1: Dispatch for task A
         E1->>B: Claim task A
         E1->>E1: Work on task A
-        E1->>B: Complete → pending_completion_review
+        E1->>B: Submit for review
+        E1->>S: Report: "finished"
     and
+        S->>E2: Dispatch for task B
         E2->>B: Claim task B
         E2->>E2: Work on task B
-        E2->>B: Complete → pending_completion_review
+        E2->>B: Submit for review
+        E2->>S: Report: "finished"
     end
 
+    S->>J: Dispatch judge for task A
     J->>B: Review task A → approved ✅
+    J->>S: "Task A approved"
+
+    S->>J: Dispatch judge for task B
     J->>B: Review task B → changes_requested ❌
+    J->>S: "Task B rejected"
 
+    S->>E2: Dispatch for rework on task B
     E2->>B: Resubmit rework
-    J->>B: Review task B (attempt 2) → approved ✅
+    E2->>S: "Rework finished"
 
-    Note over S: Tasks A, B done → deps met
-    S->>B: Submit task C (depends on A, B)
+    S->>J: Dispatch judge for task B (attempt 2)
+    J->>B: Review task B → approved ✅
+    J->>S: "Task B approved"
 
+    Note over S: Tasks A, B done → check DAG → deps met for task C
+    S->>B: Submit task C (draft → todo)
+
+    S->>E1: Dispatch for task C
     E1->>B: Claim task C
     E1->>E1: Work on task C
-    E1->>B: Complete → pending_completion_review
+    E1->>B: Submit for review
+    E1->>S: "Finished"
+
+    S->>J: Dispatch judge for task C
     J->>B: Review task C → approved ✅
 
     Note over B: All tasks done → milestone auto-completes
@@ -245,16 +276,22 @@ Prompt: "Execute vtf task <ID>"
 - Report back what was done
 ```
 
-### What the supervisor (me) does after executor reports back
+### What the supervisor (me) does
 
 ```
-1. Run test_command from the spec
-2. Dispatch judge if judge: true in spec
-3. If tests pass and judge approves → submit review: approved
-4. If anything fails → submit review: changes_requested with feedback
-5. When all milestone tasks are done → verify milestone auto-completed
-6. Submit next batch of tasks (deps now met)
+1. Activate milestone, submit tasks respecting DAG deps
+2. Dispatch executor subagents for todo tasks
+3. When executor reports "finished" → dispatch judge subagent
+4. Judge runs test_command + reviews against spec
+5. Judge submits formal review via API (approved or changes_requested with comment)
+6. If rejected → dispatch executor again with "read the review comments"
+7. If approved → check DAG, submit next tasks whose deps are met
+8. Track retry count — escalate to human after 3 failures
+9. When all tasks done → verify milestone auto-completed
 ```
+
+The supervisor NEVER runs tests or reviews code directly. It dispatches
+and monitors. The judge does all verification.
 
 ## Lessons from Phase 8 (2026-03-21)
 
