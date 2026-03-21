@@ -152,7 +152,7 @@
   color: var(--color-text-secondary);
 }
 
-/* ----- Phase groups ----- */
+/* ----- Milestone groups ----- */
 .workplan-milestones {
   display: flex;
   flex-direction: column;
@@ -193,14 +193,14 @@
   line-height: 1.4;
 }
 
-/* ----- Phase cards grid ----- */
+/* ----- Milestone cards grid ----- */
 .milestone-group-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
 }
 
-/* ----- Phase card ----- */
+/* ----- Milestone card ----- */
 .milestone-card {
   display: block;
   padding: 10px 14px;
