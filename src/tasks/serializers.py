@@ -18,8 +18,10 @@ class TaskSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "status",
+            "project",
             "milestone",
             "workplan",
+            "labels",
             "acceptance_criteria",
             "needs_review_before_start",
             "needs_review_on_completion",
@@ -40,6 +42,45 @@ class TaskSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "status"]
+
+    def validate(self, data):
+        """
+        Validate task relationships:
+        - project is required
+        - workplan is optional
+        - milestone is optional
+        - If milestone is set, workplan must also be set
+        - If milestone is set, milestone.workplan must equal workplan
+        - If workplan is set, workplan.project must equal project
+        - labels is optional, defaults to []
+        """
+        project = data.get('project')
+        workplan = data.get('workplan')
+        milestone = data.get('milestone')
+
+        # For updates, get existing values if not in data
+        if self.instance:
+            project = project if project is not None else self.instance.project
+            workplan = workplan if 'workplan' in data else self.instance.workplan
+            milestone = milestone if 'milestone' in data else self.instance.milestone
+
+        # project is always required
+        if not project:
+            raise serializers.ValidationError("project is required")
+
+        # If milestone is set, workplan must also be set
+        if milestone and not workplan:
+            raise serializers.ValidationError("If milestone is set, workplan must also be set")
+
+        # If milestone is set, milestone.workplan must equal workplan
+        if milestone and workplan and milestone.workplan != workplan:
+            raise serializers.ValidationError("milestone.workplan must equal workplan")
+
+        # If workplan is set, workplan.project must equal project
+        if workplan and workplan.project != project:
+            raise serializers.ValidationError("workplan.project must equal project")
+
+        return data
 
 
 class TaskDetailSerializer(TaskSerializer):

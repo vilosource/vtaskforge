@@ -45,7 +45,20 @@ class TaskFactory(factory.django.DjangoModelFactory):
 
     milestone = factory.SubFactory(MilestoneFactory)
     workplan = factory.LazyAttribute(lambda o: o.milestone.workplan)
+    project = factory.LazyAttribute(lambda o: o.milestone.workplan.project)
     title = factory.Sequence(lambda n: f"Task {n}")
+    status = "draft"
+
+
+class BacklogTaskFactory(factory.django.DjangoModelFactory):
+    """Factory for backlog tasks (no workplan, no milestone)."""
+    class Meta:
+        model = Task
+
+    project = factory.SubFactory(ProjectFactory)
+    milestone = None
+    workplan = None
+    title = factory.Sequence(lambda n: f"Backlog Task {n}")
     status = "draft"
 
 

@@ -27,17 +27,29 @@ class Task(NanoIDMixin, TimestampMixin):
         choices=TASK_STATUS_CHOICES,
         default="draft",
     )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="tasks",
+    )
     milestone = models.ForeignKey(
         "workplans.Milestone",
         on_delete=models.CASCADE,
         related_name="tasks",
+        null=True,
+        blank=True,
+        default=None,
     )
     workplan = models.ForeignKey(
         "workplans.Workplan",
         on_delete=models.CASCADE,
         related_name="tasks",
+        null=True,
+        blank=True,
+        default=None,
     )
     acceptance_criteria = models.JSONField(default=list, blank=True)
+    labels = models.JSONField(default=list, blank=True)
     needs_review_before_start = models.BooleanField(null=True, blank=True, default=None)
     needs_review_on_completion = models.BooleanField(null=True, blank=True, default=None)
     review_return_to = models.CharField(max_length=30, null=True, blank=True, default=None)

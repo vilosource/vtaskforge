@@ -98,45 +98,45 @@ class TestTaskList:
 @pytest.mark.django_db
 class TestTaskCreate:
     def test_create_returns_201(self, api_client, milestone, workplan):
-        payload = {"title": "New Task", "milestone": milestone.id, "workplan": workplan.id}
+        payload = {"title": "New Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
 
     def test_create_sets_default_status_to_draft(self, api_client, milestone, workplan):
-        payload = {"title": "New Task", "milestone": milestone.id, "workplan": workplan.id}
+        payload = {"title": "New Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.data["status"] == "draft"
 
     def test_create_returns_nanoid(self, api_client, milestone, workplan):
-        payload = {"title": "New Task", "milestone": milestone.id, "workplan": workplan.id}
+        payload = {"title": "New Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert "id" in response.data
         assert len(response.data["id"]) == 21
 
     def test_create_status_is_read_only(self, api_client, milestone, workplan):
-        payload = {"title": "New Task", "milestone": milestone.id, "workplan": workplan.id, "status": "done"}
+        payload = {"title": "New Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id, "status": "done"}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["status"] == "draft"
 
     def test_create_id_is_read_only(self, api_client, milestone, workplan):
-        payload = {"title": "New Task", "milestone": milestone.id, "workplan": workplan.id, "id": "custom-id-12345678901"}
+        payload = {"title": "New Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id, "id": "custom-id-12345678901"}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["id"] != "custom-id-12345678901"
 
     def test_create_without_title_returns_400(self, api_client, milestone, workplan):
-        payload = {"milestone": milestone.id, "workplan": workplan.id}
+        payload = {"project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_create_without_phase_returns_400(self, api_client, workplan):
-        payload = {"title": "Task", "workplan": workplan.id}
+    def test_create_without_project_returns_400(self, api_client, milestone, workplan):
+        payload = {"title": "Task", "milestone": milestone.id, "workplan": workplan.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_create_without_workplan_returns_400(self, api_client, milestone):
-        payload = {"title": "Task", "milestone": milestone.id}
+    def test_create_with_milestone_but_no_workplan_returns_400(self, api_client, milestone):
+        payload = {"title": "Task", "project": milestone.workplan.project.id, "milestone": milestone.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -144,8 +144,10 @@ class TestTaskCreate:
         payload = {
             "title": "Full Task",
             "description": "A detailed description",
+            "project": workplan.project.id,
             "milestone": milestone.id,
             "workplan": workplan.id,
+            "labels": ["feature", "urgent"],
             "acceptance_criteria": ["AC1", "AC2"],
             "needs_review_before_start": True,
             "needs_review_on_completion": False,
@@ -155,13 +157,14 @@ class TestTaskCreate:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["title"] == "Full Task"
         assert response.data["description"] == "A detailed description"
+        assert response.data["labels"] == ["feature", "urgent"]
         assert response.data["acceptance_criteria"] == ["AC1", "AC2"]
         assert response.data["needs_review_before_start"] is True
         assert response.data["needs_review_on_completion"] is False
         assert response.data["created_by"] == "alice"
 
     def test_create_persists_to_db(self, api_client, milestone, workplan):
-        payload = {"title": "Persist Task", "milestone": milestone.id, "workplan": workplan.id}
+        payload = {"title": "Persist Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id}
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert Task.objects.filter(id=response.data["id"]).exists()
 
@@ -184,11 +187,12 @@ class TestTaskRetrieve:
     def test_retrieve_returns_all_fields(self, api_client, task):
         response = api_client.get(f"/v1/tasks/{task.id}/")
         expected_fields = [
-            "id", "title", "description", "status", "milestone", "workplan",
-            "acceptance_criteria", "needs_review_before_start",
+            "id", "title", "description", "status", "project", "milestone", "workplan",
+            "labels", "acceptance_criteria", "needs_review_before_start",
             "needs_review_on_completion", "review_return_to", "requires",
             "assigned_to", "claimed_by", "claimed_at", "claim_timeout",
-            "claim_expires_at", "created_by", "created_at", "updated_at",
+            "claim_expires_at", "created_by", "spec", "agent_model",
+            "test_command", "judge", "isolation", "created_at", "updated_at",
         ]
         for field in expected_fields:
             assert field in response.data, f"Missing field: {field}"
@@ -306,10 +310,11 @@ class TestPhaseTasksNested:
         response = api_client.get("/v1/milestones/nonexistentid12345678/tasks/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_create_auto_sets_phase_and_workplan(self, api_client, milestone, workplan):
+    def test_create_auto_sets_project_milestone_and_workplan(self, api_client, milestone, workplan):
         payload = {"title": "Nested Task"}
         response = api_client.post(f"/v1/milestones/{milestone.id}/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["project"] == workplan.project.id
         assert response.data["milestone"] == milestone.id
         assert response.data["workplan"] == workplan.id
 
@@ -326,6 +331,7 @@ class TestPhaseTasksNested:
         payload = {"title": "Nested Task"}
         response = api_client.post(f"/v1/milestones/{milestone.id}/tasks/", payload, format="json")
         task = Task.objects.get(id=response.data["id"])
+        assert task.project_id == workplan.project.id
         assert task.milestone_id == milestone.id
         assert task.workplan_id == workplan.id
 

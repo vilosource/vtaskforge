@@ -10,6 +10,7 @@ from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
 from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
+from projects.models import Project
 from workplans.models import Milestone
 
 from .exceptions import InvalidTransition
@@ -58,13 +59,17 @@ class TaskViewSet(ModelViewSet):
         return context
 
     def get_queryset(self):
-        qs = Task.objects.select_related("milestone", "workplan").all()
+        qs = Task.objects.select_related("project", "milestone", "workplan").all()
         params = self.request.query_params
 
         task_status = params.get("status")
         if task_status:
             statuses = [s.strip() for s in task_status.split(",") if s.strip()]
             qs = qs.filter(status__in=statuses)
+
+        project = params.get("project")
+        if project:
+            qs = qs.filter(project_id=project)
 
         milestone = params.get("milestone")
         if milestone:
@@ -77,6 +82,17 @@ class TaskViewSet(ModelViewSet):
         assigned_to = params.get("assigned_to")
         if assigned_to:
             qs = qs.filter(assigned_to=assigned_to)
+
+        labels = params.get("labels")
+        if labels:
+            label_list = [l.strip() for l in labels.split(",") if l.strip()]
+            # Filter tasks that have any of the specified labels
+            from django.db.models import Q
+            label_queries = Q()
+            for label in label_list:
+                label_queries |= Q(labels__contains=[label])
+            if label_queries:
+                qs = qs.filter(label_queries)
 
         return qs
 
@@ -221,10 +237,11 @@ class TaskViewSet(ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def claimable(self, request):
-        """GET /v1/tasks/claimable?tags=executor,opus — tasks claimable by agent with given tags."""
+        """GET /v1/tasks/claimable?tags=executor,opus&project=:id — tasks claimable by agent with given tags."""
         tags_param = request.query_params.get("tags", "")
         tags = [t for t in tags_param.split(",") if t] if tags_param else []
         agent_id = request.query_params.get("agent_id", "")
+        project = request.query_params.get("project", "")
 
         # If agent_id given and no tags param, look up agent tags from DB
         if agent_id and not tags:
@@ -235,6 +252,10 @@ class TaskViewSet(ModelViewSet):
                 tags = []
 
         tasks = Task.objects.filter(status="todo")
+
+        # Filter by project if specified
+        if project:
+            tasks = tasks.filter(project_id=project)
 
         # Exclude tasks with unmet dependencies
         from links.models import Link
@@ -473,12 +494,12 @@ class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet
 
 class MilestoneTasksView(APIView):
     """Nested endpoint: list and create tasks under a milestone.
-    Auto-sets milestone and workplan from milestone.workplan on create.
+    Auto-sets milestone, workplan, and project from milestone.workplan.project on create.
     """
 
     def get_milestone(self, milestone_id):
         try:
-            return Milestone.objects.get(pk=milestone_id)
+            return Milestone.objects.select_related("workplan__project").get(pk=milestone_id)
         except Milestone.DoesNotExist:
             return None
 
@@ -509,6 +530,64 @@ class MilestoneTasksView(APIView):
         data = request.data.copy()
         data["milestone"] = milestone.id
         data["workplan"] = milestone.workplan_id
+        data["project"] = milestone.workplan.project_id
+        serializer = TaskSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectTasksView(APIView):
+    """Nested endpoint: list and create backlog tasks under a project.
+    Auto-sets project from URL, leaves workplan and milestone null for backlog tasks.
+    """
+
+    def get_project(self, project_id):
+        try:
+            return Project.objects.get(pk=project_id)
+        except Project.DoesNotExist:
+            return None
+
+    def get(self, request, project_id):
+        project = self.get_project(project_id)
+        if project is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        # List backlog tasks (tasks with no workplan)
+        tasks = Task.objects.filter(project=project, workplan__isnull=True)
+        # Apply same query filters as the viewset
+        task_status = request.query_params.get("status")
+        if task_status:
+            tasks = tasks.filter(status=task_status)
+        assigned_to = request.query_params.get("assigned_to")
+        if assigned_to:
+            tasks = tasks.filter(assigned_to=assigned_to)
+        labels = request.query_params.get("labels")
+        if labels:
+            label_list = [l.strip() for l in labels.split(",") if l.strip()]
+            from django.db.models import Q
+            label_queries = Q()
+            for label in label_list:
+                label_queries |= Q(labels__contains=[label])
+            if label_queries:
+                tasks = tasks.filter(label_queries)
+        paginator = VTFCursorPagination()
+        page = paginator.paginate_queryset(tasks, request)
+        if page is not None:
+            serializer = TaskSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        serializer = TaskSerializer(tasks, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, project_id):
+        project = self.get_project(project_id)
+        if project is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        data = request.data.copy()
+        data["project"] = project.id
+        # Explicitly set workplan and milestone to None for backlog tasks
+        data["workplan"] = None
+        data["milestone"] = None
         serializer = TaskSerializer(data=data)
         if serializer.is_valid():
             serializer.save()

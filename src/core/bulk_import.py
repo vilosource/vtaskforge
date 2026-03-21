@@ -29,6 +29,8 @@ def perform_bulk_import(payload):
             all_refs.append(milestone_data["ref"])
             for task_data in milestone_data.get("tasks", []):
                 all_refs.append(task_data["ref"])
+        for task_data in payload.get("backlog_tasks", []):
+            all_refs.append(task_data["ref"])
 
         seen = set()
         for ref in all_refs:
@@ -87,6 +89,7 @@ def perform_bulk_import(payload):
             for task_data in milestone_data.get("tasks", []):
                 task_ref = task_data["ref"]
                 task = Task.objects.create(
+                    project=project,
                     milestone=milestone,
                     workplan=workplan,
                     title=task_data["title"],
@@ -102,7 +105,28 @@ def perform_bulk_import(payload):
                 ref_map[task_ref] = task.id
                 ref_type_map[task_ref] = "task"
 
-        # 5. Validate all link refs resolve before creating anything
+        # 5. Create backlog tasks (no milestone, no workplan)
+        for task_data in payload.get("backlog_tasks", []):
+            task_ref = task_data["ref"]
+            task = Task.objects.create(
+                project=project,
+                milestone=None,
+                workplan=None,
+                title=task_data["title"],
+                description=task_data.get("description", ""),
+                labels=task_data.get("labels", []),
+                acceptance_criteria=task_data.get("acceptance_criteria", []),
+                requires=task_data.get("requires", []),
+                spec=task_data.get("spec", ""),
+                agent_model=task_data.get("agent_model", ""),
+                test_command=task_data.get("test_command", {}),
+                judge=task_data.get("judge", False),
+                isolation=task_data.get("isolation", "sequential"),
+            )
+            ref_map[task_ref] = task.id
+            ref_type_map[task_ref] = "task"
+
+        # 6. Validate all link refs resolve before creating anything
         for link_data in payload.get("links", []):
             source_ref = link_data["source_ref"]
             target_ref = link_data["target_ref"]
@@ -111,7 +135,7 @@ def perform_bulk_import(payload):
             if target_ref not in ref_map:
                 raise ValueError(f"Unresolved target_ref: {target_ref}")
 
-        # 6. Create links
+        # 7. Create links
         for link_data in payload.get("links", []):
             source_ref = link_data["source_ref"]
             target_ref = link_data["target_ref"]
