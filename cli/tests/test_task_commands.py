@@ -574,3 +574,105 @@ def test_task_reject_api_error(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["task", "reject", "task-abc", "--reason", "bad"])
     assert result.exit_code == 1
+
+
+# --- review ---
+
+def test_task_review_approved(runner, mock_client):
+    mock_client.post.return_value = {"decision": "approved"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "approved"],
+        )
+    assert result.exit_code == 0
+    assert "Review submitted for task task-abc" in result.output
+    assert "decision=approved" in result.output
+    mock_client.post.assert_called_once_with(
+        "/v1/tasks/task-abc/reviews/",
+        {"decision": "approved", "reason": "", "reviewer_id": "cli-user", "reviewer_type": "human"},
+    )
+
+
+def test_task_review_changes_requested_with_reason(runner, mock_client):
+    mock_client.post.return_value = {"decision": "changes_requested"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "changes_requested", "--reason", "Fix tests"],
+        )
+    assert result.exit_code == 0
+    assert "Review submitted" in result.output
+    assert "changes_requested" in result.output
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["reason"] == "Fix tests"
+
+
+def test_task_review_changes_requested_missing_reason(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "changes_requested"],
+        )
+    assert result.exit_code == 1
+    assert "reason is required" in result.output.lower() or "--reason" in result.output
+
+
+def test_task_review_rejected_missing_reason(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "rejected"],
+        )
+    assert result.exit_code == 1
+
+
+def test_task_review_missing_decision(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc"],
+        )
+    assert result.exit_code != 0
+
+
+def test_task_review_invalid_decision(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "invalid"],
+        )
+    assert result.exit_code != 0
+
+
+def test_task_review_api_error_404(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "approved"],
+        )
+    assert result.exit_code == 1
+
+
+def test_task_review_api_error_invalid_state(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Not in review state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "approved"],
+        )
+    assert result.exit_code == 1
+
+
+def test_task_review_custom_reviewer(runner, mock_client):
+    mock_client.post.return_value = {"decision": "approved"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "review", "task-abc", "--decision", "approved", "--reviewer", "judge-agent", "--reviewer-type", "agent"],
+        )
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["reviewer_id"] == "judge-agent"
+    assert call_data["reviewer_type"] == "agent"
