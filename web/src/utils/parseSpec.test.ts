@@ -112,3 +112,24 @@ describe('parseSpec', () => {
     expect(result!.contracts).toEqual([]);
   });
 });
+
+const STRING_TEST_COMMAND_SPEC = `id: "2.1"
+name: "Task with string test_command"
+test_command: "cd /app && python -m pytest tests/ -q"
+`;
+
+describe('parseSpec string test_command', () => {
+  it('normalizes string test_command to Record with default key', () => {
+    const result = parseSpec(STRING_TEST_COMMAND_SPEC);
+    expect(result).not.toBeNull();
+    expect(result!.testCommand).toEqual({
+      default: 'cd /app && python -m pytest tests/ -q',
+    });
+  });
+
+  it('handles missing test_command gracefully', () => {
+    const result = parseSpec(MINIMAL_SPEC);
+    expect(result).not.toBeNull();
+    expect(result!.testCommand).toEqual({});
+  });
+});

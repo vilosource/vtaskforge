@@ -17,6 +17,14 @@ export interface ParsedSpec {
   raw: string;
 }
 
+
+function normalizeTestCommand(raw: unknown): Record<string, string> {
+  if (!raw) return {};
+  if (typeof raw === 'string') return { default: raw };
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, string>;
+  return {};
+}
+
 export function parseSpec(rawYaml: string): ParsedSpec | null {
   if (!rawYaml) return null;
   try {
@@ -40,7 +48,7 @@ export function parseSpec(rawYaml: string): ParsedSpec | null {
         affected: Array.isArray(files.affected) ? files.affected.map(String) : [],
       },
       contracts: contracts.map(c => ({ name: c.name ?? '', description: c.description ?? '' })),
-      testCommand: (parsed.test_command ?? {}) as Record<string, string>,
+      testCommand: normalizeTestCommand(parsed.test_command),
       raw: rawYaml,
     };
   } catch {
