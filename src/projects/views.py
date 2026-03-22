@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, ProtectedError
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -26,6 +26,20 @@ class ProjectViewSet(ModelViewSet):
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
         return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "error": {
+                        "code": "PROTECTED",
+                        "message": "Cannot delete project: it still has tasks. Delete or reassign tasks first.",
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
     @action(detail=True, methods=["post"])
     def archive(self, request, pk=None):

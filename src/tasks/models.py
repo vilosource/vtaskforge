@@ -29,7 +29,7 @@ class Task(NanoIDMixin, TimestampMixin):
     )
     project = models.ForeignKey(
         "projects.Project",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="tasks",
     )
     milestone = models.ForeignKey(

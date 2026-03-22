@@ -1,7 +1,7 @@
 import pytest
 from rest_framework import status
 
-from tests.factories import ProjectFactory
+from tests.factories import ProjectFactory, TaskFactory
 from projects.models import Project
 
 
@@ -205,6 +205,14 @@ class TestProjectDelete:
     def test_delete_nonexistent_returns_404(self, api_client):
         response = api_client.delete("/v1/projects/nonexistentid12345678/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_delete_project_with_tasks_returns_409(self, api_client, project):
+        from tests.factories import TaskFactory
+        TaskFactory(project=project, milestone=None, workplan=None)
+        response = api_client.delete(f"/v1/projects/{project.id}/")
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "PROTECTED" in str(response.data)
+        assert Project.objects.filter(id=project.id).exists()
 
 
 @pytest.mark.django_db
