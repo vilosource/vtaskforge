@@ -238,3 +238,47 @@ def create(ctx, title, project, workplan, milestone, labels, description):
     except VTFAPIError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
+
+
+@task.command()
+@click.argument("id")
+@click.option("--decision", required=True, type=click.Choice(["approved", "changes_requested", "rejected"]), help="Review decision")
+@click.option("--reason", default="", help="Review reason (required for changes_requested/rejected)")
+@click.option("--reviewer", default="cli-user", help="Reviewer ID")
+@click.option("--reviewer-type", "reviewer_type", default="human", type=click.Choice(["human", "agent"]), help="Reviewer type")
+@click.pass_context
+def review(ctx, id, decision, reason, reviewer, reviewer_type):
+    """Submit a review for a task."""
+    if decision in ("changes_requested", "rejected") and not reason:
+        click.echo(f"Error: --reason is required when decision is '{decision}'", err=True)
+        raise SystemExit(1)
+    client = ctx.obj["client"]
+    data = {
+        "decision": decision,
+        "reason": reason,
+        "reviewer_id": reviewer,
+        "reviewer_type": reviewer_type,
+    }
+    try:
+        result = client.post(f"/v1/tasks/{id}/reviews/", data)
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Review submitted for task {id}: decision={result['decision']}")
+
+
+@task.command()
+@click.argument("id")
+@click.option("--status", "target_status", required=True, help="Target status to force-transition to")
+@click.option("--reason", required=True, help="Reason for force transition (audit trail)")
+@click.pass_context
+def reset(ctx, id, target_status, reason):
+    """Force-transition a task to any status (admin)."""
+    client = ctx.obj["client"]
+    data = {"status": target_status, "reason": reason}
+    try:
+        result = client.post(f"/v1/tasks/{id}/reset/", data)
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Reset task {id}: {result.get('status', target_status)} (reason: {reason})")

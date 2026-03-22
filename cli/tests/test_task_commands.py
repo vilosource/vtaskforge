@@ -460,3 +460,51 @@ def test_task_claim_help(runner):
     assert result.exit_code == 0
     assert "--agent" in result.output
     assert "--tags" in result.output
+
+
+# --- reset ---
+
+def test_task_reset_success(runner, mock_client):
+    mock_client.post.return_value = {"status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "reset", "task-abc", "--status", "draft", "--reason", "board recovery"],
+        )
+    assert result.exit_code == 0
+    assert "Reset task task-abc" in result.output
+    assert "draft" in result.output
+    assert "board recovery" in result.output
+    mock_client.post.assert_called_once_with(
+        "/v1/tasks/task-abc/reset/",
+        {"status": "draft", "reason": "board recovery"},
+    )
+
+
+def test_task_reset_missing_status(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "reset", "task-abc", "--reason", "test"],
+        )
+    assert result.exit_code != 0
+
+
+def test_task_reset_missing_reason(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "reset", "task-abc", "--status", "draft"],
+        )
+    assert result.exit_code != 0
+
+
+def test_task_reset_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Invalid status"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            ["task", "reset", "task-abc", "--status", "invalid", "--reason", "test"],
+        )
+    assert result.exit_code == 1
+    assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))

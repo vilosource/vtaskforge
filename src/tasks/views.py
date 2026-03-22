@@ -17,7 +17,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
-from .state_machine import get_valid_transitions, perform_transition
+from .state_machine import get_valid_transitions, perform_transition, NON_TERMINAL_STATUSES, TERMINAL_STATUSES
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
 
@@ -461,6 +461,61 @@ class TaskViewSet(ModelViewSet):
         task = self.get_object()
         task.assigned_to = None
         task.save(update_fields=["assigned_to", "updated_at"])
+        serializer = self.get_serializer(task)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def reset(self, request, pk=None):
+        """Admin force-transition: bypass state machine, move task to any valid status."""
+        task = self.get_object()
+        target_status = request.data.get("status")
+        reason = request.data.get("reason", "").strip()
+
+        all_statuses = NON_TERMINAL_STATUSES | TERMINAL_STATUSES
+        if not target_status or target_status not in all_statuses:
+            return Response(
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": f"Invalid status '{target_status}'. Must be one of: {sorted(all_statuses)}",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not reason:
+            return Response(
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "reason is required for force transitions",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_status = task.status
+        task.status = target_status
+        # Clear claim fields when resetting to a non-doing status
+        update_fields = ["status", "updated_at"]
+        if target_status != "doing":
+            task.claimed_by = None
+            task.claimed_at = None
+            task.claim_expires_at = None
+            update_fields += ["claimed_by", "claimed_at", "claim_expires_at"]
+        task.save(update_fields=update_fields)
+
+        try:
+            from events.models import TaskEvent
+            TaskEvent.objects.create(
+                task=task,
+                event_type="force_transition",
+                data={"from": old_status, "to": target_status, "reason": reason},
+                triggered_by="admin",
+            )
+        except Exception:
+            pass
+
         serializer = self.get_serializer(task)
         return Response(serializer.data)
 

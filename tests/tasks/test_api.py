@@ -499,3 +499,118 @@ class TestMultiStatusFilter:
         statuses = {t["status"] for t in response.data["results"]}
         assert "done" not in statuses
         assert len(response.data["results"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# Reset (force transition)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestTaskReset:
+    """Tests for POST /v1/tasks/{id}/reset/ — admin force-transition."""
+
+    def test_reset_transitions_task_bypassing_state_machine(self, api_client, task):
+        """Draft -> done is normally invalid, but reset should allow it."""
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "done", "reason": "retroactive closure"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "done"
+
+    def test_reset_creates_force_transition_event(self, api_client, task):
+        from events.models import TaskEvent
+        api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "todo", "reason": "board recovery"},
+            format="json",
+        )
+        event = TaskEvent.objects.filter(task=task, event_type="force_transition").first()
+        assert event is not None
+        assert event.data["from"] == "draft"
+        assert event.data["to"] == "todo"
+        assert event.data["reason"] == "board recovery"
+        assert event.triggered_by == "admin"
+
+    def test_reset_clears_claim_fields_when_target_is_not_doing(self, api_client, doing_task):
+        response = api_client.post(
+            f"/v1/tasks/{doing_task.id}/reset/",
+            {"status": "draft", "reason": "rogue agent recovery"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        doing_task.refresh_from_db()
+        assert doing_task.claimed_by is None
+        assert doing_task.claimed_at is None
+        assert doing_task.claim_expires_at is None
+
+    def test_reset_preserves_claim_fields_when_target_is_doing(self, api_client, task):
+        """When resetting TO doing, claim fields should NOT be cleared."""
+        # First set up a task with claim fields by resetting to doing
+        task.status = "todo"
+        task.claimed_by = "agent-x"
+        task.save()
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "doing", "reason": "re-assign"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        task.refresh_from_db()
+        assert task.claimed_by == "agent-x"
+
+    def test_reset_invalid_status_returns_400(self, api_client, task):
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "nonexistent", "reason": "test"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "VALIDATION_ERROR" in str(response.data)
+
+    def test_reset_empty_reason_returns_400(self, api_client, task):
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "todo", "reason": ""},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "reason is required" in str(response.data)
+
+    def test_reset_missing_reason_returns_400(self, api_client, task):
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "todo"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_reset_missing_status_returns_400(self, api_client, task):
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"reason": "test"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_reset_from_done_to_draft(self, api_client, milestone, workplan):
+        """Terminal -> non-terminal should work via reset."""
+        done_task = TaskFactory(
+            title="Done Task", milestone=milestone, workplan=workplan, status="done"
+        )
+        response = api_client.post(
+            f"/v1/tasks/{done_task.id}/reset/",
+            {"status": "draft", "reason": "reopen for rework"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "draft"
+
+    def test_reset_whitespace_only_reason_returns_400(self, api_client, task):
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "todo", "reason": "   "},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
