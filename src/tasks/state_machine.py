@@ -43,6 +43,7 @@ VALID_TRANSITIONS = {
         "deferred",
     ],
     "changes_requested": [
+        "doing",                     # executor reclaims for rework (vafi)
         "pending_start_review",
         "pending_completion_review",
         "draft",                 # major rework

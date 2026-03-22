@@ -27,12 +27,31 @@ class AgentViewSet(ModelViewSet):
         serializer.save(status="online")
 
     def create(self, request, *args, **kwargs):
+        name = request.data.get("name")
+
+        # Upsert: if agent with this name exists, update and return existing token
+        if name:
+            existing = Agent.objects.filter(name=name).first()
+            if existing:
+                serializer = self.get_serializer(existing, data=request.data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                existing.status = "online"
+                existing.save(update_fields=["status", "updated_at"])
+                serializer.save()
+
+                user = User.objects.get(username=existing.id)
+                token = Token.objects.get(user=user)
+
+                data = serializer.data
+                data["token"] = token.key
+                return Response(data, status=status.HTTP_200_OK)
+
+        # New agent: create agent, user, and token
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         agent = serializer.instance
 
-        # Create a Django User for this agent and issue a DRF Token
         user = User.objects.create_user(username=agent.id)
         token = Token.objects.create(user=user)
 

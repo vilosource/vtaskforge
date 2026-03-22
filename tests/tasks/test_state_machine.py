@@ -94,6 +94,7 @@ class TestGetValidTransitions:
     def test_changes_requested_transitions(self):
         result = get_valid_transitions("changes_requested")
         assert set(result) == {
+            "doing",
             "pending_start_review", "pending_completion_review",
             "draft", "cancelled", "deferred",
         }
