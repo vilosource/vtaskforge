@@ -132,6 +132,17 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
     if project:
         # Add to existing project
         payload["project_id"] = project
+    elif workplan:
+        # Infer project from the workplan
+        try:
+            wp_data = client.get(f"/v1/workplans/{workplan}/")
+            payload["project_id"] = wp_data["project"]
+        except (VTFAPIError, KeyError):
+            click.echo(f"Warning: could not look up project for workplan {workplan}, creating new project", err=True)
+            payload["project"] = {
+                "name": milestone_name,
+                "description": "",
+            }
     else:
         # Create new project named after the milestone directory
         payload["project"] = {

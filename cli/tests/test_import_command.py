@@ -181,6 +181,7 @@ def test_import_empty_tasks_dir_exits_with_error(runner, mock_client, tmp_path):
 # --- --workplan option ---
 
 def test_import_with_workplan_option_includes_workplan_id(runner, mock_client, successful_import_response):
+    mock_client.get.return_value = {"project": "prj-inferred", "id": "wp-existing", "name": "WP"}
     mock_client.post.return_value = successful_import_response
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["import", str(FIXTURES_DIR), "--workplan", "wp-existing"])
@@ -275,3 +276,26 @@ def test_import_inline_depends_on_string_handled(runner, mock_client, tmp_path, 
     assert len(links) == 1
     assert links[0]["source_ref"] == "task-1.2"
     assert links[0]["target_ref"] == "task-1.1"
+
+
+def test_import_with_workplan_infers_project_from_api(runner, mock_client, successful_import_response):
+    """When --workplan is given but --project is not, project should be inferred from workplan."""
+    mock_client.get.return_value = {"project": "prj-from-workplan", "id": "wp-existing", "name": "WP"}
+    mock_client.post.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(FIXTURES_DIR), "--workplan", "wp-existing"])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    assert payload.get("project_id") == "prj-from-workplan"
+    assert "project" not in payload  # should NOT create a new project
+
+
+def test_import_with_workplan_and_project_uses_explicit_project(runner, mock_client, successful_import_response):
+    """When both --workplan and --project are given, use the explicit project."""
+    mock_client.post.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(FIXTURES_DIR), "--workplan", "wp-existing", "--project", "prj-explicit"])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    assert payload.get("project_id") == "prj-explicit"
+    mock_client.get.assert_not_called()  # should NOT look up workplan
