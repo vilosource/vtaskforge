@@ -77,6 +77,14 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
         }
         milestone_tasks.append(task_entry)
 
+    if not milestone_tasks:
+        if not tasks_dir.exists():
+            click.echo(f"Error: no tasks/ directory found in {milestone_path}", err=True)
+        else:
+            click.echo(f"Error: no valid task YAML files found in {tasks_dir}", err=True)
+        click.echo("Hint: task files should be in <milestone>/tasks/*.yaml with 'id' and 'name' fields", err=True)
+        raise SystemExit(1)
+
     # Build dependency links
     # dag.yaml is authoritative when present; fall back to inline depends_on
     links = []

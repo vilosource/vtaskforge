@@ -159,16 +159,23 @@ def test_import_api_error_prints_message_and_exits_1(runner, mock_client):
     assert "Import failed" in result.output or "Import failed" in (result.output + (result.stderr or ""))
 
 
-def test_import_missing_tasks_dir_handled_gracefully(runner, mock_client, tmp_path):
-    """Milestone directory with no tasks/ dir produces empty tasks list."""
+def test_import_missing_tasks_dir_exits_with_error(runner, mock_client, tmp_path):
+    """Milestone directory with no tasks/ dir should fail with helpful error."""
     (tmp_path / "MILESTONE.md").write_text("# Empty Milestone\n")
-    mock_client.post.return_value = {"ref_map": {"workplan": "wp-empty"}}
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["import", str(tmp_path)])
-    assert result.exit_code == 0, result.output
-    payload = mock_client.post.call_args[0][1]
-    assert payload["milestones"][0]["tasks"] == []
-    assert payload["links"] == []
+    assert result.exit_code == 1
+    mock_client.post.assert_not_called()
+
+
+def test_import_empty_tasks_dir_exits_with_error(runner, mock_client, tmp_path):
+    """Milestone directory with empty tasks/ dir should fail with helpful error."""
+    (tmp_path / "MILESTONE.md").write_text("# Empty Milestone\n")
+    (tmp_path / "tasks").mkdir()
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(tmp_path)])
+    assert result.exit_code == 1
+    mock_client.post.assert_not_called()
 
 
 # --- --workplan option ---
