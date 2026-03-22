@@ -669,3 +669,246 @@ def test_bulk_import_task_count_includes_backlog_tasks(api_client):
     data = response.json()
     assert data["created"]["milestones"] == 1
     assert data["created"]["tasks"] == 5  # 2 milestone + 3 backlog
+
+
+# ---------------------------------------------------------------------------
+# Re-import tests (milestone deduplication)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_bulk_import_reuses_existing_milestone_on_reimport(api_client):
+    """When re-importing with workplan_id, existing milestones should be reused."""
+    from tests.factories import ProjectFactory, WorkplanFactory
+    project = ProjectFactory()
+    workplan = WorkplanFactory(project=project)
+
+    # First import: create milestone
+    payload = {
+        "project_id": project.id,
+        "workplan_id": workplan.id,
+        "milestones": [
+            {
+                "ref": "phase-1",
+                "name": "Core Features",
+                "description": "Initial description",
+                "tasks": [{"ref": "task-1", "title": "Task One"}],
+            }
+        ],
+        "links": [],
+    }
+    response1 = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
+    assert response1.status_code == 201
+    ref_map1 = response1.json()["ref_map"]
+    milestone_id = ref_map1["phase-1"]
+
+    # Verify milestone was created
+    milestone = Milestone.objects.get(id=milestone_id)
+    assert milestone.name == "Core Features"
+    assert milestone.description == "Initial description"
+
+    # Second import: same milestone name should reuse existing
+    payload["milestones"][0]["description"] = "Updated description"
+    payload["milestones"][0]["tasks"] = [{"ref": "task-2", "title": "Task Two"}]
+
+    response2 = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
+    assert response2.status_code == 201
+    ref_map2 = response2.json()["ref_map"]
+
+    # Same milestone ID should be returned
+    assert ref_map2["phase-1"] == milestone_id
+
+    # Milestone should have updated description
+    milestone.refresh_from_db()
+    assert milestone.name == "Core Features"
+    assert milestone.description == "Updated description"
+
+    # Both tasks should exist under the same milestone
+    task1 = Task.objects.get(id=ref_map1["task-1"])
+    task2 = Task.objects.get(id=ref_map2["task-2"])
+    assert task1.milestone_id == milestone_id
+    assert task2.milestone_id == milestone_id
+
+
+@pytest.mark.django_db
+def test_bulk_import_creates_new_milestone_when_name_differs(api_client):
+    """When re-importing with different milestone name, new milestone should be created."""
+    from tests.factories import ProjectFactory, WorkplanFactory
+    project = ProjectFactory()
+    workplan = WorkplanFactory(project=project)
+
+    # First import
+    payload1 = {
+        "project_id": project.id,
+        "workplan_id": workplan.id,
+        "milestones": [
+            {"ref": "phase-1", "name": "Phase One", "tasks": [{"ref": "task-1", "title": "Task One"}]}
+        ],
+        "links": [],
+    }
+    response1 = api_client.post(BULK_IMPORT_URL, data=payload1, format="json")
+    assert response1.status_code == 201
+    milestone1_id = response1.json()["ref_map"]["phase-1"]
+
+    # Second import with different milestone name
+    payload2 = {
+        "project_id": project.id,
+        "workplan_id": workplan.id,
+        "milestones": [
+            {"ref": "phase-2", "name": "Phase Two", "tasks": [{"ref": "task-2", "title": "Task Two"}]}
+        ],
+        "links": [],
+    }
+    response2 = api_client.post(BULK_IMPORT_URL, data=payload2, format="json")
+    assert response2.status_code == 201
+    milestone2_id = response2.json()["ref_map"]["phase-2"]
+
+    # Should be different milestone IDs
+    assert milestone1_id != milestone2_id
+
+    # Both milestones should exist
+    assert Milestone.objects.filter(id=milestone1_id, name="Phase One").exists()
+    assert Milestone.objects.filter(id=milestone2_id, name="Phase Two").exists()
+
+
+@pytest.mark.django_db
+def test_bulk_import_new_workplan_always_creates_new_milestones(api_client):
+    """When creating new workplan, milestones are always created even if names match existing."""
+    from tests.factories import ProjectFactory
+    project = ProjectFactory()
+
+    # First workplan
+    payload1 = {
+        "project_id": project.id,
+        "workplan": {"name": "Workplan One"},
+        "milestones": [
+            {"ref": "phase-1", "name": "Shared Name", "tasks": [{"ref": "task-1", "title": "Task One"}]}
+        ],
+        "links": [],
+    }
+    response1 = api_client.post(BULK_IMPORT_URL, data=payload1, format="json")
+    assert response1.status_code == 201
+    milestone1_id = response1.json()["ref_map"]["phase-1"]
+    workplan1_id = response1.json()["ref_map"]["workplan"]
+
+    # Second workplan with same milestone name
+    payload2 = {
+        "project_id": project.id,
+        "workplan": {"name": "Workplan Two"},
+        "milestones": [
+            {"ref": "phase-2", "name": "Shared Name", "tasks": [{"ref": "task-2", "title": "Task Two"}]}
+        ],
+        "links": [],
+    }
+    response2 = api_client.post(BULK_IMPORT_URL, data=payload2, format="json")
+    assert response2.status_code == 201
+    milestone2_id = response2.json()["ref_map"]["phase-2"]
+    workplan2_id = response2.json()["ref_map"]["workplan"]
+
+    # Different workplans and milestones should be created
+    assert workplan1_id != workplan2_id
+    assert milestone1_id != milestone2_id
+
+    # Both milestones should exist in different workplans
+    milestone1 = Milestone.objects.get(id=milestone1_id)
+    milestone2 = Milestone.objects.get(id=milestone2_id)
+    assert milestone1.workplan_id == workplan1_id
+    assert milestone2.workplan_id == workplan2_id
+    assert milestone1.name == "Shared Name"
+    assert milestone2.name == "Shared Name"
+
+
+@pytest.mark.django_db
+def test_bulk_import_preserves_existing_tasks_on_reimport(api_client):
+    """Re-importing should add new tasks alongside existing ones, not replace them."""
+    from tests.factories import ProjectFactory, WorkplanFactory
+    project = ProjectFactory()
+    workplan = WorkplanFactory(project=project)
+
+    # First import with one task
+    payload1 = {
+        "project_id": project.id,
+        "workplan_id": workplan.id,
+        "milestones": [
+            {
+                "ref": "phase-1",
+                "name": "Development",
+                "tasks": [{"ref": "task-1", "title": "Initial Task"}]
+            }
+        ],
+        "links": [],
+    }
+    response1 = api_client.post(BULK_IMPORT_URL, data=payload1, format="json")
+    assert response1.status_code == 201
+    milestone_id = response1.json()["ref_map"]["phase-1"]
+    task1_id = response1.json()["ref_map"]["task-1"]
+
+    # Second import with different task
+    payload2 = {
+        "project_id": project.id,
+        "workplan_id": workplan.id,
+        "milestones": [
+            {
+                "ref": "phase-1",
+                "name": "Development",
+                "tasks": [{"ref": "task-2", "title": "Additional Task"}]
+            }
+        ],
+        "links": [],
+    }
+    response2 = api_client.post(BULK_IMPORT_URL, data=payload2, format="json")
+    assert response2.status_code == 201
+    task2_id = response2.json()["ref_map"]["task-2"]
+
+    # Both tasks should exist under the same milestone
+    task1 = Task.objects.get(id=task1_id)
+    task2 = Task.objects.get(id=task2_id)
+    assert task1.milestone_id == milestone_id
+    assert task2.milestone_id == milestone_id
+    assert task1.title == "Initial Task"
+    assert task2.title == "Additional Task"
+
+    # Milestone should have 2 tasks total
+    assert Task.objects.filter(milestone_id=milestone_id).count() == 2
+
+
+@pytest.mark.django_db
+def test_bulk_import_updates_milestone_description_on_reimport(api_client):
+    """Re-importing should update milestone description if provided."""
+    from tests.factories import ProjectFactory, WorkplanFactory
+    project = ProjectFactory()
+    workplan = WorkplanFactory(project=project)
+
+    # First import with description
+    payload = {
+        "project_id": project.id,
+        "workplan_id": workplan.id,
+        "milestones": [
+            {"ref": "phase-1", "name": "Feature Set", "description": "Original description"}
+        ],
+        "links": [],
+    }
+    response1 = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
+    assert response1.status_code == 201
+    milestone_id = response1.json()["ref_map"]["phase-1"]
+
+    # Verify original description
+    milestone = Milestone.objects.get(id=milestone_id)
+    assert milestone.description == "Original description"
+
+    # Re-import with updated description
+    payload["milestones"][0]["description"] = "Updated description"
+    response2 = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
+    assert response2.status_code == 201
+
+    # Description should be updated
+    milestone.refresh_from_db()
+    assert milestone.description == "Updated description"
+
+    # Re-import without description (empty string)
+    payload["milestones"][0]["description"] = ""
+    response3 = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
+    assert response3.status_code == 201
+
+    # Description should remain unchanged when empty string provided
+    milestone.refresh_from_db()
+    assert milestone.description == "Updated description"

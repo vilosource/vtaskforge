@@ -75,14 +75,35 @@ def perform_bulk_import(payload):
         ref_map["workplan"] = workplan.id
         ref_type_map["workplan"] = "workplan"
 
-        # 4. Create milestones and their nested tasks
+        # 4. Create or get existing milestones and their nested tasks
         for milestone_data in payload.get("milestones", []):
             ref = milestone_data["ref"]
-            milestone = Milestone.objects.create(
-                workplan=workplan,
-                name=milestone_data["name"],
-                description=milestone_data.get("description", ""),
-            )
+            milestone_name = milestone_data["name"]
+            milestone_description = milestone_data.get("description", "")
+
+            # If workplan_id was provided (existing workplan), check for existing milestone
+            if workplan_id:
+                try:
+                    milestone = Milestone.objects.get(workplan=workplan, name=milestone_name)
+                    # Update description if provided
+                    if milestone_description:
+                        milestone.description = milestone_description
+                        milestone.save()
+                except Milestone.DoesNotExist:
+                    # Milestone doesn't exist, create it
+                    milestone = Milestone.objects.create(
+                        workplan=workplan,
+                        name=milestone_name,
+                        description=milestone_description,
+                    )
+            else:
+                # New workplan, always create new milestone
+                milestone = Milestone.objects.create(
+                    workplan=workplan,
+                    name=milestone_name,
+                    description=milestone_description,
+                )
+
             ref_map[ref] = milestone.id
             ref_type_map[ref] = "milestone"
 
