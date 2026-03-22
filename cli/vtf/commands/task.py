@@ -282,3 +282,45 @@ def reset(ctx, id, target_status, reason):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Reset task {id}: {result.get('status', target_status)} (reason: {reason})")
+
+
+@task.command()
+@click.argument("id")
+@click.option("--reason", default="", help="Optional comment for approval")
+@click.pass_context
+def approve(ctx, id, reason):
+    """Approve a task (shortcut for review --decision approved)."""
+    client = ctx.obj["client"]
+    data = {
+        "decision": "approved",
+        "reason": reason,
+        "reviewer_id": "cli-user",
+        "reviewer_type": "human",
+    }
+    try:
+        result = client.post(f"/v1/tasks/{id}/reviews/", data)
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Approved task {id}: decision={result['decision']}")
+
+
+@task.command()
+@click.argument("id")
+@click.option("--reason", required=True, help="Reason for rejection (required)")
+@click.pass_context
+def reject(ctx, id, reason):
+    """Reject a task (shortcut for review --decision changes_requested)."""
+    client = ctx.obj["client"]
+    data = {
+        "decision": "changes_requested",
+        "reason": reason,
+        "reviewer_id": "cli-user",
+        "reviewer_type": "human",
+    }
+    try:
+        result = client.post(f"/v1/tasks/{id}/reviews/", data)
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Rejected task {id}: decision={result['decision']}")

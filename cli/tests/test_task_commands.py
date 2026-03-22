@@ -508,3 +508,69 @@ def test_task_reset_api_error(runner, mock_client):
         )
     assert result.exit_code == 1
     assert "Error" in result.output or "Error" in (result.output + (result.stderr or ""))
+
+
+# --- approve ---
+
+def test_task_approve_success(runner, mock_client):
+    mock_client.post.return_value = {"decision": "approved"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "approve", "task-abc"])
+    assert result.exit_code == 0
+    assert "Approved task task-abc" in result.output
+    assert "approved" in result.output
+    mock_client.post.assert_called_once_with(
+        "/v1/tasks/task-abc/reviews/",
+        {"decision": "approved", "reason": "", "reviewer_id": "cli-user", "reviewer_type": "human"},
+    )
+
+
+def test_task_approve_with_reason(runner, mock_client):
+    mock_client.post.return_value = {"decision": "approved"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "approve", "task-abc", "--reason", "looks good"])
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["reason"] == "looks good"
+
+
+def test_task_approve_api_error_404(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "approve", "nonexistent"])
+    assert result.exit_code == 1
+
+
+def test_task_approve_api_error_invalid_state(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Task not in review state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "approve", "task-abc"])
+    assert result.exit_code == 1
+
+
+# --- reject ---
+
+def test_task_reject_success(runner, mock_client):
+    mock_client.post.return_value = {"decision": "changes_requested"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "reject", "task-abc", "--reason", "needs rework"])
+    assert result.exit_code == 0
+    assert "Rejected task task-abc" in result.output
+    assert "changes_requested" in result.output
+    mock_client.post.assert_called_once_with(
+        "/v1/tasks/task-abc/reviews/",
+        {"decision": "changes_requested", "reason": "needs rework", "reviewer_id": "cli-user", "reviewer_type": "human"},
+    )
+
+
+def test_task_reject_missing_reason(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "reject", "task-abc"])
+    assert result.exit_code != 0
+
+
+def test_task_reject_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Invalid state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "reject", "task-abc", "--reason", "bad"])
+    assert result.exit_code == 1
