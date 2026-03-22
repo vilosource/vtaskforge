@@ -209,3 +209,62 @@ def test_import_help(runner):
     assert "milestone" in result.output.lower() or "import" in result.output.lower()
     assert "--dry-run" in result.output
     assert "--workplan" in result.output
+
+
+# --- inline depends_on fallback ---
+
+def test_import_inline_depends_on_when_no_dag(runner, mock_client, tmp_path, successful_import_response):
+    """When dag.yaml is absent, depends_on from task specs should produce links."""
+    mock_client.post.return_value = successful_import_response
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "1.1-first.yaml").write_text(
+        'id: "1.1"\nname: "First task"\ndepends_on: []\ndescription: ""\nacceptance_criteria: []\n'
+    )
+    (tasks_dir / "1.2-second.yaml").write_text(
+        'id: "1.2"\nname: "Second task"\ndepends_on: ["1.1"]\ndescription: ""\nacceptance_criteria: []\n'
+    )
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    links = payload.get("links", [])
+    assert len(links) == 1
+    assert links[0]["source_ref"] == "task-1.2"
+    assert links[0]["target_ref"] == "task-1.1"
+    assert links[0]["type"] == "depends_on"
+
+
+def test_import_dag_yaml_takes_precedence_over_inline(runner, mock_client, successful_import_response):
+    """When dag.yaml exists, inline depends_on should be ignored."""
+    mock_client.post.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(FIXTURES_DIR)])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    links = payload.get("links", [])
+    # dag.yaml has 1.2 depends on 1.1 — should use that, not inline
+    assert len(links) == 1
+    assert links[0]["source_ref"] == "task-1.2"
+    assert links[0]["target_ref"] == "task-1.1"
+
+
+def test_import_inline_depends_on_string_handled(runner, mock_client, tmp_path, successful_import_response):
+    """Inline depends_on as a single string (not list) should still work."""
+    mock_client.post.return_value = successful_import_response
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "1.1-first.yaml").write_text(
+        'id: "1.1"\nname: "First task"\ndescription: ""\nacceptance_criteria: []\n'
+    )
+    (tasks_dir / "1.2-second.yaml").write_text(
+        'id: "1.2"\nname: "Second task"\ndepends_on: "1.1"\ndescription: ""\nacceptance_criteria: []\n'
+    )
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.post.call_args[0][1]
+    links = payload.get("links", [])
+    assert len(links) == 1
+    assert links[0]["source_ref"] == "task-1.2"
+    assert links[0]["target_ref"] == "task-1.1"

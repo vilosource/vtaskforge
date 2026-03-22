@@ -77,18 +77,38 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
         }
         milestone_tasks.append(task_entry)
 
-    # Build dependency links from dag.yaml (dag is authoritative)
+    # Build dependency links
+    # dag.yaml is authoritative when present; fall back to inline depends_on
     links = []
-    for task_id, dep_ids in dag_deps.items():
-        if task_id not in task_refs:
-            continue
-        for dep_id in dep_ids:
-            if dep_id in task_refs:
-                links.append({
-                    "source_ref": task_refs[task_id],
-                    "target_ref": task_refs[dep_id],
-                    "type": "depends_on",
-                })
+    if dag_deps:
+        # Use dag.yaml dependencies
+        for task_id, dep_ids in dag_deps.items():
+            if task_id not in task_refs:
+                continue
+            for dep_id in dep_ids:
+                if dep_id in task_refs:
+                    links.append({
+                        "source_ref": task_refs[task_id],
+                        "target_ref": task_refs[dep_id],
+                        "type": "depends_on",
+                    })
+    else:
+        # Fall back to inline depends_on from task specs
+        for spec in task_specs:
+            task_id = str(spec["id"])
+            if task_id not in task_refs:
+                continue
+            inline_deps = spec.get("depends_on", [])
+            if isinstance(inline_deps, str):
+                inline_deps = [inline_deps]
+            for dep_id in inline_deps:
+                dep_id = str(dep_id)
+                if dep_id in task_refs:
+                    links.append({
+                        "source_ref": task_refs[task_id],
+                        "target_ref": task_refs[dep_id],
+                        "type": "depends_on",
+                    })
 
     # Build bulk import payload
     payload = {
