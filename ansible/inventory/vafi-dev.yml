@@ -1,0 +1,12 @@
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+  vars:
+    vtf_repo_dir: "{{ lookup('env', 'HOME') }}/GitHub/vtaskforge"
+    kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/vafi-dev.yaml"
+    registry: "192.168.2.90:30500"
+    image_name: vtf
+    image_tag: latest
+    k8s_namespace: vafi-system
+    kustomize_overlay: vafi-dev

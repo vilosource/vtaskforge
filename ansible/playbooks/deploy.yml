@@ -1,0 +1,116 @@
+---
+# Deploy vtaskforge to k8s
+#
+# Usage:
+#   cd ~/GitHub/vtaskforge
+#   ansible-playbook ansible/playbooks/deploy.yml -i ansible/inventory/vafi-dev.yml
+#
+- name: Deploy vtaskforge to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    full_image: "{{ registry }}/{{ image_name }}:{{ image_tag }}"
+
+  tasks:
+    - name: Build vtf Docker image
+      community.docker.docker_image:
+        name: "{{ full_image }}"
+        source: build
+        build:
+          path: "{{ vtf_repo_dir }}"
+          dockerfile: Dockerfile.prod
+        force_source: true
+
+    - name: Push image to registry
+      community.docker.docker_image:
+        name: "{{ full_image }}"
+        push: true
+        source: local
+
+    - name: Delete previous migration job (if exists)
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: absent
+        kind: Job
+        namespace: "{{ k8s_namespace }}"
+        name: vtf-migrate
+      ignore_errors: true
+
+    - name: Apply kustomize overlay
+      ansible.builtin.command:
+        cmd: kubectl apply -k k8s/overlays/{{ kustomize_overlay }}
+        chdir: "{{ vtf_repo_dir }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Wait for postgres to be ready
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: StatefulSet
+        namespace: "{{ k8s_namespace }}"
+        name: vtf-db
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 120
+      ignore_errors: true
+
+    - name: Wait for postgres pod readiness
+      ansible.builtin.command:
+        cmd: kubectl -n {{ k8s_namespace }} wait --for=condition=ready pod -l app=vtf-db --timeout=120s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Run migration job
+      ansible.builtin.command:
+        cmd: kubectl apply -k k8s/overlays/{{ kustomize_overlay }}
+        chdir: "{{ vtf_repo_dir }}"
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Wait for migration job to complete
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Job
+        namespace: "{{ k8s_namespace }}"
+        name: vtf-migrate
+        wait: true
+        wait_condition:
+          type: Complete
+          status: "True"
+        wait_timeout: 120
+
+    - name: Wait for vtf-api deployment to be ready
+      ansible.builtin.command:
+        cmd: kubectl -n {{ k8s_namespace }} rollout status deployment/vtf-api --timeout=120s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Verify API is responding
+      ansible.builtin.command:
+        cmd: >
+          kubectl -n {{ k8s_namespace }} exec
+          deployment/vtf-api -- curl -sf http://localhost:8000/v1/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: api_check
+
+    - name: Show deployment status
+      ansible.builtin.command:
+        cmd: kubectl -n {{ k8s_namespace }} get pods -o wide
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+      register: pod_status
+
+    - name: Display pod status
+      ansible.builtin.debug:
+        var: pod_status.stdout_lines

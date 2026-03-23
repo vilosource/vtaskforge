@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vtf-migrate
+  annotations:
+    description: "Run Django migrations and create superuser"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: vtf:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cd /app/src
+              python manage.py migrate --noinput
+              python manage.py shell -c "
+              from django.contrib.auth import get_user_model
+              User = get_user_model()
+              if not User.objects.filter(username='admin').exists():
+                  User.objects.create_superuser('admin', '', 'admin')
+                  print('Superuser created')
+              else:
+                  print('Superuser already exists')
+              "
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: vtaskforge.settings.prod
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vtf-secrets
+                  key: DATABASE_URL
+            - name: CELERY_BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vtf-secrets
+                  key: CELERY_BROKER_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vtf-secrets
+                  key: SECRET_KEY

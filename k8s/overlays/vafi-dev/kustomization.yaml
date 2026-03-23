@@ -10,7 +10,7 @@ resources:
 
 images:
   - name: vtf
-    newName: harbor.dev.viloforge.com/vafi/vtf
+    newName: harbor.viloforge.com/vafi/vtf
     newTag: latest
 
 patches:
