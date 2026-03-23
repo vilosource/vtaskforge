@@ -9,4 +9,4 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     - vtf.viloforge.com
-    - vtf-dev.viloforge.com
+    - vtf.dev.viloforge.com

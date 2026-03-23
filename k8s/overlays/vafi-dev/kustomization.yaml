@@ -24,7 +24,7 @@ patches:
         value: 1
       - op: replace
         path: /spec/template/spec/containers/0/env/4/value
-        value: "localhost,127.0.0.1,vtf-api,vtf-api.vafi-system,vtf-api.vafi-system.svc.cluster.local,vtf.viloforge.com,vtf-dev.viloforge.com"
+        value: "localhost,127.0.0.1,vtf-api,vtf-api.vafi-system,vtf-api.vafi-system.svc.cluster.local,vtf.viloforge.com,vtf.dev.viloforge.com"
   - target:
       kind: StatefulSet
       name: vtf-db

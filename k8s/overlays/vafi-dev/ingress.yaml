@@ -9,7 +9,7 @@ spec:
   tls:
     - hosts:
         - vtf.viloforge.com
-        - vtf-dev.viloforge.com
+        - vtf.dev.viloforge.com
       secretName: vtf-tls
   rules:
     - host: vtf.viloforge.com
@@ -22,7 +22,7 @@ spec:
                 name: vtf-api
                 port:
                   number: 8000
-    - host: vtf-dev.viloforge.com
+    - host: vtf.dev.viloforge.com
       http:
         paths:
           - path: /
