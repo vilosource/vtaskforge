@@ -56,6 +56,34 @@ Spawning an explore agent to research the actual MCP SDK API before writing spec
 2. **Include the SPECIFICATION.md response examples in task specs** — don't make the executor discover the format by reading a separate doc; include the relevant section inline
 3. **Run CLI tests in every task** — Phase 1 specs included `test_command.cli` which Phase 0 didn't. Maintain this.
 4. **Consider end-to-end MCP test** — Phase 1 tests call tool functions directly. Phase 2 should include at least one test that connects via MCP protocol to verify the full stack.
+5. **Restructure test execution to reduce redundancy and token cost** — see below.
+
+### Test Execution Restructure
+
+**Problem:** In Phase 0+1, both executor and judge ran the full test suite per task. This is redundant (same tests, same machine, same result) and wasteful (full suite output consumes agent context tokens, reducing reasoning capacity).
+
+**Observation:** Across 11 tasks, the judge's full suite results always matched the executor's. Zero discrepancies. The redundancy provided no additional safety in practice.
+
+**New model for Phase 2+:**
+
+| When | Who | What | Why |
+|------|-----|------|-----|
+| Per task (TDD) | Executor | `test_command.unit` only | Fast feedback during development, small output, preserves context |
+| Per task (verify) | Judge | `test_command.unit` only + code review | Independently verify new tests pass, review design — no full suite |
+| Per milestone | Quality gate task | `test_command.full` + CLI tests | Complete regression check, run once, cheap |
+
+**Benefits:**
+- No agent ever sees 857+ lines of full test output in its context
+- Executor stays focused on code (lean context)
+- Judge stays focused on review (lean context)
+- Full regression check happens once per milestone, not 7+ times
+- Mirrors real-world CI/CD: affected tests per PR, full suite on merge
+
+**Risk mitigation:** If the quality gate fails, each task is a separate commit — `git bisect` identifies which task introduced the regression.
+
+**For vafi:** The controller runs the quality gate (full suite) once per milestone as an automated step. No agent tokens consumed. Agents only run task-specific tests.
+
+**Update required:** Executor and judge agent definitions need updating to reflect this. Executor Step 4 should reference `test_command.unit` only. Judge Step 2 should run `test_command.unit` (not full). Quality gate should be a task on the board at the end of each milestone.
 
 ## Metrics
 
