@@ -676,3 +676,32 @@ def test_task_review_custom_reviewer(runner, mock_client):
     call_data = mock_client.post.call_args[0][1]
     assert call_data["reviewer_id"] == "judge-agent"
     assert call_data["reviewer_type"] == "agent"
+
+
+# --- block ---
+
+def test_task_block_success(runner, mock_client):
+    mock_client.post.return_value = {"status": "blocked"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "block", "task-abc"])
+    assert result.exit_code == 0
+    assert "Blocked task task-abc" in result.output
+    assert "blocked" in result.output
+    mock_client.post.assert_called_once_with("/v1/tasks/task-abc/block/", None)
+
+
+def test_task_block_with_reason(runner, mock_client):
+    mock_client.post.return_value = {"status": "blocked"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "block", "task-abc", "--reason", "waiting on API"])
+    assert result.exit_code == 0
+    mock_client.post.assert_called_once_with(
+        "/v1/tasks/task-abc/block/", {"reason": "waiting on API"}
+    )
+
+
+def test_task_block_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(422, {"error": {"message": "Invalid state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "block", "task-abc"])
+    assert result.exit_code == 1

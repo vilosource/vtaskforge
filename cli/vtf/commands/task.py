@@ -324,3 +324,19 @@ def reject(ctx, id, reason):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Rejected task {id}: decision={result['decision']}")
+
+
+@task.command()
+@click.argument("id")
+@click.option("--reason", default="", help="Reason for blocking")
+@click.pass_context
+def block(ctx, id, reason):
+    """Block a task."""
+    client = ctx.obj["client"]
+    data = {"reason": reason} if reason else None
+    try:
+        result = client.post(f"/v1/tasks/{id}/block/", data)
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Blocked task {id} -> {result['status']}")
