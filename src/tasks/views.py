@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.db import transaction
 from django.utils import timezone
 from rest_framework import mixins, status
 from rest_framework.decorators import action
@@ -18,7 +17,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
-from .services import get_tasks_with_unresolved_deps, resolve_dependencies
+from .services import claim_task, ClaimError, get_tasks_with_unresolved_deps, resolve_dependencies
 from .state_machine import get_valid_transitions, perform_transition, NON_TERMINAL_STATUSES, TERMINAL_STATUSES
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
@@ -147,79 +146,26 @@ class TaskViewSet(ModelViewSet):
             )
         agent_tags = request.data.get("tags") if request.data.get("tags") is not None else agent.tags
 
-        with transaction.atomic():
-            try:
-                task = Task.objects.select_for_update().get(pk=pk)
-            except Task.DoesNotExist:
-                return Response(
-                    {"error": {"code": "NOT_FOUND", "message": "Task not found"}},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            # Status check
-            if task.status != "todo":
-                return Response(
-                    {
-                        "error": {
-                            "code": "ALREADY_CLAIMED",
-                            "message": "Task is not claimable",
-                            "details": {"current_status": task.status},
-                        }
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-
-            # Assignment check
-            if task.assigned_to and task.assigned_to != agent_id:
-                return Response(
-                    {"error": {"code": "FORBIDDEN", "message": "Task assigned to another agent"}},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            # Tag matching — task.requires must be subset of agent_tags
-            if task.requires:
-                if not set(task.requires).issubset(set(agent_tags)):
-                    return Response(
-                        {
-                            "error": {
-                                "code": "VALIDATION_ERROR",
-                                "message": "Agent tags do not match task requirements",
-                                "details": {
-                                    "requires": task.requires,
-                                    "agent_tags": agent_tags,
-                                },
-                            }
-                        },
-                        status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    )
-
-            # Dependency check — all depends_on links must have target tasks in "done" status
-            dep_result = resolve_dependencies(task.id)
-            if not dep_result["resolved"]:
-                first_unresolved = dep_result["unresolved"][0]
-                return Response(
-                    {
-                        "error": {
-                            "code": "DEPENDENCY_UNMET",
-                            "message": f"Dependency {first_unresolved['id']} not done",
-                            "details": {
-                                "dependency_id": first_unresolved["id"],
-                                "dependency_status": first_unresolved["status"],
-                            },
-                        }
-                    },
-                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                )
-
-            # All checks passed — perform claim
-            perform_transition(task, "doing", triggered_by=agent_id)
-            task.claimed_by = agent_id
-            task.claimed_at = timezone.now()
-            timeout = task.claim_timeout or timedelta(minutes=DEFAULT_CLAIM_TIMEOUT_MINUTES)
-            task.claim_expires_at = timezone.now() + timeout
-            task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
-
-            record_event(task, "claimed", data={"agent_id": agent_id}, triggered_by=agent_id)
+        try:
+            task = claim_task(pk, agent_id, agent_tags)
+        except Task.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Task not found"}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except ClaimError as exc:
+            # Map service-level codes to HTTP response error codes
+            code_map = {
+                "ALREADY_CLAIMED": "ALREADY_CLAIMED",
+                "FORBIDDEN": "FORBIDDEN",
+                "tag_mismatch": "VALIDATION_ERROR",
+                "deps_unmet": "DEPENDENCY_UNMET",
+            }
+            http_code = code_map.get(exc.code, exc.code)
+            body = {"error": {"code": http_code, "message": exc.message}}
+            if exc.details:
+                body["error"]["details"] = exc.details
+            return Response(body, status=exc.status_code)
 
         serializer = self.get_serializer(task)
         return Response(serializer.data)

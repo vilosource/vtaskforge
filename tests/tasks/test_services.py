@@ -1,11 +1,14 @@
 """
-Unit tests for tasks/services.py — dependency resolution logic.
+Unit tests for tasks/services.py — dependency resolution logic and claim_task().
 """
+import threading
+
 import pytest
 
+from events.models import TaskEvent
 from links.models import Link
-from tasks.services import get_tasks_with_unresolved_deps, resolve_dependencies
-from tests.factories import TaskFactory, MilestoneFactory, WorkplanFactory
+from tasks.services import ClaimError, claim_task, get_tasks_with_unresolved_deps, resolve_dependencies
+from tests.factories import AgentFactory, TaskFactory, MilestoneFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -167,3 +170,113 @@ class TestGetTasksWithUnresolvedDeps:
         result = get_tasks_with_unresolved_deps([task.id])
 
         assert task.id not in result
+
+
+# ---------------------------------------------------------------------------
+# claim_task() service function tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestClaimTaskSuccess:
+    def test_claim_task_success(self, db):
+        """Basic claim: task transitions to doing and is returned."""
+        agent = AgentFactory(tags=[])
+        task = TaskFactory(status="todo")
+        claimed = claim_task(task.id, agent.id, [])
+        assert claimed.status == "doing"
+
+    def test_claim_task_sets_claim_fields(self, db):
+        """claim_task sets claimed_by, claimed_at, and claim_expires_at."""
+        agent = AgentFactory(tags=[])
+        task = TaskFactory(status="todo")
+        claimed = claim_task(task.id, agent.id, [])
+        task.refresh_from_db()
+        assert task.claimed_by == agent.id
+        assert task.claimed_at is not None
+        assert task.claim_expires_at is not None
+        assert task.claim_expires_at > task.claimed_at
+
+
+@pytest.mark.django_db
+class TestClaimTaskErrors:
+    def test_claim_task_tag_mismatch_raises(self, db):
+        """ClaimError raised when agent tags do not satisfy task.requires."""
+        agent = AgentFactory(tags=["other"])
+        task = TaskFactory(status="todo", requires=["executor"])
+        with pytest.raises(ClaimError) as exc_info:
+            claim_task(task.id, agent.id, ["other"])
+        assert exc_info.value.code == "tag_mismatch"
+        assert exc_info.value.status_code == 422
+
+    def test_claim_task_wrong_status_raises(self, db):
+        """ClaimError raised when task is not in todo status."""
+        agent = AgentFactory(tags=[])
+        task = TaskFactory(status="doing")
+        with pytest.raises(ClaimError) as exc_info:
+            claim_task(task.id, agent.id, [])
+        assert exc_info.value.code == "ALREADY_CLAIMED"
+        assert exc_info.value.status_code == 409
+
+    def test_claim_task_assigned_to_other_raises(self, db):
+        """ClaimError raised when task is assigned to a different agent."""
+        agent = AgentFactory(tags=[])
+        other = AgentFactory(tags=[])
+        task = TaskFactory(status="todo", assigned_to=other.id)
+        with pytest.raises(ClaimError) as exc_info:
+            claim_task(task.id, agent.id, [])
+        assert exc_info.value.code == "FORBIDDEN"
+        assert exc_info.value.status_code == 403
+
+    def test_claim_task_unresolved_deps_raises(self, db):
+        """ClaimError raised when task has unresolved dependencies."""
+        agent = AgentFactory(tags=[])
+        dep = TaskFactory(status="todo")
+        task = TaskFactory(status="todo")
+        Link.objects.create(
+            source_type="task",
+            source_id=task.id,
+            target_type="task",
+            target_id=dep.id,
+            link_type="depends_on",
+        )
+        with pytest.raises(ClaimError) as exc_info:
+            claim_task(task.id, agent.id, [])
+        assert exc_info.value.code == "deps_unmet"
+        assert exc_info.value.status_code == 422
+
+
+@pytest.mark.django_db
+class TestClaimTaskEvent:
+    def test_claim_task_creates_event(self, db):
+        """claim_task creates a 'claimed' TaskEvent."""
+        agent = AgentFactory(tags=[])
+        task = TaskFactory(status="todo")
+        claim_task(task.id, agent.id, [])
+        assert TaskEvent.objects.filter(task=task, event_type="claimed").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestClaimTaskAtomic:
+    def test_claim_task_atomic(self):
+        """Concurrent calls to claim_task — exactly one succeeds, one raises ClaimError."""
+        agent_a = AgentFactory(tags=[])
+        agent_b = AgentFactory(tags=[])
+        task = TaskFactory(status="todo")
+        results = []
+
+        def do_claim(agent_id):
+            try:
+                claim_task(task.id, agent_id, [])
+                results.append("ok")
+            except ClaimError:
+                results.append("error")
+
+        t1 = threading.Thread(target=do_claim, args=(agent_a.id,))
+        t2 = threading.Thread(target=do_claim, args=(agent_b.id,))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        assert sorted(results) == ["error", "ok"]
