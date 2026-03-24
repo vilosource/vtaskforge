@@ -3,7 +3,7 @@ Tests for the expire_stale_claims Celery task.
 """
 import pytest
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import patch, call
 
 from django.utils import timezone
 
@@ -100,6 +100,33 @@ class TestExpireStaleClaims:
         task.refresh_from_db()
         assert task.status == "needs_attention"
         assert TaskEvent.objects.filter(task=task, event_type="claim_expired").count() == 1
+
+    def test_expire_creates_event_via_service(self):
+        """expire_stale_claims must use EventService (record_event) to create the claim_expired event."""
+        task = self._make_claimed_task(claimed_by="agent-99")
+        with patch("tasks.celery_tasks.record_event") as mock_record_event:
+            expire_stale_claims()
+        # record_event must be called with the claim_expired event type
+        calls = mock_record_event.call_args_list
+        claim_expired_calls = [
+            c for c in calls
+            if len(c.args) >= 2 and c.args[1] == "claim_expired"
+        ]
+        assert len(claim_expired_calls) == 1
+        _, kwargs = claim_expired_calls[0].args, claim_expired_calls[0].kwargs
+        assert claim_expired_calls[0].args[0].pk == task.pk
+        assert claim_expired_calls[0].kwargs.get("triggered_by") == "system"
+
+    def test_expire_uses_state_machine(self):
+        """expire_stale_claims must use perform_transition (not direct status assignment) for status changes."""
+        task = self._make_claimed_task()
+        with patch("tasks.celery_tasks.perform_transition") as mock_transition:
+            expire_stale_claims()
+        mock_transition.assert_called_once()
+        args = mock_transition.call_args
+        assert args.args[0].pk == task.pk
+        assert args.args[1] == "needs_attention"
+        assert args.kwargs.get("triggered_by") == "system"
 
     def test_expired_with_frozen_time(self):
         """Verify expiry logic using mocked timezone.now."""

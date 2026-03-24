@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from events.services import record_event
 from tasks.models import Task
+from tasks.state_machine import perform_transition
 
 
 @shared_task
@@ -26,12 +27,16 @@ def expire_stale_claims():
     for task in expired_tasks:
         previous_agent = task.claimed_by
 
-        task.status = "needs_attention"
+        # Clear claim fields separately from the status transition
         task.claimed_by = None
         task.claimed_at = None
         task.claim_expires_at = None
-        task.save(update_fields=["status", "claimed_by", "claimed_at", "claim_expires_at"])
+        task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at"])
 
+        # Use state machine for status transition
+        perform_transition(task, "needs_attention", triggered_by="system")
+
+        # Record the claim_expired event via EventService
         record_event(task, "claim_expired", data={"previous_agent": previous_agent}, triggered_by="system")
         count += 1
 
