@@ -98,6 +98,7 @@ The `isolation: "worktree"` parameter on the Agent tool did not create actual is
 2. **Track baseline in vtf** — store the current test count somewhere persistent so it doesn't need to be passed manually to each judge
 3. **Consider parallel execution** — P0.1 and P0.2 had no dependencies on each other and could have run simultaneously. Phase 1 may have similar opportunities.
 4. **Monitor for Docker image staleness** — P1.1 changes requirements.txt, requiring a Docker rebuild. The spec must include this step.
+5. **Include ALL test suites in task specs** — Phase 0 only ran backend tests (`docker compose exec api pytest`). CLI tests (`cd cli && pytest`) were not in `test_command.full`. They passed post-milestone but were never verified per-task. Future specs must include all suites, or the quality gate must run everything.
 
 ## Metrics
 

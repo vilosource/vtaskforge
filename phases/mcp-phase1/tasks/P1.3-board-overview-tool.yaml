@@ -1,0 +1,79 @@
+id: "P1.3"
+name: "Implement vtf_board_overview MCP tool (proof of concept)"
+depends_on: [P1.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Wire up the first MCP tool — vtf_board_overview — using the
+  get_board_summary() service function from P0.7. This proves the
+  full stack works: MCP server receives a tool call, calls a service
+  function, formats the response, and returns it. This is the proof
+  of concept for all subsequent tools.
+
+files:
+  create:
+    - src/mcp_server/tools/__init__.py
+    - src/mcp_server/tools/board.py
+    - tests/mcp_server/test_board_tool.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md and the existing MCP server code (server.py, responses.py)
+
+    Step 2: Read src/tasks/services.py get_board_summary() to understand the return shape
+
+    Step 3: Create src/mcp_server/tools/__init__.py (empty)
+
+    Step 4: Create src/mcp_server/tools/board.py
+    - Import get_board_summary from tasks.services
+    - Import success_response, error_response from mcp_server.responses
+    - Define the tool function that:
+      - Accepts optional project_id and workplan_id parameters
+      - Calls get_board_summary(project_id, workplan_id)
+      - Returns success_response(data=summary)
+    - Register the tool with the MCP server using @server.tool() decorator
+      or equivalent MCP SDK registration
+
+    Step 5: Modify src/mcp_server/server.py to import and register the board tool
+
+    Step 6: Create tests/mcp_server/test_board_tool.py
+    - test_board_overview_returns_counts — create tasks in various statuses, verify counts
+    - test_board_overview_includes_attention_items — create blocked/needs_attention tasks
+    - test_board_overview_includes_pending_reviews — create tasks in review status
+    - test_board_overview_includes_available_actions — verify actions are in response
+    - test_board_overview_with_project_filter — filter by project_id
+    - test_board_overview_empty_project — no tasks returns clean response
+
+    Step 7: Run all tests
+    - docker compose exec api pytest --tb=short
+    - cd cli && pytest --tb=short
+
+  constraints:
+    - The tool must call get_board_summary() from tasks.services — not query models directly
+    - Use the response envelope from responses.py
+    - Follow the MCP SDK's tool registration pattern
+    - The tool must be callable through the MCP protocol (not just as a Python function)
+
+  references:
+    - src/mcp_server/server.py
+    - src/mcp_server/responses.py
+    - src/tasks/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "src/mcp_server/tools/board.py exists with vtf_board_overview tool"
+  - "Tool calls get_board_summary() from services, not models directly"
+  - "Response uses success_response() envelope"
+  - "6 new tests pass"
+  - "All existing tests pass"
+  - "Tool is registered with the MCP server"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/ -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"

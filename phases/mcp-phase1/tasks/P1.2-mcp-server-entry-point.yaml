@@ -1,0 +1,86 @@
+id: "P1.2"
+name: "Create MCP server entry point with auth and response formatting"
+depends_on: [P1.1]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create the MCP server module with Django ORM integration, token-based
+  authentication, and shared response formatting. This is the infrastructure
+  that all MCP tools will build on. The server runs as a separate process
+  that bootstraps Django and exposes tools via the MCP protocol.
+
+files:
+  create:
+    - src/mcp_server/__init__.py
+    - src/mcp_server/server.py
+    - src/mcp_server/auth.py
+    - src/mcp_server/responses.py
+    - tests/mcp_server/__init__.py
+    - tests/mcp_server/test_server.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md and understand the project structure
+
+    Step 2: Create src/mcp_server/__init__.py (empty)
+
+    Step 3: Create src/mcp_server/server.py
+    - Bootstrap Django at module level:
+      import os, django
+      os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vtaskforge.settings.dev")
+      django.setup()
+    - Import and create MCP Server instance: from mcp.server import Server
+    - server = Server("vtf")
+    - The server will be the entry point for tool registration
+
+    Step 4: Create src/mcp_server/auth.py
+    - Token validation function that checks against Django's authtoken
+    - Read token from VTF_TOKEN environment variable
+    - Validate against rest_framework.authtoken.models.Token
+
+    Step 5: Create src/mcp_server/responses.py
+    - success_response(data, message="", available_actions=None) -> dict
+      Returns: {"success": True, "data": data, "message": message, "available_actions": available_actions or []}
+    - error_response(message, code="", details=None) -> dict
+      Returns: {"success": False, "error": {"code": code, "message": message, "details": details or {}}}
+    - These are the standard envelopes all MCP tools will use
+
+    Step 6: Create tests/mcp_server/__init__.py (empty)
+
+    Step 7: Create tests/mcp_server/test_server.py
+    - test_server_starts — Server("vtf") creates without error
+    - test_response_envelope_success — success_response() returns correct shape
+    - test_response_envelope_error — error_response() returns correct shape
+
+    Step 8: Run all tests
+    - docker compose exec api pytest --tb=short
+    - cd cli && pytest --tb=short
+
+  constraints:
+    - MCP server code lives in src/mcp_server/ — isolated from Django apps
+    - MCP tools must call services (from P0), never models or views directly
+    - Response formatting must be a single shared module (DRY)
+    - Do not register any tools yet — that's P1.3
+    - The server.py must work when run as: python -m mcp_server.server
+
+  references:
+    - requirements/base.txt
+    - src/vtaskforge/settings/base.py
+    - src/vtaskforge/urls.py
+
+acceptance_criteria:
+  - "src/mcp_server/server.py exists and creates a Server instance"
+  - "src/mcp_server/auth.py exists with token validation"
+  - "src/mcp_server/responses.py exists with success_response() and error_response()"
+  - "3 new tests pass"
+  - "All existing tests pass"
+  - "Response envelope matches spec format"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/ -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"

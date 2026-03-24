@@ -1,0 +1,64 @@
+id: "P1.1"
+name: "Add MCP SDK dependency and rebuild Docker image"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add the MCP Python SDK package to the project dependencies and rebuild
+  the Docker image. This is a prerequisite for all MCP server code.
+  The task includes the Docker rebuild because changing dependencies
+  requires a new image — this is an environment change that must be
+  part of the task, not a separate step.
+
+files:
+  create: []
+  modify:
+    - requirements/base.txt
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md to understand the project setup and Docker workflow
+
+    Step 2: Add the mcp package to requirements/base.txt
+    - Add: mcp
+    - Place it alphabetically with other dependencies
+
+    Step 3: Rebuild the Docker image
+    - docker compose build api
+    - This is required because requirements changed
+
+    Step 4: Restart services with new image
+    - docker compose up -d
+
+    Step 5: Verify the package is available
+    - docker compose exec api python -c "import mcp; print(mcp.__version__)"
+
+    Step 6: Run full test suite to verify no regressions
+    - docker compose exec api pytest --tb=short
+    - cd cli && pytest --tb=short
+
+    Step 7: Commit the requirements change (NOT the Docker image)
+
+  constraints:
+    - Only add the mcp package — do not add other dependencies
+    - Do not pin to a specific version unless there's a compatibility issue
+    - The Docker rebuild is part of this task — do not skip it
+    - All existing tests must pass after rebuild
+
+  references:
+    - requirements/base.txt
+    - CLAUDE.md
+
+acceptance_criteria:
+  - "mcp package listed in requirements/base.txt"
+  - "docker compose exec api python -c 'import mcp' succeeds"
+  - "All existing backend tests pass (857+)"
+  - "All CLI tests pass (206)"
+  - "Docker image rebuilt successfully"
+
+test_command:
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"
