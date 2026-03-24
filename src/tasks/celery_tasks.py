@@ -4,7 +4,7 @@ Celery periodic tasks for the tasks app.
 from celery import shared_task
 from django.utils import timezone
 
-from events.models import TaskEvent
+from events.services import record_event
 from tasks.models import Task
 
 
@@ -32,12 +32,7 @@ def expire_stale_claims():
         task.claim_expires_at = None
         task.save(update_fields=["status", "claimed_by", "claimed_at", "claim_expires_at"])
 
-        TaskEvent.objects.create(
-            task=task,
-            event_type="claim_expired",
-            data={"previous_agent": previous_agent},
-            triggered_by="system",
-        )
+        record_event(task, "claim_expired", data={"previous_agent": previous_agent}, triggered_by="system")
         count += 1
 
     return count

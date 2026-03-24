@@ -1,3 +1,4 @@
+from events.services import record_event
 from tasks.exceptions import InvalidTransition
 
 TERMINAL_STATUSES = {"done", "cancelled"}
@@ -86,16 +87,7 @@ def perform_transition(task, new_status: str, triggered_by: str = ""):
     old_status = task.status
     task.status = new_status
     task.save(update_fields=["status", "updated_at"])
-    try:
-        from events.models import TaskEvent
-        TaskEvent.objects.create(
-            task=task,
-            event_type="status_changed",
-            data={"from": old_status, "to": new_status},
-            triggered_by=triggered_by,
-        )
-    except Exception:
-        pass  # don't break transitions if event creation fails
+    record_event(task, "status_changed", data={"from": old_status, "to": new_status}, triggered_by=triggered_by)
 
     if new_status in TERMINAL_STATUSES:
         try:

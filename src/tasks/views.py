@@ -13,6 +13,7 @@ from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
 from projects.models import Project
 from workplans.models import Milestone
 
+from events.services import record_event
 from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
@@ -224,16 +225,7 @@ class TaskViewSet(ModelViewSet):
             task.claim_expires_at = timezone.now() + timeout
             task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
 
-            try:
-                from events.models import TaskEvent
-                TaskEvent.objects.create(
-                    task=task,
-                    event_type="claimed",
-                    data={"agent_id": agent_id},
-                    triggered_by=agent_id,
-                )
-            except Exception:
-                pass
+            record_event(task, "claimed", data={"agent_id": agent_id}, triggered_by=agent_id)
 
         serializer = self.get_serializer(task)
         return Response(serializer.data)
@@ -320,16 +312,12 @@ class TaskViewSet(ModelViewSet):
         task.claim_expires_at = None
         task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
 
-        try:
-            from events.models import TaskEvent
-            TaskEvent.objects.create(
-                task=task,
-                event_type="unclaimed",
-                data={"agent_id": previous_agent} if previous_agent else {},
-                triggered_by=previous_agent or "",
-            )
-        except Exception:
-            pass
+        record_event(
+            task,
+            "unclaimed",
+            data={"agent_id": previous_agent} if previous_agent else {},
+            triggered_by=previous_agent or "",
+        )
 
         serializer = self.get_serializer(task)
         return Response(serializer.data)
@@ -505,16 +493,12 @@ class TaskViewSet(ModelViewSet):
             update_fields += ["claimed_by", "claimed_at", "claim_expires_at"]
         task.save(update_fields=update_fields)
 
-        try:
-            from events.models import TaskEvent
-            TaskEvent.objects.create(
-                task=task,
-                event_type="force_transition",
-                data={"from": old_status, "to": target_status, "reason": reason},
-                triggered_by="admin",
-            )
-        except Exception:
-            pass
+        record_event(
+            task,
+            "force_transition",
+            data={"from": old_status, "to": target_status, "reason": reason},
+            triggered_by="admin",
+        )
 
         serializer = self.get_serializer(task)
         return Response(serializer.data)
