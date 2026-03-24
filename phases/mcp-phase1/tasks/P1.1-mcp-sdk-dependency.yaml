@@ -16,48 +16,54 @@ files:
   create: []
   modify:
     - requirements/base.txt
-  affected: []
+  affected:
+    - Dockerfile
 
 implementation:
   approach: |
     Step 1: Read CLAUDE.md to understand the project setup and Docker workflow
 
     Step 2: Add the mcp package to requirements/base.txt
-    - Add: mcp
+    - Package name on PyPI: mcp (version 1.26.0+)
     - Place it alphabetically with other dependencies
+    - Do not pin a specific version unless there's a compatibility issue
 
     Step 3: Rebuild the Docker image
     - docker compose build api
+    - If the build fails due to missing system dependencies, update the
+      Dockerfile to add them and document what was needed
     - This is required because requirements changed
 
     Step 4: Restart services with new image
     - docker compose up -d
 
     Step 5: Verify the package is available
-    - docker compose exec api python -c "import mcp; print(mcp.__version__)"
+    - docker compose exec api python -c "import mcp; print('mcp OK')"
+    - docker compose exec api python -c "from mcp.server.fastmcp import FastMCP; print('FastMCP OK')"
 
     Step 6: Run full test suite to verify no regressions
     - docker compose exec api pytest --tb=short
     - cd cli && pytest --tb=short
 
-    Step 7: Commit the requirements change (NOT the Docker image)
+    Step 7: Commit the requirements change (and Dockerfile if modified)
 
   constraints:
     - Only add the mcp package — do not add other dependencies
-    - Do not pin to a specific version unless there's a compatibility issue
     - The Docker rebuild is part of this task — do not skip it
     - All existing tests must pass after rebuild
+    - If Dockerfile changes are needed, keep them minimal
 
   references:
     - requirements/base.txt
+    - Dockerfile
     - CLAUDE.md
 
 acceptance_criteria:
   - "mcp package listed in requirements/base.txt"
-  - "docker compose exec api python -c 'import mcp' succeeds"
+  - "docker compose build api succeeds"
+  - "docker compose exec api python -c 'from mcp.server.fastmcp import FastMCP' succeeds"
   - "All existing backend tests pass (857+)"
   - "All CLI tests pass (206)"
-  - "Docker image rebuilt successfully"
 
 test_command:
   full: "docker compose exec api pytest --tb=short"

@@ -8,7 +8,7 @@ judge: true
 description: |
   Wire up the first MCP tool — vtf_board_overview — using the
   get_board_summary() service function from P0.7. This proves the
-  full stack works: MCP server receives a tool call, calls a service
+  full stack works: FastMCP server receives a tool call, calls a service
   function, formats the response, and returns it. This is the proof
   of concept for all subsequent tools.
 
@@ -25,39 +25,62 @@ implementation:
   approach: |
     Step 1: Read CLAUDE.md and the existing MCP server code (server.py, responses.py)
 
-    Step 2: Read src/tasks/services.py get_board_summary() to understand the return shape
+    Step 2: Read the specification for vtf_board_overview
+    - docs/vtf-mcp-server-SPECIFICATION.md — find the board_overview tool definition
 
-    Step 3: Create src/mcp_server/tools/__init__.py (empty)
+    Step 3: Read src/tasks/services.py get_board_summary() to understand the return shape
 
-    Step 4: Create src/mcp_server/tools/board.py
+    Step 4: Create src/mcp_server/tools/__init__.py (empty)
+
+    Step 5: Create src/mcp_server/tools/board.py
     - Import get_board_summary from tasks.services
-    - Import success_response, error_response from mcp_server.responses
-    - Define the tool function that:
-      - Accepts optional project_id and workplan_id parameters
-      - Calls get_board_summary(project_id, workplan_id)
-      - Returns success_response(data=summary)
-    - Register the tool with the MCP server using @server.tool() decorator
-      or equivalent MCP SDK registration
+    - Import success_response from mcp_server.responses
+    - Import the mcp FastMCP instance from mcp_server.server
+    - Define the tool using @mcp.tool() decorator:
 
-    Step 5: Modify src/mcp_server/server.py to import and register the board tool
+      @mcp.tool()
+      def vtf_board_overview(project_id: str = "", workplan_id: str = "") -> str:
+          """Get board state summary: task counts by status, attention items,
+          pending reviews, and active agents."""
+          summary = get_board_summary(
+              project_id=project_id or None,
+              workplan_id=workplan_id or None,
+          )
+          return json.dumps(success_response(data=summary))
 
-    Step 6: Create tests/mcp_server/test_board_tool.py
+    - FastMCP tools return strings (auto-converted to TextContent)
+    - Empty string params should be converted to None for the service
+
+    Step 6: Modify src/mcp_server/server.py to import the board tool module
+    - Add: import mcp_server.tools.board  (at the bottom, after mcp is created)
+    - This triggers the @mcp.tool() registration
+
+    Step 7: Create tests/mcp_server/test_board_tool.py
+    - Tests call the tool function directly with @pytest.mark.django_db
     - test_board_overview_returns_counts — create tasks in various statuses, verify counts
-    - test_board_overview_includes_attention_items — create blocked/needs_attention tasks
-    - test_board_overview_includes_pending_reviews — create tasks in review status
-    - test_board_overview_includes_available_actions — verify actions are in response
-    - test_board_overview_with_project_filter — filter by project_id
-    - test_board_overview_empty_project — no tasks returns clean response
+    - test_board_overview_includes_attention_items — create blocked/needs_attention tasks,
+      verify they appear in attention_items
+    - test_board_overview_includes_pending_reviews — create tasks in review status,
+      verify they appear in pending_reviews
+    - test_board_overview_with_project_filter — create tasks in two projects,
+      filter by one, verify only that project's tasks appear
+    - test_board_overview_empty_project — project with no tasks returns clean response
+      with zero counts
+    - test_board_overview_response_envelope — verify response has success=True,
+      data key, and matches SPECIFICATION.md format
 
-    Step 7: Run all tests
+    Step 8: Run all tests
     - docker compose exec api pytest --tb=short
     - cd cli && pytest --tb=short
 
   constraints:
     - The tool must call get_board_summary() from tasks.services — not query models directly
-    - Use the response envelope from responses.py
-    - Follow the MCP SDK's tool registration pattern
-    - The tool must be callable through the MCP protocol (not just as a Python function)
+    - Use the response envelope from responses.py (success_response)
+    - Use @mcp.tool() decorator from FastMCP for registration
+    - Tool parameters must be flat typed arguments (no dicts) per SPECIFICATION.md
+    - Response must match the format in SPECIFICATION.md section 4.1
+    - Tests call the Python function directly (not through MCP protocol) — this is
+      integration testing at the service level, sufficient for Phase 1
 
   references:
     - src/mcp_server/server.py
@@ -67,11 +90,11 @@ implementation:
 
 acceptance_criteria:
   - "src/mcp_server/tools/board.py exists with vtf_board_overview tool"
+  - "Tool is registered via @mcp.tool() decorator"
   - "Tool calls get_board_summary() from services, not models directly"
-  - "Response uses success_response() envelope"
+  - "Response uses success_response() envelope matching SPECIFICATION.md"
   - "6 new tests pass"
   - "All existing tests pass"
-  - "Tool is registered with the MCP server"
 
 test_command:
   unit: "docker compose exec api pytest tests/mcp_server/ -v --tb=short"
