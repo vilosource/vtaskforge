@@ -1,0 +1,70 @@
+id: "P2.4"
+name: "Implement vtf_submit_work MCP tool"
+depends_on: [P2.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_submit_work tool that completes a task and
+  optionally triggers the review gate. Uses perform_transition()
+  and the review policy to route the task to done or
+  pending_completion_review based on configuration.
+
+files:
+  create: []
+  modify:
+    - src/mcp_server/tools/workflow.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing workflow.py and the specification
+    - docs/vtf-mcp-server-SPECIFICATION.md — vtf_submit_work definition
+    - src/tasks/state_machine.py — perform_transition()
+    - src/tasks/models.py — Task fields (needs_review_on_completion)
+    - src/tasks/review_policy.py — get_effective_review_flags() if it exists
+
+    Step 2: Add vtf_submit_work to workflow.py
+
+    @mcp.tool()
+    def vtf_submit_work(task_id: str, completion_note: str = "") -> str:
+        """Submit completed work for a task. Triggers review if configured."""
+        - Fetch task, verify status is 'doing'
+        - If completion_note: create event via record_event()
+        - Call perform_transition() to move to 'done' or 'pending_completion_review'
+          (the state machine handles review routing based on task's review flags)
+        - Include milestone progress in response (how many tasks done vs total)
+        - Return success_response with task status and available_actions
+
+    Step 3: Write tests in test_workflow_tools.py
+    - test_submit_work_completes_task — task moves to done
+    - test_submit_work_triggers_review_when_configured — task with review flag
+      goes to pending_completion_review
+    - test_submit_work_adds_completion_note — event created
+    - test_submit_work_includes_milestone_progress — response has progress
+    - test_submit_work_not_doing_error — task not in doing status
+
+  constraints:
+    - Use perform_transition() for state changes, not direct status assignment
+    - Use record_event() for note/event creation
+    - Review routing is handled by the state machine, not this tool
+    - Error when task is not in 'doing' status
+    - Response format must match SPECIFICATION.md section 4.1
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - src/tasks/state_machine.py
+    - src/tasks/models.py
+    - src/events/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_submit_work tool exists in workflow.py"
+  - "Uses perform_transition() for state changes"
+  - "Triggers review when task has review flags"
+  - "Includes milestone progress in response"
+  - "5 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_workflow_tools.py -v --tb=short"

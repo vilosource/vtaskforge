@@ -1,0 +1,79 @@
+id: "P2.1"
+name: "Implement vtf_next_work MCP tool"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_next_work tool that finds the best available task
+  for an agent. Uses find_claimable_tasks() from P0.4, enriched with
+  dependency status and spec summary. Returns the top candidate with
+  full context so the agent can decide whether to claim it.
+
+files:
+  create:
+    - src/mcp_server/tools/workflow.py
+    - tests/mcp_server/test_workflow_tools.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md, existing MCP server code, and the specification
+    - src/mcp_server/server.py, responses.py, tools/board.py (for pattern)
+    - docs/vtf-mcp-server-SPECIFICATION.md — vtf_next_work definition
+    - src/tasks/services.py — find_claimable_tasks() and get_task_context()
+
+    Step 2: Create src/mcp_server/tools/workflow.py
+    - Import find_claimable_tasks, get_task_context from tasks.services
+    - Import success_response, error_response from mcp_server.responses
+    - Import mcp from mcp_server.server
+
+    @mcp.tool()
+    def vtf_next_work(project_id: str = "", tags: str = "", agent_id: str = "") -> str:
+        """Find the best available task to work on next."""
+        - Convert empty strings to None
+        - Parse tags string to list (comma-separated) if provided
+        - Call find_claimable_tasks(project_id, tags, agent_id)
+        - If no tasks available: return success_response with null data and helpful message
+        - If tasks found: get_task_context() for the first (best) candidate
+        - Return success_response with task context + alternatives count
+        - Include available_actions: ["claim_and_start"]
+
+    Step 3: Register in server.py
+    - Add: import mcp_server.tools.workflow
+
+    Step 4: Create tests/mcp_server/test_workflow_tools.py
+    - test_next_work_returns_best_candidate
+    - test_next_work_matches_agent_tags
+    - test_next_work_resolves_dependencies
+    - test_next_work_includes_spec_summary
+    - test_next_work_includes_alternatives_count
+    - test_next_work_no_work_available — null data with message
+    - test_next_work_with_project_filter
+
+  constraints:
+    - Must call find_claimable_tasks() from services, not query models
+    - Use success_response() envelope from responses.py
+    - Flat typed parameters (no dicts) — tags as comma-separated string
+    - Response format must match SPECIFICATION.md section 4.1
+    - Follow same pattern as tools/board.py
+
+  references:
+    - src/mcp_server/tools/board.py
+    - src/mcp_server/responses.py
+    - src/tasks/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_next_work tool exists in src/mcp_server/tools/workflow.py"
+  - "Tool registered via @mcp.tool() decorator"
+  - "Calls find_claimable_tasks() from services"
+  - "Returns enriched task context with spec summary and dep status"
+  - "Returns helpful message when no work available"
+  - "7 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_workflow_tools.py -v --tb=short"

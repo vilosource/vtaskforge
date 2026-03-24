@@ -1,0 +1,63 @@
+id: "P2.3"
+name: "Implement vtf_report_progress MCP tool"
+depends_on: [P2.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_report_progress tool that composes heartbeat
+  extension and note creation into a single call. Agents use this
+  during execution to keep their claim alive and log progress.
+
+files:
+  create: []
+  modify:
+    - src/mcp_server/tools/workflow.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing workflow.py and the specification
+    - docs/vtf-mcp-server-SPECIFICATION.md — vtf_report_progress definition
+    - src/tasks/views.py — heartbeat action (for claim extension logic)
+    - src/tasks/models.py — Task model fields (claimed_by, claim_expires_at)
+
+    Step 2: Add vtf_report_progress to workflow.py
+
+    @mcp.tool()
+    def vtf_report_progress(task_id: str, note: str = "") -> str:
+        """Report progress on a claimed task. Extends claim timeout and optionally adds a note."""
+        - Fetch task, verify status is 'doing' and claimed
+        - Extend claim_expires_at (same logic as heartbeat action)
+        - If note provided: create a note/event via record_event()
+        - Return success_response with updated claim expiry and available_actions
+
+    Step 3: Write tests in test_workflow_tools.py
+    - test_report_progress_extends_claim — claim_expires_at updated
+    - test_report_progress_adds_note — event created when note provided
+    - test_report_progress_without_note — heartbeat only, no event
+    - test_report_progress_not_doing_error — task not in doing status
+
+  constraints:
+    - Heartbeat logic should match the existing heartbeat action in views.py
+    - Use record_event() for note creation
+    - Error when task is not in 'doing' status — include available_actions
+    - Response format must match SPECIFICATION.md section 4.1
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - src/tasks/views.py
+    - src/tasks/models.py
+    - src/events/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_report_progress tool exists in workflow.py"
+  - "Extends claim timeout on success"
+  - "Adds note via record_event() when note provided"
+  - "Returns error when task not in doing status"
+  - "4 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_workflow_tools.py -v --tb=short"

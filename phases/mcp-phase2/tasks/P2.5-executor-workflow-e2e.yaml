@@ -1,0 +1,67 @@
+id: "P2.5"
+name: "Executor workflow end-to-end test"
+depends_on: [P2.3, P2.4]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create a single end-to-end test that exercises the complete executor
+  workflow: next_work → claim_and_start → report_progress → submit_work.
+  This proves the full MCP tool chain works as an integrated workflow.
+
+files:
+  create:
+    - tests/mcp_server/test_executor_workflow.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read all workflow tools in src/mcp_server/tools/workflow.py
+
+    Step 2: Create tests/mcp_server/test_executor_workflow.py
+
+    @pytest.mark.django_db
+    def test_full_executor_workflow():
+        """End-to-end: find work, claim it, report progress, submit."""
+        # Setup: project, workplan, milestone, todo task with spec
+        # Use factories to create realistic test data
+
+        # Step 1: vtf_next_work returns the task
+        result = vtf_next_work(project_id=project.id)
+        assert result contains task data
+
+        # Step 2: vtf_claim_and_start claims it, returns full context
+        result = vtf_claim_and_start(task_id=task.id, agent_id=agent.id)
+        assert result contains spec, deps, test_command
+
+        # Step 3: vtf_report_progress extends claim + adds note
+        result = vtf_report_progress(task_id=task.id, note="50% done")
+        assert claim extended
+
+        # Step 4: vtf_submit_work completes the task
+        result = vtf_submit_work(task_id=task.id, completion_note="Done")
+        assert task is done or pending_completion_review
+
+        # Verify: events recorded for each step
+
+  constraints:
+    - Call the tool functions directly (same as other MCP tests)
+    - Use factories for test data setup
+    - Verify the complete lifecycle, not just individual tools
+    - Check that events are recorded at each step
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - tests/mcp_server/test_workflow_tools.py
+    - tests/factories.py
+
+acceptance_criteria:
+  - "test_full_executor_workflow passes"
+  - "Test exercises all 4 workflow tools in sequence"
+  - "Events are recorded at each step"
+  - "Task ends in done or pending_completion_review"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_executor_workflow.py -v --tb=short"

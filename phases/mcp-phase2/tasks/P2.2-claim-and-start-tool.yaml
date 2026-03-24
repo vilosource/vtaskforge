@@ -1,0 +1,68 @@
+id: "P2.2"
+name: "Implement vtf_claim_and_start MCP tool"
+depends_on: [P2.1]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_claim_and_start tool that atomically claims a task
+  and returns everything the agent needs to start working: full spec,
+  dependency status, test commands, and available actions. Uses
+  claim_task() from P0.3 and get_task_context() from P0.7.
+
+files:
+  create: []
+  modify:
+    - src/mcp_server/tools/workflow.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing workflow.py and the specification
+    - docs/vtf-mcp-server-SPECIFICATION.md — vtf_claim_and_start definition
+    - src/tasks/services.py — claim_task(), get_task_context(), ClaimError
+
+    Step 2: Add vtf_claim_and_start to workflow.py
+
+    @mcp.tool()
+    def vtf_claim_and_start(task_id: str, agent_id: str, tags: str = "") -> str:
+        """Claim a task and get everything needed to start working."""
+        - Parse tags string to list
+        - Try claim_task(task_id, agent_id, tags_list)
+        - On success: get_task_context(task_id) for full context
+          Include: spec, deps, test_command, available_actions
+          Return success_response(data=context, available_actions=["report_progress", "submit_work"])
+        - On ClaimError: return error_response with actionable message
+          Include available_actions based on error (e.g., tag_mismatch → ["next_work"])
+
+    Step 3: Write tests in test_workflow_tools.py (add to existing file)
+    - test_claim_and_start_success — claims and returns full context
+    - test_claim_and_start_includes_spec
+    - test_claim_and_start_includes_deps
+    - test_claim_and_start_includes_test_command
+    - test_claim_and_start_includes_available_actions
+    - test_claim_and_start_tag_mismatch_error — actionable error with available_actions
+    - test_claim_and_start_deps_unmet_error — includes which dep is blocking
+
+  constraints:
+    - Must call claim_task() and get_task_context() from services
+    - Catch ClaimError and return error_response (not raise)
+    - Error responses must be actionable: explain what went wrong and what to do next
+    - Response format must match SPECIFICATION.md section 4.1
+    - available_actions must reflect what the agent can do after this response
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - src/tasks/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_claim_and_start tool exists in workflow.py"
+  - "Claims task atomically via claim_task()"
+  - "Returns full context including spec, deps, test_command"
+  - "Error responses are actionable with available_actions"
+  - "7 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_workflow_tools.py -v --tb=short"
