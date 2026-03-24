@@ -340,3 +340,45 @@ def block(ctx, id, reason):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Blocked task {id} -> {result['status']}")
+
+
+@task.command()
+@click.argument("id")
+@click.pass_context
+def unblock(ctx, id):
+    """Unblock a task."""
+    client = ctx.obj["client"]
+    try:
+        result = client.post(f"/v1/tasks/{id}/unblock/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Unblocked task {id} -> {result['status']}")
+
+
+@task.command()
+@click.argument("id")
+@click.pass_context
+def defer(ctx, id):
+    """Defer a task."""
+    client = ctx.obj["client"]
+    try:
+        result = client.post(f"/v1/tasks/{id}/defer/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Deferred task {id} -> {result['status']}")
+
+
+@task.command()
+@click.argument("id")
+@click.pass_context
+def cancel(ctx, id):
+    """Cancel a task."""
+    client = ctx.obj["client"]
+    try:
+        result = client.post(f"/v1/tasks/{id}/cancel/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Cancelled task {id} -> {result['status']}")

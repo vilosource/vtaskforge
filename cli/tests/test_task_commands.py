@@ -705,3 +705,60 @@ def test_task_block_api_error(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["task", "block", "task-abc"])
     assert result.exit_code == 1
+
+
+# --- unblock ---
+
+def test_task_unblock_success(runner, mock_client):
+    mock_client.post.return_value = {"status": "todo"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "unblock", "task-abc"])
+    assert result.exit_code == 0
+    assert "Unblocked task task-abc" in result.output
+    assert "todo" in result.output
+    mock_client.post.assert_called_once_with("/v1/tasks/task-abc/unblock/")
+
+
+def test_task_unblock_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(422, {"error": {"message": "Invalid state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "unblock", "task-abc"])
+    assert result.exit_code == 1
+
+
+# --- defer ---
+
+def test_task_defer_success(runner, mock_client):
+    mock_client.post.return_value = {"status": "deferred"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "defer", "task-abc"])
+    assert result.exit_code == 0
+    assert "Deferred task task-abc" in result.output
+    assert "deferred" in result.output
+    mock_client.post.assert_called_once_with("/v1/tasks/task-abc/defer/")
+
+
+def test_task_defer_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(422, {"error": {"message": "Invalid state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "defer", "task-abc"])
+    assert result.exit_code == 1
+
+
+# --- cancel ---
+
+def test_task_cancel_success(runner, mock_client):
+    mock_client.post.return_value = {"status": "cancelled"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "cancel", "task-abc"])
+    assert result.exit_code == 0
+    assert "Cancelled task task-abc" in result.output
+    assert "cancelled" in result.output
+    mock_client.post.assert_called_once_with("/v1/tasks/task-abc/cancel/")
+
+
+def test_task_cancel_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(422, {"error": {"message": "Invalid state"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "cancel", "task-abc"])
+    assert result.exit_code == 1
