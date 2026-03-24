@@ -7,8 +7,19 @@ import pytest
 
 from events.models import TaskEvent
 from links.models import Link
-from tasks.services import ClaimError, claim_task, find_claimable_tasks, get_tasks_with_unresolved_deps, resolve_dependencies
-from tests.factories import AgentFactory, TaskFactory, MilestoneFactory, WorkplanFactory
+from tasks.models import Task
+from tasks.services import (
+    ClaimError,
+    claim_task,
+    find_claimable_tasks,
+    get_available_actions,
+    get_board_summary,
+    get_task_context,
+    get_tasks_with_unresolved_deps,
+    resolve_dependencies,
+)
+from tasks.state_machine import VALID_TRANSITIONS
+from tests.factories import AgentFactory, NoteFactory, ReviewFactory, TaskEventFactory, TaskFactory, MilestoneFactory, WorkplanFactory
 
 
 # ---------------------------------------------------------------------------
@@ -402,3 +413,210 @@ class TestFindClaimableTasks:
         result_all_ids = [t.id for t in find_claimable_tasks()]
         assert task_a.id in result_all_ids
         assert task_b.id in result_all_ids
+
+
+# ---------------------------------------------------------------------------
+# get_available_actions() tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGetAvailableActions:
+    @pytest.mark.parametrize("status", list(VALID_TRANSITIONS.keys()))
+    def test_get_available_actions_for_each_status(self, db, status):
+        """get_available_actions returns exactly the transitions from VALID_TRANSITIONS."""
+        task = TaskFactory(status=status)
+        actions = get_available_actions(task)
+        assert actions == VALID_TRANSITIONS[status]
+
+    def test_get_available_actions_terminal_statuses_empty(self, db):
+        """Terminal statuses (done, cancelled) return an empty list."""
+        done_task = TaskFactory(status="done")
+        cancelled_task = TaskFactory(status="cancelled")
+        assert get_available_actions(done_task) == []
+        assert get_available_actions(cancelled_task) == []
+
+
+# ---------------------------------------------------------------------------
+# get_task_context() tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGetTaskContext:
+    def test_get_task_context_includes_all_fields(self, db):
+        """get_task_context returns a dict with all required top-level keys and task fields."""
+        task = TaskFactory(status="todo", spec="spec content here")
+        context = get_task_context(task.id)
+
+        # Top-level keys
+        assert "task" in context
+        assert "spec" in context
+        assert "dependencies" in context
+        assert "reviews" in context
+        assert "events" in context
+        assert "notes" in context
+        assert "actions" in context
+
+        # Task fields
+        t = context["task"]
+        assert t["id"] == task.id
+        assert t["title"] == task.title
+        assert t["status"] == task.status
+        assert t["project_id"] == task.project_id
+
+        # Spec
+        assert context["spec"] == "spec content here"
+
+        # Actions should be a list consistent with state machine
+        assert context["actions"] == VALID_TRANSITIONS["todo"]
+
+    def test_get_task_context_includes_reviews(self, db):
+        """get_task_context includes related reviews."""
+        task = TaskFactory(status="todo")
+        review = ReviewFactory(task=task, decision="approved", reason="Looks good")
+
+        context = get_task_context(task.id)
+
+        assert len(context["reviews"]) == 1
+        r = context["reviews"][0]
+        assert r["id"] == review.id
+        assert r["decision"] == "approved"
+        assert r["reason"] == "Looks good"
+        assert r["reviewer_id"] == review.reviewer_id
+
+    def test_get_task_context_includes_events(self, db):
+        """get_task_context includes related task events."""
+        task = TaskFactory(status="todo")
+        event = TaskEventFactory(task=task, event_type="status_changed")
+
+        context = get_task_context(task.id)
+
+        event_ids = [e["id"] for e in context["events"]]
+        assert event.id in event_ids
+
+    def test_get_task_context_includes_notes(self, db):
+        """get_task_context includes related notes."""
+        task = TaskFactory(status="todo")
+        note = NoteFactory(task=task, text="important note")
+
+        context = get_task_context(task.id)
+
+        assert len(context["notes"]) == 1
+        assert context["notes"][0]["id"] == note.id
+        assert context["notes"][0]["text"] == "important note"
+
+    def test_get_task_context_dependency_status(self, db):
+        """get_task_context includes dependency resolution status."""
+        dep = TaskFactory(status="todo")
+        task = TaskFactory(status="todo")
+        Link.objects.create(
+            source_type="task",
+            source_id=task.id,
+            target_type="task",
+            target_id=dep.id,
+            link_type="depends_on",
+        )
+
+        context = get_task_context(task.id)
+
+        deps = context["dependencies"]
+        assert deps["resolved"] is False
+        assert len(deps["unresolved"]) == 1
+        assert deps["unresolved"][0]["id"] == dep.id
+
+    def test_get_task_context_raises_for_missing_task(self, db):
+        """get_task_context raises Task.DoesNotExist for unknown task_id."""
+        with pytest.raises(Task.DoesNotExist):
+            get_task_context("nonexistent-id")
+
+
+# ---------------------------------------------------------------------------
+# get_board_summary() tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGetBoardSummary:
+    def test_get_board_summary_counts(self, db):
+        """get_board_summary returns correct counts by status."""
+        TaskFactory(status="todo")
+        TaskFactory(status="todo")
+        TaskFactory(status="doing")
+        TaskFactory(status="done")
+
+        summary = get_board_summary()
+
+        assert summary["counts"].get("todo", 0) >= 2
+        assert summary["counts"].get("doing", 0) >= 1
+        assert summary["counts"].get("done", 0) >= 1
+
+    def test_get_board_summary_counts_filtered_by_project(self, db):
+        """get_board_summary filters counts by project_id."""
+        from tests.factories import ProjectFactory
+
+        project_a = ProjectFactory()
+        project_b = ProjectFactory()
+
+        TaskFactory(status="todo", project=project_a, milestone=None, workplan=None)
+        TaskFactory(status="todo", project=project_a, milestone=None, workplan=None)
+        TaskFactory(status="doing", project=project_b, milestone=None, workplan=None)
+
+        summary_a = get_board_summary(project_id=project_a.id)
+        assert summary_a["counts"].get("todo", 0) == 2
+        assert summary_a["counts"].get("doing", 0) == 0
+
+        summary_b = get_board_summary(project_id=project_b.id)
+        assert summary_b["counts"].get("todo", 0) == 0
+        assert summary_b["counts"].get("doing", 0) == 1
+
+    def test_get_board_summary_attention_items(self, db):
+        """get_board_summary includes blocked and needs_attention tasks."""
+        blocked = TaskFactory(status="blocked", title="Blocked Task")
+        attention = TaskFactory(status="needs_attention", title="Attention Task")
+        TaskFactory(status="todo", title="Regular Task")
+
+        summary = get_board_summary()
+
+        attention_ids = [item["id"] for item in summary["attention_items"]]
+        assert blocked.id in attention_ids
+        assert attention.id in attention_ids
+
+        # Regular todo tasks must not be in attention_items
+        regular_ids = [item["id"] for item in summary["attention_items"] if item["status"] == "todo"]
+        assert len(regular_ids) == 0
+
+    def test_get_board_summary_pending_reviews(self, db):
+        """get_board_summary includes tasks in pending review statuses."""
+        pending_start = TaskFactory(status="pending_start_review", title="Pending Start")
+        pending_completion = TaskFactory(status="pending_completion_review", title="Pending Completion")
+        TaskFactory(status="todo", title="Not pending")
+
+        summary = get_board_summary()
+
+        pending_ids = [item["id"] for item in summary["pending_reviews"]]
+        assert pending_start.id in pending_ids
+        assert pending_completion.id in pending_ids
+
+    def test_get_board_summary_active_agents(self, db):
+        """get_board_summary returns active agents from tasks in doing status."""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        doing_task = TaskFactory(
+            status="doing",
+            claimed_by="agent-xyz",
+            claimed_at=timezone.now(),
+            claim_expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        TaskFactory(status="doing", claimed_by=None)  # doing but not claimed
+        TaskFactory(status="todo")
+
+        summary = get_board_summary()
+
+        agent_task_ids = [a["id"] for a in summary["active_agents"]]
+        assert doing_task.id in agent_task_ids
+
+        # Verify agent info is included
+        agent_entry = next(a for a in summary["active_agents"] if a["id"] == doing_task.id)
+        assert agent_entry["claimed_by"] == "agent-xyz"

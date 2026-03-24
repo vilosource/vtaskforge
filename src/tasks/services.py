@@ -4,6 +4,7 @@ Task service functions — reusable business logic extracted from views.
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from events.services import record_event
@@ -238,3 +239,182 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
         record_event(task, "claimed", data={"agent_id": agent_id}, triggered_by=agent_id)
 
     return task
+
+
+def get_available_actions(task) -> list:
+    """Return the list of valid action names for a task given its current status.
+
+    Derives actions directly from VALID_TRANSITIONS in state_machine.py so that
+    the two are always consistent.
+
+    Args:
+        task: A Task instance (only task.status is read).
+
+    Returns:
+        List of target-status strings that are valid transitions from the
+        task's current status.  Empty list for terminal statuses.
+    """
+    # Defer import to avoid circular dependency (state_machine imports events.services)
+    from tasks.state_machine import VALID_TRANSITIONS
+
+    return list(VALID_TRANSITIONS.get(task.status, []))
+
+
+def get_task_context(task_id: str) -> dict:
+    """Return full task context for MCP responses.
+
+    Fetches the task with related data in a small number of queries using
+    select_related/prefetch_related, then composes a complete context dict
+    suitable for passing to MCP tools.
+
+    Args:
+        task_id: PK of the task to fetch.
+
+    Returns:
+        Dict containing:
+            task        — all task scalar fields
+            spec        — raw spec text
+            dependencies — result of resolve_dependencies()
+            reviews     — list of review dicts
+            events      — list of the 20 most recent event dicts
+            notes       — list of note dicts
+            actions     — list of valid action names (from get_available_actions)
+
+    Raises:
+        Task.DoesNotExist: If no task with task_id exists.
+    """
+    task = (
+        Task.objects
+        .select_related("project", "workplan", "milestone")
+        .prefetch_related("reviews", "events", "notes")
+        .get(pk=task_id)
+    )
+
+    reviews = [
+        {
+            "id": r.id,
+            "decision": r.decision,
+            "reason": r.reason,
+            "reviewer_id": r.reviewer_id,
+            "reviewer_type": r.reviewer_type,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in task.reviews.all()
+    ]
+
+    # Most-recent 20 events (events are ordered -timestamp by default)
+    events = [
+        {
+            "id": e.id,
+            "event_type": e.event_type,
+            "data": e.data,
+            "timestamp": e.timestamp.isoformat(),
+            "triggered_by": e.triggered_by,
+        }
+        for e in task.events.all()[:20]
+    ]
+
+    notes = [
+        {
+            "id": n.id,
+            "text": n.text,
+            "actor_id": n.actor_id,
+            "created_at": n.created_at.isoformat(),
+        }
+        for n in task.notes.all()
+    ]
+
+    return {
+        "task": {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "status": task.status,
+            "project_id": task.project_id,
+            "workplan_id": task.workplan_id,
+            "milestone_id": task.milestone_id,
+            "acceptance_criteria": task.acceptance_criteria,
+            "labels": task.labels,
+            "needs_review_before_start": task.needs_review_before_start,
+            "needs_review_on_completion": task.needs_review_on_completion,
+            "review_return_to": task.review_return_to,
+            "requires": task.requires,
+            "assigned_to": task.assigned_to,
+            "claimed_by": task.claimed_by,
+            "claimed_at": task.claimed_at.isoformat() if task.claimed_at else None,
+            "claim_expires_at": task.claim_expires_at.isoformat() if task.claim_expires_at else None,
+            "created_by": task.created_by,
+            "agent_model": task.agent_model,
+            "test_command": task.test_command,
+            "judge": task.judge,
+            "isolation": task.isolation,
+            "created_at": task.created_at.isoformat(),
+            "updated_at": task.updated_at.isoformat(),
+        },
+        "spec": task.spec,
+        "dependencies": resolve_dependencies(task_id),
+        "reviews": reviews,
+        "events": events,
+        "notes": notes,
+        "actions": get_available_actions(task),
+    }
+
+
+def get_board_summary(project_id: str = None, workplan_id: str = None) -> dict:
+    """Return an aggregated board summary for a project or workplan.
+
+    Uses database-level aggregation to avoid Python-level iteration over large
+    querysets.
+
+    Args:
+        project_id:  If given, restrict to tasks in this project.
+        workplan_id: If given, restrict to tasks in this workplan.
+                     Both filters may be applied simultaneously.
+
+    Returns:
+        Dict containing:
+            counts          — {status: count} for all task statuses
+            attention_items — list of task dicts in 'blocked' or 'needs_attention'
+            pending_reviews — list of task dicts in 'pending_completion_review'
+                              or 'pending_start_review'
+            active_agents   — list of {task_id, claimed_by} for tasks in 'doing'
+                              with claimed_by set
+    """
+    qs = Task.objects.all()
+    if project_id:
+        qs = qs.filter(project_id=project_id)
+    if workplan_id:
+        qs = qs.filter(workplan_id=workplan_id)
+
+    # Aggregate counts by status in a single query
+    counts_qs = qs.values("status").annotate(count=Count("id"))
+    counts = {row["status"]: row["count"] for row in counts_qs}
+
+    # Attention items: blocked or needs_attention
+    attention_qs = qs.filter(
+        Q(status="blocked") | Q(status="needs_attention")
+    ).values("id", "title", "status")
+    attention_items = list(attention_qs)
+
+    # Pending reviews: waiting for a review decision
+    pending_review_qs = qs.filter(
+        Q(status="pending_completion_review") | Q(status="pending_start_review")
+    ).values("id", "title", "status")
+    pending_reviews = list(pending_review_qs)
+
+    # Active agents: tasks in doing status that have a claimed_by value
+    active_agents_qs = qs.filter(
+        status="doing"
+    ).exclude(
+        claimed_by__isnull=True
+    ).exclude(
+        claimed_by=""
+    ).values("id", "claimed_by")
+    active_agents = list(active_agents_qs)
+
+    return {
+        "counts": counts,
+        "attention_items": attention_items,
+        "pending_reviews": pending_reviews,
+        "active_agents": active_agents,
+    }
