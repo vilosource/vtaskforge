@@ -57,9 +57,9 @@ Before starting a simulation session:
 - [ ] Git is on develop, clean: `git status` shows no uncommitted changes
 - [ ] vafi executor is scaled to 0: `KUBECONFIG=~/.kube/vafi-dev.yaml kubectl get pods -n vafi-agents` shows no pods
 - [ ] Tasks are in `todo` on the board: `vtf task list --workplan <id>`
-- [ ] **Baseline test count established**: run `docker compose exec api pytest --tb=short` and record the exact pass/fail count. This is the safety net for the entire milestone.
+- [ ] **Baseline test count known**: the previous milestone's quality gate recorded the count. If this is the first milestone, run E0 to establish it.
 
-**The baseline is non-negotiable.** Without it, the "existing tests pass" acceptance criterion is unverifiable. Record it at the start of each milestone.
+**The baseline is verified by the quality gate task (G<N>) at the end of each milestone, not per task.** The quality gate is the only task that runs the full test suite.
 
 ## Supervisor Workflow
 
@@ -140,13 +140,10 @@ Verify the implementation for a vtf task. Work in /home/jasonvi/GitHub/vtaskforg
 Review branch: task/<task-id>
 Base branch: develop
 
-## Baseline Test Count
-<X passed, Y failed> (established during pre-flight)
-
 ## Executor Completion Report
 <paste executor's report here>
 
-Run tests, review the code, and produce your verdict.
+Run the task-specific tests (test_command.unit from the spec), review the code, and produce your verdict.
 ---
 ```
 
