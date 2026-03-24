@@ -796,3 +796,89 @@ def test_task_delete_api_error(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["task", "delete", "task-abc", "--yes"])
     assert result.exit_code == 1
+
+
+# --- update ---
+
+def test_task_update_title(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "title": "New title", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--title", "New title"])
+    assert result.exit_code == 0
+    assert "Updated task task-abc" in result.output
+    mock_client.patch.assert_called_once_with("/v1/tasks/task-abc/", {"title": "New title"})
+
+
+def test_task_update_multiple_fields(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--title", "X", "--description", "Y"]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"title": "X", "description": "Y"}
+    )
+
+
+def test_task_update_labels(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--labels", "bug,ui"])
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"labels": ["bug", "ui"]}
+    )
+
+
+def test_task_update_spec_inline(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--spec", "do the thing"])
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"spec": "do the thing"}
+    )
+
+
+def test_task_update_spec_file(runner, mock_client, tmp_path):
+    spec_file = tmp_path / "spec.yaml"
+    spec_file.write_text("description: test spec\n")
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--spec-file", str(spec_file)]
+        )
+    assert result.exit_code == 0
+    call_data = mock_client.patch.call_args[0][1]
+    assert call_data["spec"] == "description: test spec\n"
+
+
+def test_task_update_judge_flag(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--judge"])
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with("/v1/tasks/task-abc/", {"judge": True})
+
+
+def test_task_update_no_judge_flag(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--no-judge"])
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with("/v1/tasks/task-abc/", {"judge": False})
+
+
+def test_task_update_no_options(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc"])
+    assert result.exit_code == 1
+    assert "no fields to update" in result.output.lower()
+
+
+def test_task_update_api_error(runner, mock_client):
+    mock_client.patch.side_effect = VTFAPIError(400, {"error": {"message": "Invalid data"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--title", "X"])
+    assert result.exit_code == 1

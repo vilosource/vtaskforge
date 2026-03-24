@@ -399,3 +399,48 @@ def delete(ctx, id, yes):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Deleted task {id}")
+
+
+@task.command()
+@click.argument("id")
+@click.option("--title", default=None, help="Task title")
+@click.option("--description", default=None, help="Task description")
+@click.option("--labels", default=None, help="Comma-separated labels")
+@click.option("--spec", default=None, help="Task spec text")
+@click.option("--spec-file", default=None, type=click.Path(exists=True), help="Read spec from file")
+@click.option("--agent-model", default=None, help="Agent model override")
+@click.option("--judge/--no-judge", default=None, help="Enable/disable judge review")
+@click.option("--isolation", default=None, help="Isolation mode")
+@click.pass_context
+def update(ctx, id, title, description, labels, spec, spec_file, agent_model, judge, isolation):
+    """Update task fields."""
+    data = {}
+    if title is not None:
+        data["title"] = title
+    if description is not None:
+        data["description"] = description
+    if labels is not None:
+        data["labels"] = [l.strip() for l in labels.split(",")]
+    if spec is not None:
+        data["spec"] = spec
+    if spec_file is not None:
+        with open(spec_file) as f:
+            data["spec"] = f.read()
+    if agent_model is not None:
+        data["agent_model"] = agent_model
+    if judge is not None:
+        data["judge"] = judge
+    if isolation is not None:
+        data["isolation"] = isolation
+
+    if not data:
+        click.echo("Error: no fields to update. Use --title, --description, --labels, etc.", err=True)
+        raise SystemExit(1)
+
+    client = ctx.obj["client"]
+    try:
+        client.patch(f"/v1/tasks/{id}/", data)
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Updated task {id}")
