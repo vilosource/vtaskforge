@@ -6,13 +6,35 @@ Manual supervisor workflow for executing vtf tasks using Claude Code subagents a
 
 The simulation replaces the automated vafi controller loop with a human supervisor (you) orchestrating Claude Code subagents. The executor and judge agents do real work — the simulation is only in how they're dispatched.
 
+### Roles
+
+| Role | Responsibility | Does NOT |
+|------|---------------|----------|
+| **Supervisor** (you) | Orchestrates: picks tasks, dispatches agents, creates branches, merges on accept, decides accept/reject | Run tests, write code, review code |
+| **Executor** (subagent) | Implements: reads spec, writes code, runs tests during TDD (self-check), commits | Make design decisions, push, run final verification |
+| **Judge** (subagent) | Verifies: runs tests against baseline (verification gate), reviews code, checks blast radius, produces verdict | Modify code, implement fixes, make design decisions |
+
+The supervisor orchestrates. The executor implements. The judge verifies. No role does another role's work.
+
 ```
-You (Supervisor)
-  ├── vtf board: pick task, manage lifecycle
-  ├── git: create branches, merge on accept
-  ├── dispatch: spawn executor agent with spec
-  ├── dispatch: spawn judge agent with diff
-  └── decide: accept/reject based on judge verdict
+Supervisor                    Executor              Judge
+  │                              │                    │
+  ├── claim task                 │                    │
+  ├── create branch              │                    │
+  ├── dispatch executor ────────►│                    │
+  │                              ├── orient           │
+  │                              ├── implement (TDD)  │
+  │                              ├── commit           │
+  │◄── completion report ────────┤                    │
+  │                                                   │
+  ├── dispatch judge ────────────────────────────────►│
+  │                                                   ├── run tests (vs baseline)
+  │                                                   ├── review code
+  │                                                   ├── check blast radius
+  │◄── verdict ──────────────────────────────────────┤
+  │
+  ├── PASS → merge, complete
+  └── FAIL → dispatch executor rework
 ```
 
 ## Three-Layer Context Model
@@ -31,10 +53,13 @@ Before starting a simulation session:
 
 - [ ] vtf CLI points at prod: `vtf config show` → `https://vtf.viloforge.com`
 - [ ] vtf token is valid: `vtf health` returns healthy
-- [ ] Docker dev stack is running: `cd ~/GitHub/vtaskforge && docker compose ps`
+- [ ] Docker dev stack is running: `cd ~/GitHub/vtaskforge && docker compose up -d && docker compose ps`
 - [ ] Git is on develop, clean: `git status` shows no uncommitted changes
 - [ ] vafi executor is scaled to 0: `KUBECONFIG=~/.kube/vafi-dev.yaml kubectl get pods -n vafi-agents` shows no pods
 - [ ] Tasks are in `todo` on the board: `vtf task list --workplan <id>`
+- [ ] **Baseline test count established**: run `docker compose exec api pytest --tb=short` and record the exact pass/fail count. This is the safety net for the entire milestone.
+
+**The baseline is non-negotiable.** Without it, the "existing tests pass" acceptance criterion is unverifiable. Record it at the start of each milestone.
 
 ## Supervisor Workflow
 
@@ -49,7 +74,7 @@ Choose the next task respecting dependencies. Tasks with unresolved dependencies
 ### 2. Claim the Task
 
 ```bash
-vtf task claim <task-id> --agent supervisor --tags supervisor
+vtf task claim <task-id> --agent <agent-id> --tags supervisor
 ```
 
 ### 3. Fetch the Spec
@@ -97,26 +122,16 @@ The executor returns a completion report. Read it. Note:
 - Any spec deviations?
 - Any blast radius discoveries?
 
-### 7. Run Test Gate (Supervisor Responsibility)
+Do NOT verify the executor's claims yourself — that's the judge's job. You just read the report to understand what was done.
 
-The executor should have run tests, but verify independently:
-
-```bash
-cd ~/GitHub/vtaskforge
-git checkout task/<task-id>
-docker compose exec api pytest --tb=short
-```
-
-If tests fail, skip the judge and send back to executor for fixes.
-
-### 8. Dispatch the Judge
+### 7. Dispatch the Judge
 
 Use the Agent tool with `subagent_type: vtf-judge`:
 
 ```
 Prompt template:
 ---
-Review the implementation for a vtf task. Work in /home/jasonvi/GitHub/vtaskforge/.
+Verify the implementation for a vtf task. Work in /home/jasonvi/GitHub/vtaskforge/.
 
 ## Task Spec
 <paste spec YAML here>
@@ -125,18 +140,25 @@ Review the implementation for a vtf task. Work in /home/jasonvi/GitHub/vtaskforg
 Review branch: task/<task-id>
 Base branch: develop
 
-Diff command: git diff develop...task/<task-id>
+## Baseline Test Count
+<X passed, Y failed> (established during pre-flight)
 
 ## Executor Completion Report
 <paste executor's report here>
 
-Produce your verdict.
+Run tests, review the code, and produce your verdict.
 ---
 ```
 
 Model: `opus` (judge needs deeper reasoning)
 
-### 9. Decision
+The judge will:
+1. Run the full test suite and compare against the baseline
+2. If tests regressed → automatic FAIL, skip code review
+3. If tests pass → full code review, blast radius check, pattern compliance
+4. Produce a structured verdict
+
+### 8. Decision
 
 Based on the judge verdict:
 
@@ -151,10 +173,6 @@ vtf task complete <task-id>
 ```
 
 #### FAIL → Rework
-
-```bash
-vtf task block <task-id>   # or keep in doing
-```
 
 Dispatch a new executor with the original spec + judge feedback:
 
@@ -176,9 +194,9 @@ Fix the BLOCKING issues. Do not reimplement from scratch — build on existing w
 ---
 ```
 
-Then re-run the judge (include previous verdict for rework awareness).
+Then re-dispatch the judge (include previous verdict for rework awareness).
 
-### 10. Update the Board
+### 9. Update the Board
 
 After merge:
 ```bash
@@ -217,9 +235,9 @@ git merge task/<second-id>   # if conflict, resolve manually
 ## Rework Flow Detail
 
 ```
-Attempt 1: Executor implements → Judge reviews → FAIL
-Attempt 2: New executor (spec + judge feedback) on same branch → Judge reviews → FAIL
-Attempt 3: New executor (spec + latest judge feedback) on same branch → Judge reviews → FAIL
+Attempt 1: Executor implements → Judge verifies → FAIL
+Attempt 2: New executor (spec + judge feedback) on same branch → Judge verifies → FAIL
+Attempt 3: New executor (spec + latest judge feedback) on same branch → Judge verifies → FAIL
 Attempt 4: DO NOT RETRY. vtf task fail <id>. Escalate to human.
 ```
 
@@ -234,6 +252,17 @@ Max 3 rework attempts. After that, the task needs human intervention.
 | No heartbeats | vtf doesn't know if executor is alive | Supervisor monitors agent manually |
 | No automatic claim expiry recovery | If supervisor session dies mid-task, task stays in `doing` | Manually unblock/reset via vtf CLI |
 | Single machine | All agents share one filesystem | Use branches for isolation, not worktrees (worktrees don't work with subagents) |
+
+## Lessons Learned
+
+### Baseline before everything
+The executor reported "27 pre-existing test failures" during the first attempted run. Without a baseline, the supervisor couldn't verify this claim. Always establish the baseline before dispatching any executor.
+
+### The supervisor doesn't do work
+The supervisor orchestrates — it does not run tests, write code, or review code. If something needs to be verified, dispatch the right agent. If you find yourself doing work as the supervisor, stop and ask: which agent should be doing this?
+
+### Tests before code review
+If the judge finds test regressions, it should FAIL immediately and skip the code review. Reviewing broken code wastes tokens and time. Tests are cheap verification; code review is expensive verification. Cheap first, expensive second.
 
 ## Quick Reference: Task IDs (MCP Server Phase 0)
 
