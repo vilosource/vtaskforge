@@ -17,7 +17,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
-from .services import claim_task, ClaimError, get_tasks_with_unresolved_deps, resolve_dependencies
+from .services import claim_task, ClaimError, find_claimable_tasks, resolve_dependencies
 from .state_machine import get_valid_transitions, perform_transition, NON_TERMINAL_STATUSES, TERMINAL_STATUSES
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
@@ -186,27 +186,11 @@ class TaskViewSet(ModelViewSet):
             except Agent.DoesNotExist:
                 tags = []
 
-        tasks = Task.objects.filter(status="todo")
-
-        # Filter by project if specified
-        if project:
-            tasks = tasks.filter(project_id=project)
-
-        # Exclude tasks with unmet dependencies
-        all_task_ids = list(tasks.values_list("id", flat=True))
-        unmet_task_ids = get_tasks_with_unresolved_deps(all_task_ids)
-        tasks = tasks.exclude(id__in=unmet_task_ids)
-
-        # Filter by tags if provided — task.requires must be subset of provided tags
-        if tags:
-            filtered_ids = [t.id for t in tasks if not t.requires or set(t.requires).issubset(set(tags))]
-            tasks = tasks.filter(id__in=filtered_ids)
-
-        # Filter by assignment — exclude tasks assigned to other agents
-        if agent_id:
-            unassigned = tasks.filter(assigned_to__isnull=True) | tasks.filter(assigned_to="")
-            assigned_to_me = tasks.filter(assigned_to=agent_id)
-            tasks = Task.objects.filter(id__in=list(unassigned.values_list("id", flat=True)) + list(assigned_to_me.values_list("id", flat=True)))
+        tasks = find_claimable_tasks(
+            project_id=project or None,
+            tags=tags or None,
+            agent_id=agent_id or None,
+        )
 
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(tasks, request)

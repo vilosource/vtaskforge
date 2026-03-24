@@ -7,7 +7,7 @@ import pytest
 
 from events.models import TaskEvent
 from links.models import Link
-from tasks.services import ClaimError, claim_task, get_tasks_with_unresolved_deps, resolve_dependencies
+from tasks.services import ClaimError, claim_task, find_claimable_tasks, get_tasks_with_unresolved_deps, resolve_dependencies
 from tests.factories import AgentFactory, TaskFactory, MilestoneFactory, WorkplanFactory
 
 
@@ -280,3 +280,125 @@ class TestClaimTaskAtomic:
         t2.join()
 
         assert sorted(results) == ["error", "ok"]
+
+
+# ---------------------------------------------------------------------------
+# find_claimable_tasks() service function tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestFindClaimableTasks:
+    def test_find_claimable_basic(self, db):
+        """Returns todo tasks and excludes non-todo tasks."""
+        task_todo_a = TaskFactory(status="todo", title="Todo A")
+        task_todo_b = TaskFactory(status="todo", title="Todo B")
+        TaskFactory(status="doing", title="Doing")
+        TaskFactory(status="done", title="Done")
+        TaskFactory(status="draft", title="Draft")
+
+        result = list(find_claimable_tasks())
+        result_ids = [t.id for t in result]
+
+        assert task_todo_a.id in result_ids
+        assert task_todo_b.id in result_ids
+        assert len(result_ids) == 2
+
+    def test_find_claimable_excludes_tasks_with_unmet_deps(self, db):
+        """Tasks with unresolved dependencies are excluded from results."""
+        dep_unmet = TaskFactory(status="todo", title="Unmet Dep")
+        dep_met = TaskFactory(status="done", title="Met Dep")
+        task_blocked = TaskFactory(status="todo", title="Blocked by unmet dep")
+        task_ready = TaskFactory(status="todo", title="Ready, dep is done")
+        task_no_dep = TaskFactory(status="todo", title="No dep")
+
+        Link.objects.create(
+            source_type="task",
+            source_id=task_blocked.id,
+            target_type="task",
+            target_id=dep_unmet.id,
+            link_type="depends_on",
+        )
+        Link.objects.create(
+            source_type="task",
+            source_id=task_ready.id,
+            target_type="task",
+            target_id=dep_met.id,
+            link_type="depends_on",
+        )
+
+        result_ids = [t.id for t in find_claimable_tasks()]
+
+        assert task_blocked.id not in result_ids
+        assert task_ready.id in result_ids
+        assert task_no_dep.id in result_ids
+
+    def test_find_claimable_filters_by_tags(self, db):
+        """task.requires must be a subset of provided tags; tasks with unmatched requires excluded."""
+        task_no_requires = TaskFactory(status="todo", requires=[], title="No requires")
+        task_executor = TaskFactory(status="todo", requires=["executor"], title="Needs executor")
+        task_opus = TaskFactory(status="todo", requires=["opus"], title="Needs opus")
+        task_both = TaskFactory(status="todo", requires=["executor", "opus"], title="Needs both")
+
+        # Tags: only executor — should see no-requires and executor tasks
+        result_ids = [t.id for t in find_claimable_tasks(tags=["executor"])]
+        assert task_no_requires.id in result_ids
+        assert task_executor.id in result_ids
+        assert task_opus.id not in result_ids
+        assert task_both.id not in result_ids
+
+        # Tags: executor and opus — should see all
+        result_ids = [t.id for t in find_claimable_tasks(tags=["executor", "opus"])]
+        assert task_no_requires.id in result_ids
+        assert task_executor.id in result_ids
+        assert task_opus.id in result_ids
+        assert task_both.id in result_ids
+
+        # No tags — tag filtering skipped, all todo tasks included
+        result_ids = [t.id for t in find_claimable_tasks(tags=None)]
+        assert task_executor.id in result_ids
+        assert task_opus.id in result_ids
+
+    def test_find_claimable_filters_by_assignment(self, db):
+        """Excludes tasks assigned to other agents; includes unassigned and self-assigned."""
+        from tests.factories import AgentFactory
+
+        agent = AgentFactory(tags=[])
+        other = AgentFactory(tags=[])
+
+        task_unassigned = TaskFactory(status="todo", assigned_to=None, title="Unassigned")
+        task_mine = TaskFactory(status="todo", assigned_to=agent.id, title="Mine")
+        task_other = TaskFactory(status="todo", assigned_to=other.id, title="Other agent's")
+
+        result_ids = [t.id for t in find_claimable_tasks(agent_id=agent.id)]
+
+        assert task_unassigned.id in result_ids
+        assert task_mine.id in result_ids
+        assert task_other.id not in result_ids
+
+        # Without agent_id — all tasks included regardless of assignment
+        result_ids_no_agent = [t.id for t in find_claimable_tasks()]
+        assert task_other.id in result_ids_no_agent
+
+    def test_find_claimable_filters_by_project(self, db):
+        """Only tasks in the specified project are returned when project_id is given."""
+        from tests.factories import ProjectFactory
+
+        project_a = ProjectFactory()
+        project_b = ProjectFactory()
+
+        task_a = TaskFactory(status="todo", project=project_a, milestone=None, workplan=None, title="Task A")
+        task_b = TaskFactory(status="todo", project=project_b, milestone=None, workplan=None, title="Task B")
+
+        result_a_ids = [t.id for t in find_claimable_tasks(project_id=project_a.id)]
+        assert task_a.id in result_a_ids
+        assert task_b.id not in result_a_ids
+
+        result_b_ids = [t.id for t in find_claimable_tasks(project_id=project_b.id)]
+        assert task_b.id in result_b_ids
+        assert task_a.id not in result_b_ids
+
+        # No project filter — all tasks included
+        result_all_ids = [t.id for t in find_claimable_tasks()]
+        assert task_a.id in result_all_ids
+        assert task_b.id in result_all_ids

@@ -102,6 +102,53 @@ def get_tasks_with_unresolved_deps(task_ids: list) -> set:
     return unresolved_ids
 
 
+def find_claimable_tasks(
+    project_id: str = None,
+    tags: list = None,
+    agent_id: str = None,
+) -> list:
+    """Return tasks that are claimable, optionally filtered by project, tags, and agent.
+
+    Finds tasks in 'todo' status, excludes tasks with unresolved dependencies,
+    filters by tag matching (task.requires must be a subset of given tags),
+    and filters by assignment (unassigned or assigned to agent_id).
+
+    Args:
+        project_id: If given, only return tasks belonging to this project.
+        tags:       Agent's capability tags. If provided, task.requires must be
+                    a subset of these tags. If None or empty, tag filtering is skipped.
+        agent_id:   If given, exclude tasks assigned to other agents.
+
+    Returns:
+        QuerySet of Task objects matching all filters.
+    """
+    tasks = Task.objects.filter(status="todo")
+
+    if project_id:
+        tasks = tasks.filter(project_id=project_id)
+
+    # Exclude tasks with unmet dependencies
+    all_task_ids = list(tasks.values_list("id", flat=True))
+    unmet_task_ids = get_tasks_with_unresolved_deps(all_task_ids)
+    tasks = tasks.exclude(id__in=unmet_task_ids)
+
+    # Filter by tags if provided — task.requires must be subset of provided tags
+    if tags:
+        filtered_ids = [t.id for t in tasks if not t.requires or set(t.requires).issubset(set(tags))]
+        tasks = tasks.filter(id__in=filtered_ids)
+
+    # Filter by assignment — exclude tasks assigned to other agents
+    if agent_id:
+        unassigned = tasks.filter(assigned_to__isnull=True) | tasks.filter(assigned_to="")
+        assigned_to_me = tasks.filter(assigned_to=agent_id)
+        tasks = Task.objects.filter(
+            id__in=list(unassigned.values_list("id", flat=True))
+            + list(assigned_to_me.values_list("id", flat=True))
+        )
+
+    return tasks
+
+
 def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
     """Atomically claim a task for an agent.
 
