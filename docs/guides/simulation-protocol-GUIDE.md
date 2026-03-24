@@ -208,6 +208,45 @@ After max rework attempts (3) with no resolution:
 vtf task fail <task-id>
 ```
 
+## Quality Gates as Tasks
+
+Every milestone must end with a quality gate task. Quality gates are regular tasks on the board — they go through the same executor→judge loop as implementation tasks.
+
+**What a quality gate task does:**
+- Runs the full test suite (backend + CLI + frontend) — the complete regression check
+- Verifies the milestone's checklist (from the implementation plan)
+- Reports the updated baseline test count
+
+**Why it's a task, not a manual step:**
+- The supervisor doesn't do work — quality verification is work
+- It's tracked on the board like everything else
+- It goes through the judge for independent confirmation
+- In vafi, the controller dispatches it like any other task
+
+**Naming convention:** `G<N>` — e.g., `G0` (after Phase 0), `G1` (after Phase 1)
+
+**Dependency:** The quality gate depends on ALL tasks in its milestone.
+
+**Example spec structure:**
+```yaml
+id: "G1"
+name: "Quality Gate: Phase 1 complete"
+depends_on: [P1.1, P1.2, P1.3]
+judge: true
+
+acceptance_criteria:
+  - "Full backend test suite passes with 0 failures"
+  - "CLI test suite passes with 0 failures"
+  - "MCP server starts via python -m mcp_server.server"
+  - "vtf_board_overview tool returns correct data"
+  - "Response format matches SPECIFICATION.md"
+```
+
+**Test execution model:**
+- Per task: executor and judge run `test_command.unit` only (lean context, fast)
+- Quality gate task: executor runs `test_command.full` + CLI tests (complete regression)
+- This is the ONLY time the full suite runs during a milestone
+
 ## Branch Naming Convention
 
 ```
