@@ -4,13 +4,11 @@ from rest_framework.viewsets import GenericViewSet
 
 from tasks.exceptions import InvalidTransition
 from tasks.models import Task
-from tasks.state_machine import perform_transition
 from tasks.views import invalid_transition_response
 
 from .models import Review
 from .serializers import ReviewSerializer
-
-REVIEW_STATUSES = {"pending_start_review", "pending_completion_review"}
+from .services import ReviewError, submit_review
 
 
 class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
@@ -37,36 +35,27 @@ class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewS
         if task is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if task.status not in REVIEW_STATUSES:
-            return Response(
-                {
-                    "detail": (
-                        f"Reviews can only be submitted when task is in a review state. "
-                        f"Current status: '{task.status}'."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         decision = serializer.validated_data["decision"]
+        reason = serializer.validated_data.get("reason", "")
+        reviewer_id = serializer.validated_data.get("reviewer_id", "")
+        reviewer_type = serializer.validated_data.get("reviewer_type", "human")
 
         try:
-            if decision == "approved":
-                if task.status == "pending_start_review":
-                    perform_transition(task, "todo")
-                else:  # pending_completion_review
-                    perform_transition(task, "done")
-            else:
-                # rejected or changes_requested — set review_return_to BEFORE transitioning
-                task.review_return_to = task.status
-                task.save(update_fields=["review_return_to", "updated_at"])
-                perform_transition(task, "changes_requested")
+            result = submit_review(
+                task_id=task.id,
+                decision=decision,
+                reason=reason,
+                reviewer_id=reviewer_id,
+                reviewer_type=reviewer_type,
+            )
+        except ReviewError as exc:
+            return Response({"detail": exc.message}, status=exc.status_code)
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
 
-        serializer.save(task=task)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        out_serializer = self.get_serializer(result["review"])
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
