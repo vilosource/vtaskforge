@@ -382,3 +382,20 @@ def cancel(ctx, id):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Cancelled task {id} -> {result['status']}")
+
+
+@task.command()
+@click.argument("id")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def delete(ctx, id, yes):
+    """Delete a task."""
+    if not yes:
+        click.confirm(f"Delete task {id}?", abort=True)
+    client = ctx.obj["client"]
+    try:
+        client.delete(f"/v1/tasks/{id}/")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    click.echo(f"Deleted task {id}")

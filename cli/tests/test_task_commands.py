@@ -762,3 +762,37 @@ def test_task_cancel_api_error(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["task", "cancel", "task-abc"])
     assert result.exit_code == 1
+
+
+# --- delete ---
+
+def test_task_delete_with_yes_flag(runner, mock_client):
+    mock_client.delete.return_value = {}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "delete", "task-abc", "--yes"])
+    assert result.exit_code == 0
+    assert "Deleted task task-abc" in result.output
+    mock_client.delete.assert_called_once_with("/v1/tasks/task-abc/")
+
+
+def test_task_delete_confirm_yes(runner, mock_client):
+    mock_client.delete.return_value = {}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "delete", "task-abc"], input="y\n")
+    assert result.exit_code == 0
+    assert "Deleted task task-abc" in result.output
+    mock_client.delete.assert_called_once_with("/v1/tasks/task-abc/")
+
+
+def test_task_delete_confirm_no(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "delete", "task-abc"], input="n\n")
+    assert result.exit_code == 1
+    mock_client.delete.assert_not_called()
+
+
+def test_task_delete_api_error(runner, mock_client):
+    mock_client.delete.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "delete", "task-abc", "--yes"])
+    assert result.exit_code == 1
