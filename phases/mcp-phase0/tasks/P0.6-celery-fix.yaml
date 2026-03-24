@@ -1,0 +1,62 @@
+id: "P0.6"
+name: "Fix celery expire_stale_claims to use state machine and EventService"
+depends_on: [P0.1]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Make the celery expire_stale_claims task use the state machine and
+  EventService instead of directly mutating task status and creating events
+  inline. Currently the task sets task.status directly and creates
+  TaskEvent.objects.create() inline, bypassing both the state machine
+  and the new EventService.
+
+files:
+  create: []
+  modify:
+    - src/tasks/celery_tasks.py
+  affected:
+    - tests/tasks/test_claim_expiry.py
+
+implementation:
+  approach: |
+    Step 1: Modify src/tasks/celery_tasks.py expire_stale_claims
+    - Replace direct task.status = "needs_attention" with
+      perform_transition(task, "needs_attention", triggered_by="system")
+    - Replace inline TaskEvent.objects.create() with
+      record_event(task, "claim_expired", triggered_by="system")
+    - Keep claim field clearing: claimed_by=None, claimed_at=None,
+      claim_expires_at=None (these are separate from the status transition)
+    - Import perform_transition from tasks.state_machine
+    - Import record_event from events.services
+
+    Step 2: Add tests to tests/tasks/test_claim_expiry.py (or create new test file)
+    - test_expire_creates_event_via_service — verify event created through EventService
+    - test_expire_uses_state_machine — verify transition goes through perform_transition
+
+    Step 3: Run full test suite
+
+  constraints:
+    - Existing claim expiry tests must pass WITHOUT modification
+    - The celery task must use perform_transition, not direct status assignment
+    - The celery task must use record_event, not inline TaskEvent.objects.create
+    - Keep the claim field clearing (claimed_by, claimed_at, claim_expires_at)
+
+  references:
+    - src/tasks/celery_tasks.py
+    - src/tasks/state_machine.py
+    - src/events/services.py
+    - tests/tasks/test_claim_expiry.py
+
+acceptance_criteria:
+  - "expire_stale_claims uses perform_transition() for status changes"
+  - "expire_stale_claims uses record_event() for event creation"
+  - "No direct task.status assignment in celery_tasks.py"
+  - "No inline TaskEvent.objects.create() in celery_tasks.py"
+  - "2 new tests pass"
+  - "All existing tests pass without modification"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/test_claim_expiry.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"

@@ -1,0 +1,72 @@
+id: "P0.7"
+name: "Add enrichment helper functions to TaskService"
+depends_on: [P0.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add helper functions to tasks/services.py that MCP tools will need in
+  later phases. These compose existing data into enriched response formats.
+  Unlike the other P0 tasks, this adds NEW functions rather than extracting
+  existing logic — but the functions only read and compose existing data.
+
+files:
+  create: []
+  modify:
+    - src/tasks/services.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Add get_task_context(task_id: str) -> dict to services.py
+    - Returns full task context for MCP responses
+    - Includes: all task fields, parsed spec, dependency status (via resolve_dependencies),
+      reviews, recent events, notes, available actions
+    - Use select_related/prefetch_related for efficient queries
+
+    Step 2: Add get_available_actions(task) -> list[str] to services.py
+    - Given a task's current status, return the list of valid actions
+    - Maps from VALID_TRANSITIONS in state_machine.py to action names
+    - Example: status "todo" -> ["claim", "block", "cancel", "defer"]
+
+    Step 3: Add get_board_summary(project_id: str, workplan_id: str = None) -> dict to services.py
+    - Aggregate board state
+    - Returns: counts by status, attention items (blocked + needs_attention tasks),
+      pending reviews, active agents (tasks in doing status with claimed_by set)
+    - Optionally filter by project_id and/or workplan_id
+
+    Step 4: Write tests in tests/tasks/test_services.py (add to existing file)
+    - test_get_task_context_includes_all_fields
+    - test_get_available_actions_for_each_status — parametrized across all statuses
+    - test_get_board_summary_counts
+    - test_get_board_summary_attention_items
+    - test_get_board_summary_pending_reviews
+
+    Step 5: Run full test suite
+
+  constraints:
+    - These are new functions, not refactors — but they must not change existing behavior
+    - get_available_actions must be consistent with the state machine's VALID_TRANSITIONS
+    - Use select_related/prefetch_related in get_task_context to avoid N+1 queries
+    - get_board_summary should use aggregate queries, not Python-level counting
+
+  references:
+    - src/tasks/services.py
+    - src/tasks/state_machine.py
+    - src/tasks/models.py
+    - src/events/models.py
+    - src/reviews/models.py
+    - src/links/models.py
+
+acceptance_criteria:
+  - "get_task_context() returns dict with task fields, spec, deps, reviews, events, actions"
+  - "get_available_actions() returns correct actions for each status (parametrized test passes)"
+  - "get_board_summary() returns counts, attention items, pending reviews, active agents"
+  - "5 new tests pass"
+  - "All existing tests pass"
+  - "No N+1 queries in get_task_context (uses select_related/prefetch_related)"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/test_services.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"

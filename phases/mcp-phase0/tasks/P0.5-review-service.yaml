@@ -1,0 +1,74 @@
+id: "P0.5"
+name: "Extract ReviewService from inline review logic"
+depends_on: [P0.1]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Extract review routing logic from ReviewViewSet.create() into a service
+  function. The view currently handles decision parsing, status validation,
+  state transition routing based on decision type, review record creation,
+  and event recording inline. Extract to submit_review() in a new
+  reviews/services.py module.
+
+files:
+  create:
+    - src/reviews/services.py
+    - tests/reviews/test_services.py
+  modify:
+    - src/reviews/views.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Create src/reviews/services.py with ReviewError and submit_review()
+
+    ReviewError(message: str, status_code: int = 400):
+      Exception for review submission failures.
+
+    submit_review(task_id: str, decision: str, reason: str = "", reviewer_id: str = "", reviewer_type: str = "human") -> dict:
+      - decision is one of: "approved", "changes_requested", "rejected"
+      - Validates task is in a review status (pending_start_review or pending_completion_review)
+      - Routes state transition based on decision and current status:
+        - approved + pending_start_review -> todo
+        - approved + pending_completion_review -> done
+        - changes_requested -> sets review_return_to, transitions appropriately
+      - Creates Review record
+      - Creates event via record_event() from P0.1
+      - Returns: {'review': Review, 'task': Task, 'previous_status': str}
+      - Raises ReviewError if task not in review status
+
+    Step 2: Write tests in tests/reviews/test_services.py
+    - test_submit_review_approved_start_review — pending_start_review -> todo
+    - test_submit_review_approved_completion_review — pending_completion_review -> done
+    - test_submit_review_changes_requested — sets review_return_to, transitions
+    - test_submit_review_not_in_review_status_raises
+    - test_submit_review_creates_review_record
+
+    Step 3: Reduce views.py create() to parse request, call service, return response
+
+    Step 4: Run full test suite
+
+  constraints:
+    - Existing tests must pass WITHOUT modification — especially tests/reviews/test_api.py
+    - Review routing behavior must be identical to current inline version
+    - Use record_event() from P0.1 for event creation
+    - Use the state machine (perform_transition) for status changes
+
+  references:
+    - src/reviews/views.py
+    - src/reviews/models.py
+    - src/tasks/state_machine.py
+    - src/events/services.py
+    - tests/reviews/test_api.py
+
+acceptance_criteria:
+  - "src/reviews/services.py exists with submit_review() and ReviewError"
+  - "views.py create() delegates to submit_review()"
+  - "5 new unit tests in tests/reviews/test_services.py all pass"
+  - "All existing tests pass without modification, especially tests/reviews/test_api.py"
+
+test_command:
+  unit: "docker compose exec api pytest tests/reviews/test_services.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"

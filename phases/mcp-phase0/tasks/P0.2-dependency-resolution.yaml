@@ -1,0 +1,71 @@
+id: "P0.2"
+name: "Extract dependency resolution to TaskService"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Extract the duplicated dependency resolution logic shared by claim() and
+  claimable() into service functions. Currently the same dependency checking
+  logic exists in two places in views.py. Consolidate into resolve_dependencies()
+  and get_tasks_with_unresolved_deps() in a new tasks/services.py module.
+
+files:
+  create:
+    - src/tasks/services.py
+    - tests/tasks/test_services.py
+  modify:
+    - src/tasks/views.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Create src/tasks/services.py with two functions
+
+    resolve_dependencies(task_id: str) -> dict:
+      Check if all depends_on links for a task point to done tasks.
+      Returns: {
+        'resolved': bool,
+        'dependencies': [{'id', 'title', 'status'}],
+        'unresolved': [{'id', 'title', 'status'}]
+      }
+
+    get_tasks_with_unresolved_deps(task_ids: list[str]) -> set[str]:
+      Given a list of task IDs, return the subset that have unresolved
+      dependencies. Used by claimable() to filter efficiently.
+
+    Step 2: Write tests in tests/tasks/test_services.py
+    - test_resolve_deps_no_deps_returns_resolved — task with no links
+    - test_resolve_deps_all_done_returns_resolved — all dependency targets are done
+    - test_resolve_deps_some_not_done_returns_unresolved — mixed statuses
+    - test_resolve_deps_nonexistent_target_returns_unresolved — dangling link
+    - test_get_tasks_with_unresolved_deps_filters_correctly — batch check
+
+    Step 3: Replace inline dependency logic in views.py
+    - claim() action — replace dependency checking with resolve_dependencies() call
+    - claimable() action — replace filtering with get_tasks_with_unresolved_deps() call
+
+    Step 4: Run full test suite, especially test_claiming.py
+
+  constraints:
+    - This is a pure refactor — no behavior changes
+    - Existing tests must pass WITHOUT modification
+    - The dependency resolution logic must produce identical results to the inline version
+    - Use Link model queries consistent with existing patterns
+
+  references:
+    - src/tasks/views.py
+    - src/links/models.py
+    - tests/tasks/test_claiming.py
+
+acceptance_criteria:
+  - "src/tasks/services.py exists with resolve_dependencies() and get_tasks_with_unresolved_deps()"
+  - "Dependency checking logic removed from views.py claim() and claimable()"
+  - "5 new unit tests in tests/tasks/test_services.py all pass"
+  - "All existing tests pass without modification, especially test_claiming.py"
+  - "Dependency logic lives in one place (services.py)"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/test_services.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"

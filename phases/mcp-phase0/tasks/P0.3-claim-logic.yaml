@@ -1,0 +1,81 @@
+id: "P0.3"
+name: "Extract claim logic to TaskService"
+depends_on: [P0.1, P0.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Extract the atomic claim logic from TaskViewSet.claim() into a service
+  function. The view method currently contains validation, tag matching,
+  assignment checks, dependency resolution, atomic claim with select_for_update,
+  and event creation — all inline. Extract to claim_task() in services.py,
+  reducing the view to ~15 lines of request parsing and response formatting.
+
+files:
+  create: []
+  modify:
+    - src/tasks/services.py
+    - src/tasks/views.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Add ClaimError exception class to src/tasks/services.py
+    - ClaimError(message: str, code: str, status_code: int = 422)
+    - code field for machine-readable error type (tag_mismatch, already_claimed, deps_unmet, etc.)
+
+    Step 2: Add claim_task() function to src/tasks/services.py
+    - Signature: claim_task(task_id: str, agent_id: str, agent_tags: list[str] = None) -> Task
+    - Validates: status is todo, tags match, assignment allowed, deps resolved
+    - Uses resolve_dependencies() from P0.2
+    - Uses record_event() from P0.1
+    - Sets: claimed_by, claimed_at, claim_expires_at
+    - Transitions to doing via state machine
+    - Atomic via select_for_update
+    - Raises ClaimError with descriptive message on failure
+    - Returns the claimed Task instance
+
+    Step 3: Write tests in tests/tasks/test_services.py (add to existing file)
+    - test_claim_task_success — basic claim
+    - test_claim_task_sets_claim_fields — claimed_by, claimed_at, claim_expires_at
+    - test_claim_task_tag_mismatch_raises — task.requires not subset of agent tags
+    - test_claim_task_wrong_status_raises — task not in todo
+    - test_claim_task_assigned_to_other_raises — 403 case
+    - test_claim_task_unresolved_deps_raises — deps not done
+    - test_claim_task_creates_event — claimed event recorded
+    - test_claim_task_atomic — concurrent claims, one wins
+
+    Step 4: Reduce views.py claim() to ~15 lines
+    - Parse request (agent_id, tags)
+    - Call claim_task()
+    - Catch ClaimError, return appropriate HTTP response
+    - Return success response with serialized task
+
+    Step 5: Run full test suite
+
+  constraints:
+    - Existing tests must pass WITHOUT modification — especially test_claiming.py
+    - The claim behavior must be identical to the current inline version
+    - Use select_for_update for atomicity, matching the existing pattern
+    - ClaimError must carry enough info for the view to return the correct HTTP status
+    - Use resolve_dependencies() from P0.2, not inline dependency checks
+    - Use record_event() from P0.1, not inline event creation
+
+  references:
+    - src/tasks/services.py
+    - src/tasks/views.py
+    - src/tasks/state_machine.py
+    - tests/tasks/test_claiming.py
+    - src/events/services.py
+
+acceptance_criteria:
+  - "claim_task() function exists in src/tasks/services.py"
+  - "ClaimError exception class exists in src/tasks/services.py"
+  - "views.py claim() method is ~15 lines, delegates to claim_task()"
+  - "8 new unit tests in tests/tasks/test_services.py all pass"
+  - "All existing tests pass without modification, especially test_claiming.py"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/test_services.py tests/tasks/test_claiming.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"

@@ -1,0 +1,68 @@
+id: "P0.1"
+name: "Extract EventService from inline TaskEvent creation"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Extract event creation into a central service function. This is the simplest
+  extraction in Phase 0 and unblocks all other service extractions. Currently
+  TaskEvent.objects.create() is called inline in 5 locations across views,
+  state machine, and celery tasks. Replace all with a single record_event()
+  service function.
+
+files:
+  create:
+    - src/events/services.py
+    - tests/events/test_services.py
+  modify:
+    - src/tasks/views.py
+    - src/tasks/state_machine.py
+    - src/tasks/celery_tasks.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Create src/events/services.py with record_event() function
+    - Signature: record_event(task, event_type: str, data: dict = None, triggered_by: str = "")
+    - Creates a TaskEvent via TaskEvent.objects.create()
+    - Silent on failure (matches existing behavior) — wrap in try/except Exception: pass
+    - Returns the created TaskEvent on success, None on failure
+
+    Step 2: Write tests in tests/events/test_services.py
+    - test_record_event_creates_event — verify TaskEvent row created with correct fields
+    - test_record_event_silent_on_error — verify no exception raised on failure
+    - test_record_event_returns_event — verify return value is the TaskEvent instance
+
+    Step 3: Replace all 5 inline TaskEvent.objects.create() calls with record_event()
+    - src/tasks/views.py (3 callsites)
+    - src/tasks/state_machine.py (1 callsite)
+    - src/tasks/celery_tasks.py (1 callsite)
+    - Add import: from events.services import record_event
+
+    Step 4: Run full test suite to verify no regressions
+
+  constraints:
+    - This is a pure refactor — no behavior changes
+    - Existing tests must pass WITHOUT modification
+    - If any existing test breaks, you introduced a regression — fix the service, not the test
+    - The record_event() function must be silent on failure to match existing inline behavior
+    - Do not add any new features or error handling beyond what exists
+
+  references:
+    - src/events/models.py
+    - src/tasks/views.py
+    - src/tasks/state_machine.py
+    - src/tasks/celery_tasks.py
+
+acceptance_criteria:
+  - "src/events/services.py exists with record_event() function"
+  - "All 5 inline TaskEvent.objects.create() calls replaced with record_event()"
+  - "Zero grep results for TaskEvent.objects.create outside of services.py"
+  - "3 new unit tests in tests/events/test_services.py all pass"
+  - "All existing tests pass without modification"
+
+test_command:
+  unit: "docker compose exec api pytest tests/events/test_services.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"

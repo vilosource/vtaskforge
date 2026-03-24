@@ -1,0 +1,60 @@
+id: "P0.4"
+name: "Extract find claimable tasks to TaskService"
+depends_on: [P0.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Extract the claimable query logic from TaskViewSet.claimable() into a
+  service function. The view currently contains filtering by status, dependency
+  resolution, tag matching, and assignment checks inline. Extract to
+  find_claimable_tasks() in services.py.
+
+files:
+  create: []
+  modify:
+    - src/tasks/services.py
+    - src/tasks/views.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Add find_claimable_tasks() to src/tasks/services.py
+    - Signature: find_claimable_tasks(project_id: str = None, tags: list[str] = None, agent_id: str = None) -> list[Task]
+    - Finds tasks in 'todo' status
+    - Filters out tasks with unresolved dependencies (uses get_tasks_with_unresolved_deps from P0.2)
+    - Filters by tag matching (task.requires is subset of given tags)
+    - Filters by assignment (unassigned or assigned to agent_id)
+    - Optionally filters by project_id
+
+    Step 2: Write tests in tests/tasks/test_services.py (add to existing file)
+    - test_find_claimable_basic — returns todo tasks
+    - test_find_claimable_excludes_tasks_with_unmet_deps
+    - test_find_claimable_filters_by_tags
+    - test_find_claimable_filters_by_assignment
+    - test_find_claimable_filters_by_project
+
+    Step 3: Reduce views.py claimable() to request parsing + call service + format response
+
+    Step 4: Run full test suite
+
+  constraints:
+    - Existing tests must pass WITHOUT modification
+    - The claimable filtering must produce identical results to the current inline version
+    - Use get_tasks_with_unresolved_deps() from P0.2
+
+  references:
+    - src/tasks/services.py
+    - src/tasks/views.py
+    - tests/tasks/test_claiming.py
+
+acceptance_criteria:
+  - "find_claimable_tasks() function exists in src/tasks/services.py"
+  - "views.py claimable() delegates to find_claimable_tasks()"
+  - "5 new unit tests in tests/tasks/test_services.py all pass"
+  - "All existing tests pass without modification"
+
+test_command:
+  unit: "docker compose exec api pytest tests/tasks/test_services.py -v --tb=short"
+  full: "docker compose exec api pytest --tb=short"
