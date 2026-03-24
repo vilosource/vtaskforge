@@ -18,6 +18,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
+from .services import get_tasks_with_unresolved_deps, resolve_dependencies
 from .state_machine import get_valid_transitions, perform_transition, NON_TERMINAL_STATUSES, TERMINAL_STATUSES
 
 DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
@@ -193,29 +194,22 @@ class TaskViewSet(ModelViewSet):
                     )
 
             # Dependency check — all depends_on links must have target tasks in "done" status
-            from links.models import Link
-            depends_on_links = Link.objects.filter(
-                source_type="task", source_id=task.id, link_type="depends_on"
-            )
-            for link in depends_on_links:
-                try:
-                    dep_task = Task.objects.get(pk=link.target_id)
-                    if dep_task.status != "done":
-                        return Response(
-                            {
-                                "error": {
-                                    "code": "DEPENDENCY_UNMET",
-                                    "message": f"Dependency {link.target_id} not done",
-                                    "details": {
-                                        "dependency_id": link.target_id,
-                                        "dependency_status": dep_task.status,
-                                    },
-                                }
+            dep_result = resolve_dependencies(task.id)
+            if not dep_result["resolved"]:
+                first_unresolved = dep_result["unresolved"][0]
+                return Response(
+                    {
+                        "error": {
+                            "code": "DEPENDENCY_UNMET",
+                            "message": f"Dependency {first_unresolved['id']} not done",
+                            "details": {
+                                "dependency_id": first_unresolved["id"],
+                                "dependency_status": first_unresolved["status"],
                             },
-                            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        )
-                except Task.DoesNotExist:
-                    pass  # External dependency — skip
+                        }
+                    },
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
 
             # All checks passed — perform claim
             perform_transition(task, "doing", triggered_by=agent_id)
@@ -253,21 +247,8 @@ class TaskViewSet(ModelViewSet):
             tasks = tasks.filter(project_id=project)
 
         # Exclude tasks with unmet dependencies
-        from links.models import Link
-        task_ids_with_deps = Link.objects.filter(
-            source_type="task", link_type="depends_on"
-        ).values_list("source_id", flat=True)
-        unmet_task_ids = []
-        for tid in set(task_ids_with_deps):
-            deps = Link.objects.filter(source_type="task", source_id=tid, link_type="depends_on")
-            for dep in deps:
-                try:
-                    dep_task = Task.objects.get(pk=dep.target_id)
-                    if dep_task.status != "done":
-                        unmet_task_ids.append(tid)
-                        break
-                except Task.DoesNotExist:
-                    pass
+        all_task_ids = list(tasks.values_list("id", flat=True))
+        unmet_task_ids = get_tasks_with_unresolved_deps(all_task_ids)
         tasks = tasks.exclude(id__in=unmet_task_ids)
 
         # Filter by tags if provided — task.requires must be subset of provided tags
