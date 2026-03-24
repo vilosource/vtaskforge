@@ -55,24 +55,27 @@ def test_response_success_defaults():
 
 
 def test_response_envelope_error():
-    """error_response() shape matches the spec envelope."""
+    """error_response() shape matches the spec envelope (flat, same keys as success)."""
     result = error_response(
-        message="Task not found",
-        code="not_found",
-        details={"task_id": "t-99"},
+        message="Task 'abc' is in 'blocked' status and cannot be claimed.",
+        data={"task_id": "abc", "current_status": "blocked"},
+        available_actions=["vtf_search_tasks", "vtf_manage_task"],
     )
     assert result["success"] is False
-    assert result["error"]["code"] == "not_found"
-    assert result["error"]["message"] == "Task not found"
-    assert result["error"]["details"] == {"task_id": "t-99"}
+    assert result["message"] == "Task 'abc' is in 'blocked' status and cannot be claimed."
+    assert result["data"] == {"task_id": "abc", "current_status": "blocked"}
+    assert result["available_actions"] == ["vtf_search_tasks", "vtf_manage_task"]
+    # must NOT contain a nested error object
+    assert "error" not in result
 
 
 def test_response_error_defaults():
-    """error_response() with no code/details fills safe defaults."""
+    """error_response() with no data/actions fills safe defaults."""
     result = error_response(message="Something went wrong")
     assert result["success"] is False
-    assert result["error"]["code"] == ""
-    assert result["error"]["details"] == {}
+    assert result["message"] == "Something went wrong"
+    assert result["data"] == {}
+    assert result["available_actions"] == []
 
 
 # ---------------------------------------------------------------------------

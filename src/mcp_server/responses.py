@@ -41,32 +41,30 @@ def success_response(
 
 def error_response(
     message: str,
-    code: str = "",
-    details: Optional[Dict] = None,
+    data: Optional[Dict] = None,
+    available_actions: Optional[List[str]] = None,
 ) -> Dict:
     """
     Build an error response envelope.
 
     Args:
-        message: Actionable human-readable error description.
-        code: Machine-readable error code (e.g. "not_found", "invalid_transition").
-        details: Additional structured context about the error.
+        message: Actionable human-readable error description (what went wrong,
+                 why, and what to do instead).
+        data: Additional structured context about the error (e.g. task_id,
+              current_status). Goes inside the standard ``data`` key.
+        available_actions: List of MCP tool names the agent can call next.
 
     Returns:
         {
             "success": False,
-            "error": {
-                "code": code,
-                "message": message,
-                "details": {...},
-            },
+            "data": {...},
+            "message": "...",
+            "available_actions": [...],
         }
     """
     return {
         "success": False,
-        "error": {
-            "code": code,
-            "message": message,
-            "details": details if details is not None else {},
-        },
+        "data": data if data is not None else {},
+        "message": message,
+        "available_actions": available_actions if available_actions is not None else [],
     }
