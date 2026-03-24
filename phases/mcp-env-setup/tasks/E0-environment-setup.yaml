@@ -1,0 +1,73 @@
+id: "E0"
+name: "Set up and verify development environment"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Set up the development environment for the vtaskforge project so that
+  all subsequent tasks can be executed by agents. This is the "developer
+  sets up their laptop" task — after this, every executor and judge can
+  clone, build, test, and work on the project.
+
+  The goal is a clean baseline: all services running, all tests passing,
+  zero failures. If there are pre-existing test failures, investigate and
+  fix them. The baseline must be clean before any implementation tasks start.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md to understand the project setup
+
+    Step 2: Start the development stack
+    - docker compose up -d
+    - Wait for all services to be healthy: docker compose ps
+    - Verify: api, db, redis, celery, celery-beat all running
+
+    Step 3: Run database migrations
+    - docker compose exec api python src/manage.py migrate
+
+    Step 4: Run the full backend test suite
+    - docker compose exec api pytest --tb=short
+    - Record the exact count: X passed, Y failed
+
+    Step 5: If there are ANY test failures:
+    - Investigate each failure
+    - Determine if it's a code bug, a test bug, or an environment issue
+    - Fix what can be fixed
+    - Re-run the full suite until 0 failures
+    - If failures cannot be fixed, document them with clear reasoning
+
+    Step 6: Run CLI tests
+    - cd cli && pytest --tb=short
+    - Record the count
+    - Fix any failures
+
+    Step 7: Produce the environment report with exact baseline counts
+
+  constraints:
+    - The goal is 0 test failures across all suites
+    - Do not skip or disable tests to achieve 0 failures
+    - If a test is genuinely broken (not your fault), fix the test
+    - If a test requires infrastructure that's not available, document it
+    - Do not modify application code — only fix tests or environment config
+    - Commit any fixes you make
+
+  references:
+    - CLAUDE.md
+
+acceptance_criteria:
+  - "Docker dev stack running: api, db, redis, celery, celery-beat all healthy"
+  - "Database migrations applied successfully"
+  - "Backend test suite: 0 failures"
+  - "CLI test suite: 0 failures"
+  - "Environment report produced with exact baseline counts"
+
+test_command:
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"
