@@ -93,7 +93,7 @@ implementation:
     - Use perform_transition() for all state changes, not direct status assignment
     - Use record_event() for recording reasons (block, cancel)
     - Catch TransitionError and return error_response with valid_transitions
-    - "judge" parameter is string ("true"/"false") since MCP params are flat typed
+    - judge parameter is string (true/false) since MCP params are flat typed
     - Error responses must list valid transitions from current status
     - Response format must match SPECIFICATION.md section 4.9
     - New file src/mcp_server/tools/manage.py (not in workflow.py)
