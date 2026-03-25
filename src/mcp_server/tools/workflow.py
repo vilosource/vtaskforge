@@ -115,6 +115,14 @@ def vtf_claim_and_start(task_id: str, agent_id: str, tags: str = "") -> str:
     try:
         # Atomically claim the task via the service layer
         claim_task(task_id, agent_id, agent_tags=tags_list)
+    except Task.DoesNotExist:
+        return json.dumps(
+            error_response(
+                message=f"Task {task_id} not found. Use vtf_next_work to find an available task.",
+                data={"task_id": task_id},
+                available_actions=["vtf_next_work", "vtf_search_tasks"],
+            )
+        )
     except ClaimError as e:
         # Build actionable error messages and suggest appropriate next steps
         if e.code == "tag_mismatch":
@@ -160,8 +168,6 @@ def vtf_claim_and_start(task_id: str, agent_id: str, tags: str = "") -> str:
                 available_actions=actions,
             )
         )
-    except Exception:
-        raise
 
     # Claim succeeded — fetch full context for the response
     context = get_task_context(task_id)
