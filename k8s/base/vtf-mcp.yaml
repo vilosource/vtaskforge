@@ -57,15 +57,13 @@ spec:
                   name: vtf-secrets
                   key: SECRET_KEY
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 8002
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 8002
             initialDelaySeconds: 15
             periodSeconds: 30

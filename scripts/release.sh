@@ -62,9 +62,7 @@ docker push "${IMAGE_LATEST}"
 
 # Step 3: Update kustomization with the SHA tag
 echo "Updating image tag in overlay to ${GIT_SHA}..."
-cd "${OVERLAY}"
-kustomize edit set image "vtf=${IMAGE_TAG}"
-cd - > /dev/null
+sed -i "s|newTag:.*|newTag: ${GIT_SHA}|" "${OVERLAY}/kustomization.yaml"
 
 # Step 4: Apply manifests
 echo "Applying manifests to ${NAMESPACE}..."
