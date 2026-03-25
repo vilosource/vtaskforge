@@ -1,0 +1,64 @@
+id: "G4"
+name: "Quality Gate: Phase 4 complete — MCP server shipped"
+depends_on: [P4.4]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Final quality gate for the MCP server project. Verify everything works
+  end-to-end: all tests pass, all tools respond correctly, documentation
+  is complete, and the .mcp.json configuration works.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Run the full backend test suite
+    - docker compose exec api pytest --tb=short
+    - Record exact count
+
+    Step 2: Run the CLI test suite
+    - cd cli && pytest --tb=short
+
+    Step 3: Verify final checklist
+    - All 9 tools registered and responding
+    - Error message audit tests pass (test_error_quality.py)
+    - Performance tests pass (test_performance.py)
+    - .mcp.json exists and has correct configuration
+    - docs/mcp-server-README.md exists with all sections
+    - Auto-discovery in server.py works (no manual imports needed)
+    - Both e2e workflow tests pass (executor + supervisor)
+
+    Step 4: Produce final report
+    - Total test count (backend + CLI)
+    - Final baseline
+    - Ship readiness assessment
+
+  constraints:
+    - This is a verification task — do not modify any code
+    - Report the final baseline
+    - If anything fails, report it — do not fix
+
+  references:
+    - CLAUDE.md
+    - docs/vtf-mcp-server-IMPLEMENTATION-PLAN.md
+    - docs/vtf-mcp-server-SPECIFICATION.md
+    - docs/mcp-server-README.md
+
+acceptance_criteria:
+  - "Full backend test suite: 0 failures"
+  - "CLI test suite: 0 failures"
+  - "All 9 MCP tools registered"
+  - "Error audit tests pass"
+  - "Performance tests pass (all tools under 500ms)"
+  - ".mcp.json configuration present"
+  - "Documentation complete"
+  - "Final baseline recorded"
+
+test_command:
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"

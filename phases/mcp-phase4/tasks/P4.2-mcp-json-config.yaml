@@ -1,0 +1,65 @@
+id: "P4.2"
+name: "Claude Code .mcp.json configuration"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Create a working .mcp.json configuration at the project root so
+  Claude Code can automatically discover and connect to the vtf MCP
+  server. Also add auto-discovery of tool modules in server.py to
+  eliminate manual import lines.
+
+files:
+  create:
+    - .mcp.json
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read the specification section on configuration
+    - docs/vtf-mcp-server-SPECIFICATION.md — section on Claude Code config
+    - src/mcp_server/server.py — current tool import pattern
+
+    Step 2: Create .mcp.json at project root
+    {
+      "mcpServers": {
+        "vtf": {
+          "command": "docker",
+          "args": ["compose", "exec", "-T", "api", "python", "-m", "mcp_server.server"],
+          "env": {}
+        }
+      }
+    }
+    Note: The server runs inside Docker, so the command uses docker compose exec.
+    The -T flag is needed for non-TTY stdio transport.
+
+    Step 3: Replace manual imports in server.py with auto-discovery
+    - Use importlib and pkgutil to discover all modules in mcp_server.tools/
+    - This eliminates the need to add import lines when new tools are added
+    - Keep the existing manual imports as a fallback comment
+
+    Step 4: Verify the server still starts and all tools are registered
+    - docker compose exec api python -c "from mcp_server.server import mcp; print(mcp.list_tools())"
+
+  constraints:
+    - .mcp.json must work with Claude Code's MCP client
+    - Auto-discovery must find all existing tool modules
+    - Server must still start correctly after the change
+    - Do not break any existing tests
+
+  references:
+    - src/mcp_server/server.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - ".mcp.json exists at project root with correct configuration"
+  - "server.py auto-discovers tool modules instead of manual imports"
+  - "All 9 tools are still registered after auto-discovery change"
+  - "Existing tests still pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/ -v --tb=short"

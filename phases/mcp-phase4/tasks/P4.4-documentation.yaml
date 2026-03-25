@@ -1,0 +1,57 @@
+id: "P4.4"
+name: "MCP server documentation"
+depends_on: [P4.1, P4.2, P4.3]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Create comprehensive MCP server documentation covering setup,
+  tool reference, configuration, and troubleshooting.
+
+files:
+  create:
+    - docs/mcp-server-README.md
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read all tool files to extract descriptions and parameters
+    - src/mcp_server/tools/*.py — all tool functions with docstrings
+
+    Step 2: Read the specification for context
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+    Step 3: Create docs/mcp-server-README.md with sections:
+    - Overview: what the MCP server is and who it's for
+    - Setup: how to configure .mcp.json for Claude Code
+    - Tool Reference: all 9 tools with parameters and example responses
+      (generated from actual tool signatures and docstrings)
+    - Response Format: the standard envelope format
+    - Error Handling: how errors are structured, available_actions pattern
+    - Architecture: embedded in Django, service layer, tool modules
+    - Troubleshooting: common issues and solutions
+    - Development: how to add a new tool (auto-discovery pattern)
+
+  constraints:
+    - Tool reference must match actual implementations, not just the spec
+    - Include real parameter names and types from the tool signatures
+    - Keep it practical — setup instructions should work out of the box
+    - Do not duplicate the full SPECIFICATION — reference it instead
+
+  references:
+    - src/mcp_server/tools/*.py
+    - src/mcp_server/server.py
+    - .mcp.json
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "docs/mcp-server-README.md exists"
+  - "All 9 tools documented with parameters"
+  - "Setup instructions reference .mcp.json"
+  - "Response format documented"
+  - "Troubleshooting section present"
+
+test_command:
+  unit: "echo 'Documentation task - no tests'"
