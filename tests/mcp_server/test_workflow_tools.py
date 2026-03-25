@@ -1,6 +1,6 @@
 """
 Tests for the vtf_next_work MCP tool (P2.1), vtf_claim_and_start MCP tool (P2.2),
-and vtf_report_progress MCP tool (P2.3).
+vtf_report_progress MCP tool (P2.3), and vtf_submit_work MCP tool (P2.4).
 
 Tests call the tool Python functions directly (not via MCP protocol).
 """
@@ -10,8 +10,8 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from mcp_server.tools.workflow import vtf_claim_and_start, vtf_next_work, vtf_report_progress
-from tests.factories import LinkFactory, ProjectFactory, TaskFactory
+from mcp_server.tools.workflow import vtf_claim_and_start, vtf_next_work, vtf_report_progress, vtf_submit_work
+from tests.factories import LinkFactory, MilestoneFactory, ProjectFactory, TaskFactory
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +439,123 @@ def test_report_progress_not_doing_error():
     task = TaskFactory(status="todo")
 
     result = json.loads(vtf_report_progress(task_id=task.id))
+
+    assert result["success"] is False
+    assert result["message"] != ""
+    assert "doing" in result["message"].lower()
+    assert "available_actions" in result
+    assert len(result["available_actions"]) > 0
+
+
+# ===========================================================================
+# vtf_submit_work tests (P2.4)
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# test_submit_work_completes_task
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_submit_work_completes_task():
+    """vtf_submit_work moves a doing task with no review flag directly to done."""
+    task = TaskFactory(status="doing", needs_review_on_completion=False)
+
+    result = json.loads(vtf_submit_work(task_id=task.id))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.status == "done"
+    assert result["data"]["task"]["status"] == "done"
+    assert result["data"]["review_required"] is False
+
+
+# ---------------------------------------------------------------------------
+# test_submit_work_triggers_review_when_configured
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_submit_work_triggers_review_when_configured():
+    """vtf_submit_work routes task to pending_completion_review when review flag is set."""
+    task = TaskFactory(status="doing", needs_review_on_completion=True)
+
+    result = json.loads(vtf_submit_work(task_id=task.id))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.status == "pending_completion_review"
+    assert result["data"]["task"]["status"] == "pending_completion_review"
+    assert result["data"]["review_required"] is True
+
+
+# ---------------------------------------------------------------------------
+# test_submit_work_adds_completion_note
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_submit_work_adds_completion_note():
+    """vtf_submit_work creates a completion_note event when a note is provided."""
+    from events.models import TaskEvent
+
+    task = TaskFactory(status="doing", needs_review_on_completion=False)
+
+    result = json.loads(vtf_submit_work(task_id=task.id, completion_note="All tests pass, branch committed."))
+
+    assert result["success"] is True
+    events = TaskEvent.objects.filter(task=task, event_type="completion_note")
+    assert events.exists()
+    assert events.first().data.get("note") == "All tests pass, branch committed."
+
+
+# ---------------------------------------------------------------------------
+# test_submit_work_includes_milestone_progress
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_submit_work_includes_milestone_progress():
+    """vtf_submit_work response includes milestone_progress with completion counts."""
+    milestone = MilestoneFactory()
+    # 2 done tasks + 1 we are about to submit = 3 total in milestone
+    TaskFactory(milestone=milestone, workplan=milestone.workplan, project=milestone.workplan.project, status="done")
+    TaskFactory(milestone=milestone, workplan=milestone.workplan, project=milestone.workplan.project, status="done")
+    task = TaskFactory(
+        milestone=milestone,
+        workplan=milestone.workplan,
+        project=milestone.workplan.project,
+        status="doing",
+        needs_review_on_completion=False,
+    )
+
+    result = json.loads(vtf_submit_work(task_id=task.id))
+
+    assert result["success"] is True
+    assert "milestone_progress" in result["data"]
+    progress = result["data"]["milestone_progress"]
+    assert "id" in progress
+    assert "title" in progress
+    assert "completed" in progress
+    assert "total" in progress
+    assert "pct" in progress
+    # 3 tasks in milestone — all now done
+    assert progress["total"] == 3
+    assert progress["completed"] == 3
+
+
+# ---------------------------------------------------------------------------
+# test_submit_work_not_doing_error
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_submit_work_not_doing_error():
+    """vtf_submit_work returns an error when task is not in 'doing' status."""
+    task = TaskFactory(status="todo")
+
+    result = json.loads(vtf_submit_work(task_id=task.id))
 
     assert result["success"] is False
     assert result["message"] != ""
