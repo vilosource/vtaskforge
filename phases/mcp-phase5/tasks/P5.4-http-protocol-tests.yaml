@@ -1,0 +1,77 @@
+id: "P5.4"
+name: "HTTP transport protocol tests"
+depends_on: [P5.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add protocol-level tests that exercise the MCP server over streamable
+  HTTP transport. Mirror the existing stdio protocol tests but connect
+  via HTTP URL. Verify tool discovery, success/error calls, and full
+  lifecycle over HTTP.
+
+files:
+  create:
+    - tests/mcp_server/test_http_protocol.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read the existing stdio protocol tests for pattern reference
+    - tests/mcp_server/test_mcp_protocol.py
+
+    Step 2: Read how to start the HTTP server programmatically
+    - The server can be started as a subprocess with VTF_MCP_TRANSPORT=http
+    - Or we can use the mcp.streamable_http_app() directly with a test client
+    - Best approach: start the server as a subprocess on a random port,
+      connect with the MCP HTTP client, run tests, shut down
+
+    Step 3: Create tests/mcp_server/test_http_protocol.py
+
+    Use a fixture that:
+    - Picks a free port
+    - Starts the MCP server as a subprocess with VTF_MCP_TRANSPORT=http
+    - Waits for the port to be ready (retry connect)
+    - Yields the URL
+    - Kills the subprocess on teardown
+
+    Use mcp.client.streamable_http.streamable_http_client for MCP protocol:
+
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    async with streamable_http_client(url=f"http://localhost:{port}/mcp") as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            ...
+
+    Tests:
+    - test_http_initialize_and_list_tools — 9 tools discovered over HTTP
+    - test_http_call_tool_success — board_overview returns valid response
+    - test_http_call_tool_error — nonexistent task returns error envelope
+    - test_http_full_lifecycle — create > submit > claim > progress > submit_work > delete
+
+  constraints:
+    - Tests must start their own server subprocess (not depend on docker compose mcp service)
+    - Use a random free port to avoid conflicts
+    - Wait for server readiness before running tests (retry loop)
+    - Clean up subprocess on teardown
+    - Auth can be skipped in these tests (auth is tested separately in P5.3)
+      Set VTF_MCP_AUTH_DISABLED=true env var or similar
+
+  references:
+    - tests/mcp_server/test_mcp_protocol.py
+    - src/mcp_server/server.py
+    - mcp.client.streamable_http
+
+acceptance_criteria:
+  - "4 HTTP protocol tests pass"
+  - "Tests start server subprocess on random port"
+  - "Tests use MCP HTTP client (not raw HTTP)"
+  - "Full lifecycle works over HTTP transport"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_http_protocol.py -v --tb=short"

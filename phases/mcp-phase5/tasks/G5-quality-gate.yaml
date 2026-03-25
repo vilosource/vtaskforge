@@ -1,0 +1,57 @@
+id: "G5"
+name: "Quality Gate: Phase 5 complete — HTTP transport shipped"
+depends_on: [P5.6]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Quality gate for Phase 5. Verify both transports work, auth is
+  enforced on HTTP, all tests pass, documentation is complete.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Run full backend test suite
+    - docker compose exec api pytest --tb=short
+
+    Step 2: Run CLI test suite
+    - cd cli && pytest --tb=short
+
+    Step 3: Verify checklist:
+    - DJANGO_ALLOW_ASYNC_UNSAFE is NOT set anywhere
+    - All tools use @async_tool decorator
+    - Stdio protocol tests pass (test_mcp_protocol.py)
+    - HTTP protocol tests pass (test_http_protocol.py)
+    - HTTP auth tests pass (test_http_auth.py, test_http_auth_integration.py)
+    - mcp service starts in docker compose on port 8002
+    - Docker compose mcp service responds to MCP HTTP requests
+    - Documentation covers both transports
+
+    Step 4: Produce final report with test count and baseline
+
+  constraints:
+    - Verification task — do not modify any code
+    - Report the final baseline
+
+  references:
+    - CLAUDE.md
+    - docs/mcp-server-README.md
+
+acceptance_criteria:
+  - "Full backend test suite: 0 failures"
+  - "CLI test suite: 0 failures"
+  - "DJANGO_ALLOW_ASYNC_UNSAFE not present in codebase"
+  - "Stdio protocol tests pass"
+  - "HTTP protocol tests pass"
+  - "HTTP auth enforced (401 without token)"
+  - "Both transports documented"
+  - "Final baseline recorded"
+
+test_command:
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"

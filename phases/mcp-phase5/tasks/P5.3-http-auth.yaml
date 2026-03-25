@@ -1,0 +1,93 @@
+id: "P5.3"
+name: "HTTP authentication middleware for MCP server"
+depends_on: [P5.2]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Add token-based authentication for the HTTP transport. Validate
+  Authorization: Token <token> header against Django's authtoken table.
+  Stdio transport remains unauthenticated. Use Starlette middleware
+  since FastMCP's HTTP transport is a Starlette app.
+
+files:
+  create:
+    - src/mcp_server/http_auth.py
+    - tests/mcp_server/test_http_auth.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing auth.py for the validate_token function
+    - src/mcp_server/auth.py — validate_token(token) -> User or None
+
+    Step 2: Create src/mcp_server/http_auth.py
+
+    Create a Starlette middleware that:
+    - Extracts token from Authorization header (format: "Token <key>")
+    - Calls validate_token() to check against Django authtoken
+    - Returns 401 with JSON error if invalid or missing
+    - Passes request through if valid
+    - Skips auth for health check endpoint (GET /health or GET /)
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import JSONResponse
+    from mcp_server.auth import validate_token
+
+    class TokenAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            # Skip auth for health checks
+            if request.method == "GET" and request.url.path in ("/", "/health"):
+                return await call_next(request)
+            # Extract token
+            auth_header = request.headers.get("authorization", "")
+            if not auth_header.startswith("Token "):
+                return JSONResponse({"error": "Missing Authorization: Token header"}, 401)
+            token = auth_header[6:]  # Strip "Token " prefix
+            # validate_token uses Django ORM — run in thread
+            from asgiref.sync import sync_to_async
+            user = await sync_to_async(validate_token, thread_sensitive=False)(token)
+            if user is None:
+                return JSONResponse({"error": "Invalid token"}, 401)
+            # Store user on request state for downstream use
+            request.state.user = user
+            return await call_next(request)
+
+    Step 3: Update server.py to apply middleware when using HTTP transport
+
+    When transport == "http":
+    - Get the Starlette app from mcp.streamable_http_app()
+    - Add TokenAuthMiddleware
+    - Run with uvicorn
+
+    Step 4: Create tests/mcp_server/test_http_auth.py
+    - test_auth_valid_token — request with valid token passes through
+    - test_auth_invalid_token — returns 401
+    - test_auth_missing_header — returns 401
+    - test_auth_health_check_no_auth — GET / passes without token
+    - test_auth_wrong_format — "Bearer" instead of "Token" returns 401
+
+  constraints:
+    - Use existing validate_token() from mcp_server.auth
+    - Must use sync_to_async for the ORM call in the async middleware
+    - Stdio transport must NOT require auth (no change to stdio behavior)
+    - Return JSON error responses matching the MCP envelope format
+    - Health check endpoint must work without auth
+
+  references:
+    - src/mcp_server/auth.py
+    - src/mcp_server/server.py
+
+acceptance_criteria:
+  - "TokenAuthMiddleware exists in src/mcp_server/http_auth.py"
+  - "HTTP requests without valid token get 401"
+  - "HTTP requests with valid token pass through"
+  - "Health check endpoint works without auth"
+  - "Stdio transport unaffected"
+  - "5 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_http_auth.py -v --tb=short"

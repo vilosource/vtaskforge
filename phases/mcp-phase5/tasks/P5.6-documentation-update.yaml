@@ -1,0 +1,65 @@
+id: "P5.6"
+name: "Update documentation for HTTP transport"
+depends_on: [P5.5]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Update mcp-server-README.md and .mcp.json with HTTP transport
+  documentation. Add remote agent connection instructions and both
+  transport configurations.
+
+files:
+  create: []
+  modify:
+    - docs/mcp-server-README.md
+    - .mcp.json
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read current docs/mcp-server-README.md
+
+    Step 2: Update the Architecture section to show both transports
+
+    Step 3: Add HTTP transport setup section:
+    - Start the mcp service: docker compose up -d mcp
+    - Verify: curl http://localhost:8002/mcp
+    - Auth: set VTF_TOKEN for agent authentication
+
+    Step 4: Add remote agent configuration section:
+    - For vafi executor containers: connect to http://vtf-mcp:8002/mcp
+    - For k8s internal: use service DNS (vtf-mcp.vtf.svc.cluster.local:8002)
+    - For external: use vtf-mcp.viloforge.com (behind ingress)
+
+    Step 5: Update .mcp.json to show both options:
+    - stdio (local dev, default)
+    - http (remote, with token auth)
+
+    Step 6: Remove the "Django async safety" section (no longer applicable
+    after P5.1 replaced DJANGO_ALLOW_ASYNC_UNSAFE with sync_to_async)
+
+    Step 7: Update the "Transport limitations" section to reflect that HTTP
+    is now supported
+
+  constraints:
+    - Keep practical — setup instructions must work out of the box
+    - Show both stdio and HTTP configurations
+    - Document the env vars (VTF_MCP_TRANSPORT, VTF_MCP_HOST, VTF_MCP_PORT)
+    - Reference the SPECIFICATION for protocol details
+
+  references:
+    - docs/mcp-server-README.md
+    - .mcp.json
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "README documents both stdio and HTTP transports"
+  - "Remote agent connection instructions present"
+  - "Environment variables documented"
+  - "Auth setup documented for HTTP"
+  - ".mcp.json shows both transport options"
+
+test_command:
+  unit: "echo 'Documentation task - no tests'"

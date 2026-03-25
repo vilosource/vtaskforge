@@ -1,0 +1,108 @@
+id: "P5.1"
+name: "Replace DJANGO_ALLOW_ASYNC_UNSAFE with sync_to_async tool wrapper"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Remove the DJANGO_ALLOW_ASYNC_UNSAFE hack from server.py and replace
+  it with a proper async wrapper. Create a decorator that makes sync
+  tool functions safe to call from FastMCP's async event loop by running
+  them in a thread via sync_to_async.
+
+files:
+  create:
+    - src/mcp_server/utils.py
+  modify:
+    - src/mcp_server/server.py
+    - src/mcp_server/tools/board.py
+    - src/mcp_server/tools/workflow.py
+    - src/mcp_server/tools/search.py
+    - src/mcp_server/tools/detail.py
+    - src/mcp_server/tools/manage.py
+    - src/mcp_server/tools/review.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read server.py and all tool files to understand the current pattern
+    - Each tool is a sync function decorated with @mcp.tool()
+    - FastMCP calls sync functions directly in the async loop
+    - DJANGO_ALLOW_ASYNC_UNSAFE=true bypasses Django's safety check
+
+    Step 2: Create src/mcp_server/utils.py with an async tool wrapper
+
+    The approach: create an async wrapper function for each tool that calls
+    the original sync function via sync_to_async. Register the async wrapper
+    with @mcp.tool() instead of the sync function.
+
+    from asgiref.sync import sync_to_async
+
+    def async_tool(fn):
+        """Wrap a sync tool function for safe async execution.
+
+        Creates an async version that runs the sync function in a thread
+        via sync_to_async. The async function preserves the original's
+        name, docstring, and type annotations (required by FastMCP for
+        tool registration and parameter schema generation).
+        """
+        async_fn = sync_to_async(fn, thread_sensitive=False)
+        # Copy metadata that FastMCP uses for tool registration
+        async_fn.__name__ = fn.__name__
+        async_fn.__doc__ = fn.__doc__
+        async_fn.__annotations__ = fn.__annotations__
+        async_fn.__module__ = fn.__module__
+        async_fn.__qualname__ = fn.__qualname__
+        # Copy function signature for FastMCP parameter schema
+        import functools
+        functools.update_wrapper(async_fn, fn)
+        return async_fn
+
+    Step 3: Update each tool file — replace @mcp.tool() with @mcp.tool() on
+    the async-wrapped version:
+
+    Before:
+        @mcp.tool()
+        def vtf_board_overview(...) -> str:
+
+    After:
+        from mcp_server.utils import async_tool
+
+        @mcp.tool()
+        @async_tool
+        def vtf_board_overview(...) -> str:
+
+    The @async_tool decorator goes BETWEEN @mcp.tool() and the function.
+    This way FastMCP registers an async function, and the sync function
+    body runs in a thread.
+
+    Step 4: Remove DJANGO_ALLOW_ASYNC_UNSAFE from server.py
+
+    Step 5: Run protocol tests to verify tools work without the hack
+    - docker compose exec api pytest tests/mcp_server/test_mcp_protocol.py -v
+    Step 6: Run full MCP test suite to verify no regressions
+    - docker compose exec api pytest tests/mcp_server/ -v
+
+  constraints:
+    - Must NOT use DJANGO_ALLOW_ASYNC_UNSAFE
+    - All existing tests must pass (they call tool functions synchronously)
+    - All protocol tests must pass (they call tools over MCP stdio)
+    - The wrapper must preserve function signatures for FastMCP schema generation
+    - Use sync_to_async(thread_sensitive=False) for true thread parallelism
+    - asgiref is already installed (Django dependency)
+
+  references:
+    - src/mcp_server/server.py
+    - src/mcp_server/tools/board.py
+    - tests/mcp_server/test_mcp_protocol.py
+
+acceptance_criteria:
+  - "DJANGO_ALLOW_ASYNC_UNSAFE removed from server.py"
+  - "async_tool decorator exists in src/mcp_server/utils.py"
+  - "All 9 tools use @async_tool decorator"
+  - "Protocol tests pass without DJANGO_ALLOW_ASYNC_UNSAFE"
+  - "All existing MCP tests still pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/ -v --tb=short"

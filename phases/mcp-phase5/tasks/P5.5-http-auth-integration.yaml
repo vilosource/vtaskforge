@@ -1,0 +1,54 @@
+id: "P5.5"
+name: "HTTP auth integration test"
+depends_on: [P5.3, P5.4]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Integration test that verifies the full HTTP + auth stack: start the
+  MCP server in HTTP mode with auth enabled, connect with valid/invalid
+  tokens, and verify tools work end-to-end with authentication.
+
+files:
+  create:
+    - tests/mcp_server/test_http_auth_integration.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read the HTTP protocol tests and auth middleware
+
+    Step 2: Create tests/mcp_server/test_http_auth_integration.py
+
+    Use a fixture that starts the server WITH auth enabled (no auth-disable flag).
+
+    Tests:
+    - test_http_auth_valid_token_lists_tools — connect with valid token, list tools
+    - test_http_auth_valid_token_calls_tool — connect with valid token, call board_overview
+    - test_http_auth_invalid_token_rejected — connect with bad token, get rejected
+    - test_http_auth_no_token_rejected — connect without token, get rejected
+
+    For the valid token tests:
+    - Create a Django User and Token in the test setup (using Django ORM)
+    - Pass the token via headers to streamable_http_client
+
+  constraints:
+    - Must test with real Django authtoken records
+    - Use transaction=True for DB visibility across processes
+    - Clean up test data in teardown
+
+  references:
+    - tests/mcp_server/test_http_protocol.py
+    - src/mcp_server/http_auth.py
+    - src/mcp_server/auth.py
+
+acceptance_criteria:
+  - "Valid token: tools list and call succeed"
+  - "Invalid token: connection rejected with 401"
+  - "No token: connection rejected with 401"
+  - "4 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_http_auth_integration.py -v --tb=short"
