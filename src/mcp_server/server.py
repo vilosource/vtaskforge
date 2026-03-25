@@ -24,6 +24,7 @@ import mcp_server.tools.workflow  # noqa: E402, F401 — registers @mcp.tool() d
 import mcp_server.tools.search  # noqa: E402, F401
 
 import mcp_server.tools.detail  # noqa: E402, F401
+import mcp_server.tools.manage  # noqa: E402, F401
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
