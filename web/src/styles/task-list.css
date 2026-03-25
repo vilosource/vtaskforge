@@ -1,0 +1,172 @@
+/* ============================================================
+   task-list.css — Reusable task list table (Forge Slate)
+   ============================================================ */
+
+.task-list {
+  width: 100%;
+}
+
+/* ----- Table ----- */
+.task-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 0.8125rem;
+}
+
+.task-list-table thead {
+  background: var(--color-bg-secondary);
+}
+
+.task-list-table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.task-list-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+.task-list-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ----- Row interaction ----- */
+.task-list-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.task-list-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.task-list-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* ----- Cell variants ----- */
+.task-list-cell-title {
+  font-weight: 500;
+  color: var(--color-text);
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-list-cell-status {
+  white-space: nowrap;
+}
+
+/* ----- Labels ----- */
+.task-list-labels {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.task-list-label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--color-bg-sidebar);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+/* ----- Agent ----- */
+.task-list-agent {
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--color-text-secondary);
+}
+
+/* ----- Time ----- */
+.task-list-time {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* ----- Empty ----- */
+.task-list-empty {
+  color: var(--color-text-secondary);
+}
+
+.task-list-empty-state {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  padding: 1.5rem 0;
+}
+
+/* ============================================================
+   Pagination
+   ============================================================ */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.pagination-info {
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pagination-page {
+  font-weight: 500;
+  min-width: 4ch;
+  text-align: center;
+}
+
+.pagination-btn {
+  padding: 0.25rem 0.625rem;
+  min-height: 28px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: inherit;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  border-color: var(--color-text-secondary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

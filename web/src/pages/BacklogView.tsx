@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { KanbanBoard } from './KanbanBoard';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 import { useProject } from '../api/projects';
-import { useBacklogTasks } from '../api/tasks';
+import { useBacklogTasks, type Task } from '../api/tasks';
 
 export function BacklogView() {
   const { id: projectId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
 
   const { data: project } = useProject(projectId);
@@ -23,6 +24,13 @@ export function BacklogView() {
     });
     return Array.from(labelSet).sort();
   }, [backlogTasks]);
+
+  const filteredTasks = useMemo(() => {
+    if (labelFilters.length === 0) return backlogTasks;
+    return backlogTasks.filter((task) =>
+      task.labels.some((label) => labelFilters.includes(label))
+    );
+  }, [backlogTasks, labelFilters]);
 
   const handleLabelToggle = (label: string) => {
     setLabelFilters((prev) => {
@@ -106,10 +114,14 @@ export function BacklogView() {
         </div>
       )}
 
-      <KanbanBoard
-        projectId={projectId}
-        labelFilters={labelFilters}
-      />
+      <div style={{ padding: '0 24px 24px' }}>
+        <TaskListTable
+          tasks={filteredTasks}
+          columns={BACKLOG_COLUMNS}
+          onTaskClick={(task: Task) => navigate(`/tasks/${task.id}`)}
+          emptyMessage="No backlog tasks"
+        />
+      </div>
     </div>
   );
 }

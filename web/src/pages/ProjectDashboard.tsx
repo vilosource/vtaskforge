@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useProject, useProjectStats, useProjectWorkplans, useProjectBacklog } from '../api/projects';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useProject, useProjectStats, useProjectWorkplans } from '../api/projects';
+import { useBacklogTasks, type Task } from '../api/tasks';
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
+import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 
 function WorkplanCard({ workplan, projectId }: {
   workplan: { id: string; name: string; description: string; status: string; total_tasks: number; completed_percentage: number };
@@ -84,10 +86,11 @@ function WorkplanGroup({ title, workplans, projectId, defaultCollapsed = false }
 
 export function ProjectDashboard() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: project, isLoading: projectLoading } = useProject(id);
   const { data: stats } = useProjectStats(id);
   const { data: workplans, isLoading: workplansLoading } = useProjectWorkplans(id);
-  const { data: backlogTasks } = useProjectBacklog(id);
+  const { data: backlogData } = useBacklogTasks(id!);
   const { status: sseStatus } = useSSE({
     url: `/v1/events/stream/?project=${id}`,
     onEvent: () => {},
@@ -107,13 +110,7 @@ export function ProjectDashboard() {
   const overallPct = stats?.completed_percentage ?? 0;
   const backlogCount = stats?.backlog_tasks ?? 0;
 
-  // Group backlog tasks by labels
-  const labelCounts: Record<string, number> = {};
-  (backlogTasks ?? []).forEach((task) => {
-    task.labels.forEach((label) => {
-      labelCounts[label] = (labelCounts[label] ?? 0) + 1;
-    });
-  });
+  const backlogTasks = backlogData?.results ?? [];
 
   return (
     <div className="project-dashboard">
@@ -198,17 +195,27 @@ export function ProjectDashboard() {
             <span className="project-dashboard-section-count">{backlogCount}</span>
           </div>
 
-          {Object.keys(labelCounts).length > 0 && (
-            <div className="project-backlog-labels">
-              {Object.entries(labelCounts).map(([label, count]) => (
-                <span key={label} className="project-backlog-label">
-                  {label}: {count}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {backlogCount === 0 && (
+          {backlogTasks.length > 0 ? (
+            <>
+              <TaskListTable
+                tasks={backlogTasks}
+                columns={BACKLOG_COLUMNS}
+                onTaskClick={(task: Task) => navigate(`/tasks/${task.id}`)}
+                pageSize={15}
+                emptyMessage="No backlog tasks"
+              />
+              {backlogCount > backlogTasks.length && (
+                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                  <Link
+                    to={`/projects/${id}/backlog`}
+                    style={{ fontSize: '0.8125rem', color: 'var(--color-primary)' }}
+                  >
+                    View all {backlogCount} backlog tasks
+                  </Link>
+                </div>
+              )}
+            </>
+          ) : (
             <div className="project-dashboard-empty">
               No backlog tasks
             </div>

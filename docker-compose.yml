@@ -86,5 +86,19 @@ services:
       db:
         condition: service_healthy
 
+  web:
+    image: node:20-alpine
+    working_dir: /web
+    command: sh -c "npm ci && npx vite --host 0.0.0.0 --port 3000"
+    volumes:
+      - ./web:/web
+      - ~/.npmrc:/root/.npmrc:ro
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_PROXY_TARGET=http://api:8000
+    depends_on:
+      - api
+
 volumes:
   pgdata:
