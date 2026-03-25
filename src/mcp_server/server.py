@@ -20,6 +20,7 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 mcp = FastMCP("vtf", instructions="vtaskforge task management server")
 
 import mcp_server.tools.board  # noqa: E402, F401 — registers @mcp.tool() decorators
+import mcp_server.tools.workflow  # noqa: E402, F401 — registers @mcp.tool() decorators
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
