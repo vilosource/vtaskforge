@@ -51,10 +51,19 @@ for _module_info in pkgutil.iter_modules(_tools_pkg.__path__):
 if __name__ == "__main__":
     transport = os.environ.get("VTF_MCP_TRANSPORT", "stdio")
     if transport == "http":
+        import uvicorn
+
+        from mcp_server.http_auth import TokenAuthMiddleware
+
         host = os.environ.get("VTF_MCP_HOST", "0.0.0.0")
         port = int(os.environ.get("VTF_MCP_PORT", "8002"))
         mcp.settings.host = host
         mcp.settings.port = port
-        mcp.run(transport="streamable-http")
+
+        # Build the Starlette app and attach token auth middleware.
+        app = mcp.streamable_http_app()
+        app.add_middleware(TokenAuthMiddleware)
+
+        uvicorn.run(app, host=host, port=port)
     else:
         mcp.run(transport="stdio")
