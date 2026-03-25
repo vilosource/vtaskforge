@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vtf-tls
+spec:
+  secretName: vtf-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - vtf.dev.viloforge.com
+    - vtf-mcp.dev.viloforge.com

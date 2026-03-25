@@ -8,4 +8,5 @@ resources:
   - vtf-api.yaml
   - vtf-celery.yaml
   - vtf-celery-beat.yaml
+  - vtf-mcp.yaml
   - vtf-migrate.yaml
