@@ -69,5 +69,22 @@ services:
       - DATABASE_URL=postgres://vtf:vtfdev@db:5432/vtaskforge
       - CELERY_BROKER_URL=redis://redis:6379/0
 
+  mcp:
+    build: .
+    command: python src/mcp_server/server.py
+    volumes:
+      - ./src:/app/src
+    environment:
+      - VTF_MCP_TRANSPORT=http
+      - VTF_MCP_HOST=0.0.0.0
+      - VTF_MCP_PORT=8002
+      - DATABASE_URL=postgres://vtf:vtfdev@db:5432/vtaskforge
+      - DJANGO_SETTINGS_MODULE=vtaskforge.settings.dev
+    ports:
+      - "8002:8002"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

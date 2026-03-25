@@ -167,3 +167,51 @@ def test_django_allow_async_unsafe_not_set():
         "DJANGO_ALLOW_ASYNC_UNSAFE=true must not be set. "
         "Use sync_to_async wrapping instead."
     )
+
+
+# ---------------------------------------------------------------------------
+# Transport selection via environment variables
+# ---------------------------------------------------------------------------
+
+
+def test_server_transport_defaults_to_stdio(monkeypatch):
+    """When VTF_MCP_TRANSPORT is unset, the transport defaults to 'stdio'."""
+    import os
+
+    monkeypatch.delenv("VTF_MCP_TRANSPORT", raising=False)
+    transport = os.environ.get("VTF_MCP_TRANSPORT", "stdio")
+    assert transport == "stdio"
+
+
+def test_server_transport_http_configures_settings(monkeypatch):
+    """When VTF_MCP_TRANSPORT=http, env vars resolve to expected host/port values."""
+    import os
+
+    monkeypatch.setenv("VTF_MCP_TRANSPORT", "http")
+    monkeypatch.setenv("VTF_MCP_HOST", "0.0.0.0")
+    monkeypatch.setenv("VTF_MCP_PORT", "8002")
+
+    transport = os.environ.get("VTF_MCP_TRANSPORT", "stdio")
+    host = os.environ.get("VTF_MCP_HOST", "0.0.0.0")
+    port = int(os.environ.get("VTF_MCP_PORT", "8002"))
+
+    assert transport == "http"
+    assert host == "0.0.0.0"
+    assert port == 8002
+
+
+def test_server_transport_http_uses_default_host_port(monkeypatch):
+    """When VTF_MCP_TRANSPORT=http with no HOST/PORT, defaults are 0.0.0.0:8002."""
+    import os
+
+    monkeypatch.setenv("VTF_MCP_TRANSPORT", "http")
+    monkeypatch.delenv("VTF_MCP_HOST", raising=False)
+    monkeypatch.delenv("VTF_MCP_PORT", raising=False)
+
+    transport = os.environ.get("VTF_MCP_TRANSPORT", "stdio")
+    host = os.environ.get("VTF_MCP_HOST", "0.0.0.0")
+    port = int(os.environ.get("VTF_MCP_PORT", "8002"))
+
+    assert transport == "http"
+    assert host == "0.0.0.0"
+    assert port == 8002

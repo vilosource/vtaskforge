@@ -49,4 +49,12 @@ for _module_info in pkgutil.iter_modules(_tools_pkg.__path__):
     importlib.import_module(f"mcp_server.tools.{_module_info.name}")
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    transport = os.environ.get("VTF_MCP_TRANSPORT", "stdio")
+    if transport == "http":
+        host = os.environ.get("VTF_MCP_HOST", "0.0.0.0")
+        port = int(os.environ.get("VTF_MCP_PORT", "8002"))
+        mcp.settings.host = host
+        mcp.settings.port = port
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run(transport="stdio")
