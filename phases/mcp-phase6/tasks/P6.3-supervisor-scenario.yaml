@@ -1,0 +1,61 @@
+id: "P6.3"
+name: "E2E supervisor agent scenario"
+depends_on: [P6.1]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  E2E test that exercises the supervisor workflow: check the board, search
+  for tasks pending review, inspect details, and approve. Verified via REST.
+
+files:
+  create:
+    - tests/e2e/test_supervisor_scenario.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read the E2E infrastructure and seed data
+
+    Step 2: Create tests/e2e/test_supervisor_scenario.py
+
+    def test_supervisor_review_workflow():
+        """Supervisor: board -> search -> detail -> review."""
+        # 1. board_overview — see pending reviews
+        response = mcp.call_tool("vtf_board_overview", project_id=PROJECT_ID)
+        assert response["success"]
+
+        # 2. search for pending_completion_review tasks
+        response = mcp.call_tool("vtf_search_tasks", status="pending_completion_review", project_id=PROJECT_ID)
+        assert response["data"]["total_count"] >= 1
+        task_id = response["data"]["tasks"][0]["id"]
+
+        # 3. task_detail — get full context
+        response = mcp.call_tool("vtf_task_detail", task_id=task_id)
+        assert response["success"]
+        assert response["data"]["task"]["status"] == "pending_completion_review"
+
+        # 4. review — approve
+        response = mcp.call_tool("vtf_review_task", task_id=task_id, decision="approved", reviewer_id="e2e-supervisor")
+        assert response["success"]
+        assert response["data"]["task"]["status"] == "done"
+        # REST verify
+        task = rest.get_task(task_id)
+        assert task["status"] == "done"
+
+  constraints:
+    - Must use seeded task in pending_completion_review state
+    - Dual verification via REST API
+
+  references:
+    - tests/e2e/conftest.py
+    - docs/mcp-e2e-testing-PLAN.md
+
+acceptance_criteria:
+  - "Supervisor scenario completes: board -> search -> detail -> review"
+  - "Task ends in done status, verified via REST API"
+
+test_command:
+  unit: "pytest tests/e2e/test_supervisor_scenario.py -v --tb=short"

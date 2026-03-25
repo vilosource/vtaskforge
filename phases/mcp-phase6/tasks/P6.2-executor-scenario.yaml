@@ -1,0 +1,73 @@
+id: "P6.2"
+name: "E2E executor agent scenario"
+depends_on: [P6.1]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  E2E test that exercises the executor agent workflow over the real MCP
+  HTTP transport against the isolated docker compose stack. Follows
+  available_actions chain and verifies every mutation via REST API.
+
+files:
+  create:
+    - tests/e2e/test_executor_scenario.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read the E2E infrastructure (conftest, clients, seed data)
+
+    Step 2: Create tests/e2e/test_executor_scenario.py
+
+    def test_executor_find_and_complete_task():
+        """Executor: next_work -> claim -> progress -> submit_work."""
+        # 1. next_work — find a task to work on
+        response = mcp.call_tool("vtf_next_work", project_id=PROJECT_ID)
+        assert response["success"]
+        assert "claim_and_start" in str(response["available_actions"])
+        task_id = response["data"]["task"]["id"]
+
+        # 2. claim_and_start — claim it
+        response = mcp.call_tool("vtf_claim_and_start", task_id=task_id, agent_id=AGENT_ID)
+        assert response["success"]
+        assert response["data"]["task"]["status"] == "doing"
+        # REST verify
+        task = rest.get_task(task_id)
+        assert task["status"] == "doing"
+        assert task["claimed_by"] == AGENT_ID
+
+        # 3. report_progress — heartbeat + note
+        response = mcp.call_tool("vtf_report_progress", task_id=task_id, note="halfway done")
+        assert response["data"]["note_added"] is True
+
+        # 4. submit_work — complete
+        response = mcp.call_tool("vtf_submit_work", task_id=task_id, completion_note="all done")
+        assert response["success"]
+        final_status = response["data"]["task"]["status"]
+        assert final_status in ("done", "pending_completion_review")
+        # REST verify
+        task = rest.get_task(task_id)
+        assert task["status"] == final_status
+
+  constraints:
+    - Must use mcp_client from P6.1 (MCP HTTP connection)
+    - Must verify EVERY state change via rest_client (independent channel)
+    - Follow available_actions from responses, don't hardcode tool names
+    - Use seeded task IDs from seed.py
+
+  references:
+    - tests/e2e/conftest.py
+    - tests/e2e/mcp_client.py
+    - tests/e2e/rest_client.py
+    - docs/mcp-e2e-testing-PLAN.md
+
+acceptance_criteria:
+  - "Executor scenario completes: next_work -> claim -> progress -> submit_work"
+  - "Every state transition verified via REST API"
+  - "available_actions chain followed (not hardcoded)"
+
+test_command:
+  unit: "pytest tests/e2e/test_executor_scenario.py -v --tb=short"

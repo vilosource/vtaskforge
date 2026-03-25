@@ -1,0 +1,99 @@
+id: "P6.4"
+name: "E2E full task lifecycle scenario"
+depends_on: [P6.1]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  E2E test that exercises the complete task lifecycle from creation to
+  deletion using vtf_manage_task, plus the executor workflow tools.
+  Every transition verified via REST API.
+
+files:
+  create:
+    - tests/e2e/test_lifecycle_scenario.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read E2E infrastructure
+
+    Step 2: Create tests/e2e/test_lifecycle_scenario.py
+
+    def test_full_task_lifecycle():
+        """Create -> submit -> claim -> progress -> submit_work -> review -> delete."""
+        # 1. create task
+        r = mcp.call_tool("vtf_manage_task", action="create", title="Lifecycle test", project_id=PROJECT_ID)
+        assert r["success"]
+        task_id = r["data"]["task"]["id"]
+        assert r["data"]["task"]["status"] == "draft"
+        rest_verify(task_id, "draft")
+
+        # 2. submit (draft -> todo)
+        r = mcp.call_tool("vtf_manage_task", action="submit", task_id=task_id)
+        assert r["data"]["task"]["status"] == "todo"
+        rest_verify(task_id, "todo")
+
+        # 3. claim
+        r = mcp.call_tool("vtf_claim_and_start", task_id=task_id, agent_id="e2e-executor")
+        assert r["data"]["task"]["status"] == "doing"
+        rest_verify(task_id, "doing")
+
+        # 4. progress
+        r = mcp.call_tool("vtf_report_progress", task_id=task_id, note="working")
+        assert r["data"]["note_added"]
+
+        # 5. submit_work
+        r = mcp.call_tool("vtf_submit_work", task_id=task_id, completion_note="done")
+        status = r["data"]["task"]["status"]
+        rest_verify(task_id, status)
+
+        # 6. review if needed
+        if status == "pending_completion_review":
+            r = mcp.call_tool("vtf_review_task", task_id=task_id, decision="approved")
+            assert r["data"]["task"]["status"] == "done"
+            rest_verify(task_id, "done")
+
+        # 7. delete
+        r = mcp.call_tool("vtf_manage_task", action="delete", task_id=task_id)
+        assert r["success"]
+        # REST verify: task no longer exists (404)
+        assert rest.get_task(task_id) is None  # or 404
+
+    def test_manage_block_unblock_cycle():
+        """Create -> submit -> block -> unblock -> cancel."""
+        r = mcp.call_tool("vtf_manage_task", action="create", title="Block test", project_id=PROJECT_ID)
+        task_id = r["data"]["task"]["id"]
+
+        mcp.call_tool("vtf_manage_task", action="submit", task_id=task_id)
+        rest_verify(task_id, "todo")
+
+        mcp.call_tool("vtf_manage_task", action="block", task_id=task_id, reason="waiting on dependency")
+        rest_verify(task_id, "blocked")
+
+        mcp.call_tool("vtf_manage_task", action="unblock", task_id=task_id)
+        rest_verify(task_id, "todo")
+
+        mcp.call_tool("vtf_manage_task", action="cancel", task_id=task_id)
+        rest_verify(task_id, "cancelled")
+
+        mcp.call_tool("vtf_manage_task", action="delete", task_id=task_id)
+
+  constraints:
+    - Creates its own tasks (doesn't depend on seed data for lifecycle)
+    - Every transition verified via REST API
+    - Cleans up after itself (deletes created tasks)
+
+  references:
+    - tests/e2e/conftest.py
+    - docs/mcp-e2e-testing-PLAN.md
+
+acceptance_criteria:
+  - "Full lifecycle passes: create through delete"
+  - "Block/unblock cycle passes"
+  - "Every state transition verified via REST API"
+
+test_command:
+  unit: "pytest tests/e2e/test_lifecycle_scenario.py -v --tb=short"

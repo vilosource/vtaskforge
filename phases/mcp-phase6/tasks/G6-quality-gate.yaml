@@ -1,0 +1,51 @@
+id: "G6"
+name: "Quality Gate: Phase 6 complete — E2E tests shipped"
+depends_on: [P6.6]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Quality gate for Phase 6. Run the full backend test suite to verify
+  no regressions, then run the E2E suite via the CI script.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Run full backend test suite
+    - docker compose exec api pytest --tb=short
+
+    Step 2: Run CLI test suite
+    - cd cli && pytest --tb=short
+
+    Step 3: Run E2E test suite
+    - ./scripts/run-e2e.sh
+
+    Step 4: Verify checklist:
+    - E2E stack is isolated (different DB, different ports)
+    - All 4 scenarios pass (executor, supervisor, lifecycle, error)
+    - Dual verification works (MCP + REST)
+    - Stack tears down cleanly
+    - No interference with dev stack
+
+    Step 5: Produce report with test counts
+
+  constraints:
+    - Verification task — do not modify any code
+    - E2E tests must pass via the CI script (not manually)
+
+acceptance_criteria:
+  - "Full backend test suite: 0 failures"
+  - "CLI test suite: 0 failures"
+  - "E2E test suite: all scenarios pass"
+  - "Stack tears down cleanly"
+  - "Final baseline recorded"
+
+test_command:
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"
+  e2e: "./scripts/run-e2e.sh"

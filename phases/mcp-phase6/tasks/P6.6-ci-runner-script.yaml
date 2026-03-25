@@ -1,0 +1,85 @@
+id: "P6.6"
+name: "E2E CI runner script and documentation"
+depends_on: [P6.2, P6.3, P6.4, P6.5]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  Create a shell script that runs the full E2E test suite: bring up
+  isolated stack, run tests, tear down. Handles cleanup on failure.
+  Update docs.
+
+files:
+  create:
+    - scripts/run-e2e.sh
+  modify:
+    - docs/mcp-server-README.md
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Create scripts/run-e2e.sh
+
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    COMPOSE_FILE="docker-compose.e2e.yml"
+    PROJECT="vtf-e2e"
+
+    cleanup() {
+        echo "Tearing down E2E stack..."
+        docker compose -f "$COMPOSE_FILE" -p "$PROJECT" down -v 2>/dev/null || true
+    }
+    trap cleanup EXIT
+
+    echo "Building and starting E2E stack..."
+    docker compose -f "$COMPOSE_FILE" -p "$PROJECT" up -d --build --wait
+
+    echo "Running migrations..."
+    docker compose -f "$COMPOSE_FILE" -p "$PROJECT" exec -T api python src/manage.py migrate --run-syncdb
+
+    echo "Seeding test data..."
+    docker compose -f "$COMPOSE_FILE" -p "$PROJECT" exec -T api python -c "exec(open('/app/tests/e2e/seed.py').read())"
+
+    echo "Waiting for MCP server..."
+    for i in $(seq 1 30); do
+        if curl -sf http://localhost:18002/health >/dev/null 2>&1 || curl -sf http://localhost:18002/ >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+
+    echo "Running E2E tests..."
+    pytest tests/e2e/ -v --tb=short
+    exit_code=$?
+
+    exit $exit_code
+
+    Step 2: chmod +x scripts/run-e2e.sh
+
+    Step 3: Update docs/mcp-server-README.md
+    Add an "E2E Testing" section that explains:
+    - What the E2E tests cover
+    - How to run: ./scripts/run-e2e.sh
+    - What the isolated stack includes
+    - How to debug failures
+
+  constraints:
+    - Script must clean up on success AND failure (trap)
+    - Use -p PROJECT to namespace compose resources
+    - Exit code must reflect test results (for CI)
+    - Must work from the repo root
+
+  references:
+    - docker-compose.e2e.yml
+    - docs/mcp-server-README.md
+
+acceptance_criteria:
+  - "scripts/run-e2e.sh exists and is executable"
+  - "Script brings up stack, runs tests, tears down"
+  - "Cleanup happens even on failure"
+  - "README documents E2E testing"
+
+test_command:
+  unit: "echo 'CI script task - tested by running it'"

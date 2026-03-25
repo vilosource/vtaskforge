@@ -1,0 +1,96 @@
+id: "P6.1"
+name: "E2E test infrastructure: docker compose, clients, seed data"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create the isolated E2E test infrastructure: a separate docker compose
+  stack (db + api + mcp), MCP and REST client wrappers, seed data script,
+  and conftest with stack lifecycle management. This is the foundation
+  all scenario tests depend on.
+
+files:
+  create:
+    - docker-compose.e2e.yml
+    - tests/e2e/__init__.py
+    - tests/e2e/conftest.py
+    - tests/e2e/seed.py
+    - tests/e2e/mcp_client.py
+    - tests/e2e/rest_client.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read the existing docker-compose.yml for service patterns and the
+    E2E testing plan at docs/mcp-e2e-testing-PLAN.md for full architecture.
+
+    Step 2: Create docker-compose.e2e.yml
+    Minimal stack: db (postgres with tmpfs), api (Django runserver), mcp (HTTP transport).
+    - db: postgres:16-alpine, tmpfs for data (ephemeral), database vtf_e2e, user vtf, password vtftest
+    - api: same image as main, runserver on 8000, ports 18000:8000
+    - mcp: same image, run_server() via python -c, ports 18002:8002
+    - All services use DATABASE_URL=postgres://vtf:vtftest@db:5432/vtf_e2e
+    - No celery, no redis (not needed for E2E tool tests)
+
+    Step 3: Create tests/e2e/seed.py
+    A script that runs inside the api container to create known test state:
+    - Admin user + token (for REST API auth)
+    - Project (id=e2e-project)
+    - Workplan + Milestone
+    - Tasks in various states: 2x todo, 1x blocked, 1x pending_completion_review, 1x draft
+    - Agent (id=e2e-executor)
+    - Print the token and IDs so conftest can capture them
+
+    Step 4: Create tests/e2e/mcp_client.py
+    An async context manager that connects to the MCP server over HTTP:
+    - Takes url, auth token
+    - Creates httpx.AsyncClient with auth header
+    - Connects via streamable_http_client
+    - Provides call_tool() that returns parsed JSON
+    - Provides list_tools() convenience method
+
+    Step 5: Create tests/e2e/rest_client.py
+    A sync HTTP client for verifying DB state via REST API:
+    - Takes base_url, auth token
+    - get_task(task_id) -> dict
+    - list_tasks(status=...) -> list
+    - Uses httpx
+
+    Step 6: Create tests/e2e/conftest.py
+    Session-scoped fixtures:
+    - e2e_stack: brings up docker-compose.e2e.yml, runs migrations, seeds, yields, tears down
+    - mcp_url: returns http://localhost:18002/mcp
+    - api_url: returns http://localhost:18000/v1
+    - auth_token: the token created by seed.py (captured from seed output)
+    - rest_client: REST client instance
+    - Readiness check: poll MCP and API until they respond
+
+    Step 7: Create a minimal smoke test to verify infrastructure works
+    - test_e2e_stack_is_healthy: MCP lists 9 tools, REST API responds
+
+  constraints:
+    - E2E stack must be fully isolated (different DB, different ports)
+    - tmpfs for DB (no persistent volume, fast teardown)
+    - Ports 18000/18002 to avoid conflict with dev stack
+    - seed.py runs inside the container, not from the host
+    - conftest handles cleanup even on test failure
+    - Tests run from the HOST, not inside containers
+
+  references:
+    - docker-compose.yml
+    - docs/mcp-e2e-testing-PLAN.md
+    - src/mcp_server/server.py
+
+acceptance_criteria:
+  - "docker-compose.e2e.yml creates isolated stack with db + api + mcp"
+  - "seed.py creates known test state (project, tasks, agent, token)"
+  - "mcp_client.py connects over HTTP and can list tools"
+  - "rest_client.py can query tasks via REST API"
+  - "conftest manages stack lifecycle (up, seed, yield, down)"
+  - "Infrastructure smoke test passes"
+
+test_command:
+  unit: "pytest tests/e2e/ -v --tb=short -k test_e2e_stack"

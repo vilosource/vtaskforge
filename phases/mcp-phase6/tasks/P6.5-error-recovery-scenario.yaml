@@ -1,0 +1,78 @@
+id: "P6.5"
+name: "E2E error recovery scenario"
+depends_on: [P6.1]
+agent_model: sonnet
+isolation: sequential
+judge: false
+
+description: |
+  E2E tests for error paths: invalid actions, wrong task state, auth
+  failures. Verify error responses are actionable and available_actions
+  guide recovery.
+
+files:
+  create:
+    - tests/e2e/test_error_recovery.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read E2E infrastructure
+
+    Step 2: Create tests/e2e/test_error_recovery.py
+
+    def test_claim_nonexistent_task():
+        r = mcp.call_tool("vtf_claim_and_start", task_id="does-not-exist", agent_id="e2e-executor")
+        assert r["success"] is False
+        assert "not found" in r["message"].lower() or "cannot claim" in r["message"].lower()
+        assert len(r["available_actions"]) > 0
+
+    def test_submit_work_on_todo_task():
+        # Create + submit a task (it's in todo, not doing)
+        r = mcp.call_tool("vtf_manage_task", action="create", title="Error test", project_id=PROJECT_ID)
+        task_id = r["data"]["task"]["id"]
+        mcp.call_tool("vtf_manage_task", action="submit", task_id=task_id)
+        # Try to submit work (should fail — task is todo, not doing)
+        r = mcp.call_tool("vtf_submit_work", task_id=task_id)
+        assert r["success"] is False
+        assert "doing" in r["message"]  # tells you what status is needed
+        assert len(r["available_actions"]) > 0
+        # Cleanup
+        mcp.call_tool("vtf_manage_task", action="delete", task_id=task_id)
+
+    def test_review_non_review_task():
+        r = mcp.call_tool("vtf_manage_task", action="create", title="Review error test", project_id=PROJECT_ID)
+        task_id = r["data"]["task"]["id"]
+        r = mcp.call_tool("vtf_review_task", task_id=task_id, decision="approved")
+        assert r["success"] is False
+        assert len(r["available_actions"]) > 0
+        mcp.call_tool("vtf_manage_task", action="delete", task_id=task_id)
+
+    def test_invalid_manage_action():
+        r = mcp.call_tool("vtf_manage_task", action="explode")
+        assert r["success"] is False
+        assert "valid actions" in r["message"].lower() or "unknown" in r["message"].lower()
+
+    def test_auth_rejected_without_token():
+        # Connect with no/bad token — should fail
+        (test with httpx directly against MCP endpoint)
+
+  constraints:
+    - Every error response must have non-empty available_actions
+    - Error messages must be actionable
+    - Tests clean up any tasks they create
+    - Auth test uses raw httpx (not MCP client)
+
+  references:
+    - tests/e2e/conftest.py
+    - docs/mcp-e2e-testing-PLAN.md
+
+acceptance_criteria:
+  - "All error scenarios return success=false"
+  - "Every error has non-empty available_actions"
+  - "Auth rejection returns 401"
+  - "All tests clean up after themselves"
+
+test_command:
+  unit: "pytest tests/e2e/test_error_recovery.py -v --tb=short"
