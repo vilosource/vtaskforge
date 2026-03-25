@@ -14,6 +14,12 @@ import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vtaskforge.settings.dev")
 
+# FastMCP runs tool functions inside an async event loop, but our tools use
+# synchronous Django ORM calls. Django's async safety check would raise
+# SynchronousOnlyOperation. This is safe to disable because the MCP server
+# is single-client stdio — no concurrent DB access risk.
+os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
+
 import django  # noqa: E402
 
 django.setup()

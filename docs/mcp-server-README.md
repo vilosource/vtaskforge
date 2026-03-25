@@ -72,6 +72,16 @@ Copy the `.mcp.json` from the repo root to your Claude Code workspace, or add th
 
 This runs the MCP server inside the `api` container via stdio transport. The `-T` flag disables TTY allocation, which is required for MCP stdio communication.
 
+### Transport limitations
+
+The current implementation only supports **stdio transport**. This means the MCP client (Claude Code) must be able to spawn the server process — i.e., it must run on the same machine as the Docker compose stack.
+
+For remote agents (e.g., vafi executor containers in Kubernetes), stdio won't work. Streamable HTTP transport is needed — see the [specification](vtf-mcp-server-SPECIFICATION.md) section on transports.
+
+### Django async safety
+
+The MCP server sets `DJANGO_ALLOW_ASYNC_UNSAFE=true` because FastMCP runs tool functions inside an async event loop, but the tools use synchronous Django ORM calls. This is safe for single-client stdio transport. If multi-client HTTP transport is added in the future, tools should be wrapped with `sync_to_async` or dispatched to a thread pool instead.
+
 ### Verify the connection
 
 After adding `.mcp.json`, Claude Code will show `vtf` in its MCP tool list. You can test by asking Claude to call `vtf_board_overview`.
