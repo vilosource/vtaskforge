@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    tmpfs:
+      - /var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: vtf_e2e
+      POSTGRES_USER: vtf
+      POSTGRES_PASSWORD: vtftest
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vtf -d vtf_e2e"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  api:
+    build: .
+    command: python src/manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+    ports:
+      - "18000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SETTINGS_MODULE: vtaskforge.settings.dev
+      DATABASE_URL: postgres://vtf:vtftest@db:5432/vtf_e2e
+      SECRET_KEY: e2e-test-secret-key-not-for-production
+
+  mcp:
+    build: .
+    command: python -c "from mcp_server.server import run_server; run_server()"
+    volumes:
+      - ./src:/app/src
+    ports:
+      - "18002:8002"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      VTF_MCP_TRANSPORT: http
+      VTF_MCP_HOST: "0.0.0.0"
+      VTF_MCP_PORT: "8002"
+      DATABASE_URL: postgres://vtf:vtftest@db:5432/vtf_e2e
+      DJANGO_SETTINGS_MODULE: vtaskforge.settings.dev
+      SECRET_KEY: e2e-test-secret-key-not-for-production
