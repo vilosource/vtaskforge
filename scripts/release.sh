@@ -53,7 +53,7 @@ echo ""
 
 # Step 1: Build
 echo "Building production image..."
-docker build -f Dockerfile.prod -t "${IMAGE_TAG}" -t "${IMAGE_LATEST}" .
+docker build -f Dockerfile.prod --secret id=npmrc,src="$HOME/.npmrc" -t "${IMAGE_TAG}" -t "${IMAGE_LATEST}" .
 
 # Step 2: Push
 echo "Pushing to Harbor..."

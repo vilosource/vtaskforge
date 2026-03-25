@@ -11,7 +11,7 @@ resources:
 images:
   - name: vtf
     newName: harbor.viloforge.com/vafi/vtf
-    newTag: a52e6ec
+    newTag: 9bf936a
 
 patches:
   - target:
