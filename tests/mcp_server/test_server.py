@@ -145,3 +145,25 @@ def test_auto_discovery_finds_all_tool_modules():
     }
     expected = {"board", "workflow", "search", "review", "detail", "manage"}
     assert expected == discovered, f"Module mismatch. Discovered: {discovered}"
+
+
+def test_all_registered_tools_are_async():
+    """All registered tools are marked async after post-registration wrapping."""
+    from mcp_server.server import mcp
+
+    for tool in mcp._tool_manager._tools.values():
+        assert tool.is_async, (
+            f"Tool '{tool.name}' is not async. "
+            "All tools must be wrapped with sync_to_async for MCP runtime safety."
+        )
+
+
+def test_django_allow_async_unsafe_not_set():
+    """DJANGO_ALLOW_ASYNC_UNSAFE must not be set in the environment by server.py."""
+    import os
+
+    # The server module is already imported; if it set the env var we'd see it.
+    assert os.environ.get("DJANGO_ALLOW_ASYNC_UNSAFE") != "true", (
+        "DJANGO_ALLOW_ASYNC_UNSAFE=true must not be set. "
+        "Use sync_to_async wrapping instead."
+    )
