@@ -116,9 +116,12 @@ def _action_create(title, project_id, description, labels, spec,
     except Project.DoesNotExist:
         return json.dumps(
             error_response(
-                message=f"Project {project_id} not found.",
+                message=(
+                    f"Project {project_id} not found. "
+                    "Provide a valid project_id when creating a task."
+                ),
                 data={"project_id": project_id},
-                available_actions=[],
+                available_actions=["vtf_board_overview"],
             )
         )
 
@@ -192,9 +195,12 @@ def _action_update(task_id, title, description, labels, spec,
     if not task_id:
         return json.dumps(
             error_response(
-                message="Cannot update task: 'task_id' is required.",
+                message=(
+                    "Cannot update task: 'task_id' is required. "
+                    "Use vtf_search_tasks to find the task you want to update."
+                ),
                 data={},
-                available_actions=[],
+                available_actions=["vtf_search_tasks"],
             )
         )
 
@@ -258,9 +264,12 @@ def _action_transition(task_id, target_status, action_name):
     if not task_id:
         return json.dumps(
             error_response(
-                message=f"Cannot {action_name} task: 'task_id' is required.",
+                message=(
+                    f"Cannot {action_name} task: 'task_id' is required. "
+                    "Use vtf_search_tasks to find the task you want to transition."
+                ),
                 data={},
-                available_actions=[],
+                available_actions=["vtf_search_tasks"],
             )
         )
 
@@ -313,9 +322,12 @@ def _action_block(task_id, reason):
     if not task_id:
         return json.dumps(
             error_response(
-                message="Cannot block task: 'task_id' is required.",
+                message=(
+                    "Cannot block task: 'task_id' is required. "
+                    "Use vtf_search_tasks to find the task you want to block."
+                ),
                 data={},
-                available_actions=[],
+                available_actions=["vtf_search_tasks"],
             )
         )
 
@@ -390,9 +402,12 @@ def _action_delete(task_id):
     if not task_id:
         return json.dumps(
             error_response(
-                message="Cannot delete task: 'task_id' is required.",
+                message=(
+                    "Cannot delete task: 'task_id' is required. "
+                    "Use vtf_search_tasks to find the task you want to delete."
+                ),
                 data={},
-                available_actions=[],
+                available_actions=["vtf_search_tasks"],
             )
         )
 
@@ -417,17 +432,23 @@ def _action_assign(task_id, assigned_to):
     if not task_id:
         return json.dumps(
             error_response(
-                message="Cannot assign task: 'task_id' is required.",
+                message=(
+                    "Cannot assign task: 'task_id' is required. "
+                    "Use vtf_search_tasks to find the task you want to assign."
+                ),
                 data={},
-                available_actions=[],
+                available_actions=["vtf_search_tasks"],
             )
         )
     if not assigned_to:
         return json.dumps(
             error_response(
-                message="Cannot assign task: 'assigned_to' is required.",
+                message=(
+                    "Cannot assign task: 'assigned_to' is required. "
+                    "Provide the agent or user ID to assign this task to."
+                ),
                 data={"task_id": task_id},
-                available_actions=[],
+                available_actions=["vtf_manage_task(action=assign)"],
             )
         )
 
@@ -459,9 +480,12 @@ def _action_unassign(task_id):
     if not task_id:
         return json.dumps(
             error_response(
-                message="Cannot unassign task: 'task_id' is required.",
+                message=(
+                    "Cannot unassign task: 'task_id' is required. "
+                    "Use vtf_search_tasks to find the task you want to unassign."
+                ),
                 data={},
-                available_actions=[],
+                available_actions=["vtf_search_tasks"],
             )
         )
 
