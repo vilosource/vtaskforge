@@ -22,6 +22,7 @@ mcp = FastMCP("vtf", instructions="vtaskforge task management server")
 import mcp_server.tools.board  # noqa: E402, F401 — registers @mcp.tool() decorators
 import mcp_server.tools.workflow  # noqa: E402, F401 — registers @mcp.tool() decorators
 import mcp_server.tools.search  # noqa: E402, F401
+import mcp_server.tools.review  # noqa: E402, F401
 
 import mcp_server.tools.detail  # noqa: E402, F401
 import mcp_server.tools.manage  # noqa: E402, F401
