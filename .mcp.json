@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "vtf": {
+      "command": "docker",
+      "args": ["compose", "exec", "-T", "api", "python", "-m", "mcp_server.server"],
+      "env": {}
+    }
+  }
+}

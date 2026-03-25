@@ -106,3 +106,42 @@ def test_auth_missing_token():
     """validate_token() returns None when called with None."""
     result = validate_token(None)
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery — all tool modules loaded
+# ---------------------------------------------------------------------------
+
+
+def test_all_tools_registered():
+    """All 9 vtf tools are registered after auto-discovery imports all modules."""
+    from mcp_server.server import mcp
+
+    tool_names = [t.name for t in mcp._tool_manager._tools.values()]
+    expected = {
+        "vtf_board_overview",
+        "vtf_next_work",
+        "vtf_claim_and_start",
+        "vtf_report_progress",
+        "vtf_submit_work",
+        "vtf_search_tasks",
+        "vtf_review_task",
+        "vtf_task_detail",
+        "vtf_manage_task",
+    }
+    assert expected == set(tool_names), f"Tool mismatch. Registered: {tool_names}"
+
+
+def test_auto_discovery_finds_all_tool_modules():
+    """Auto-discovery loads every .py file from mcp_server/tools/ (except __init__.py)."""
+    import importlib
+    import pkgutil
+
+    import mcp_server.tools as tools_pkg
+
+    discovered = {
+        name
+        for _, name, _ in pkgutil.iter_modules(tools_pkg.__path__)
+    }
+    expected = {"board", "workflow", "search", "review", "detail", "manage"}
+    assert expected == discovered, f"Module mismatch. Discovered: {discovered}"
