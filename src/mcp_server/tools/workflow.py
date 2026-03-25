@@ -1,16 +1,23 @@
 """
-MCP tools: vtf_next_work (P2.1), vtf_claim_and_start (P2.2)
+MCP tools: vtf_next_work (P2.1), vtf_claim_and_start (P2.2), vtf_report_progress (P2.3)
 
 vtf_next_work — finds the best available task for an agent to work on next.
 vtf_claim_and_start — atomically claims a task and returns full execution context.
+vtf_report_progress — extends claim heartbeat and optionally logs a progress note.
 
-Both tools use service functions from tasks.services.
+All tools use service functions from tasks.services.
 """
 import json
+from datetime import timedelta
 
+from django.utils import timezone
+
+from events.services import record_event
 from mcp_server.responses import error_response, success_response
 from mcp_server.server import mcp
+from tasks.models import Task
 from tasks.services import ClaimError, claim_task, find_claimable_tasks, get_task_context
+from tasks.views import DEFAULT_CLAIM_TIMEOUT_MINUTES
 
 
 @mcp.tool()
@@ -182,5 +189,74 @@ def vtf_claim_and_start(task_id: str, agent_id: str, tags: str = "") -> str:
             data=data,
             message=message,
             available_actions=["vtf_report_progress", "vtf_submit_work"],
+        )
+    )
+
+
+@mcp.tool()
+def vtf_report_progress(task_id: str, note: str = "", agent_id: str = "") -> str:
+    """Report progress on a claimed task. Extends claim timeout and optionally adds a note.
+
+    Call this periodically during long-running tasks to keep your claim alive and
+    provide visibility to supervisors. Extends the claim expiry by the task's
+    configured timeout (default 30 minutes from now).
+    """
+    # Fetch the task
+    try:
+        task = Task.objects.get(pk=task_id)
+    except Task.DoesNotExist:
+        return json.dumps(
+            error_response(
+                message=f"Task {task_id} not found.",
+                data={"task_id": task_id},
+                available_actions=["vtf_next_work"],
+            )
+        )
+
+    # Verify task is in doing status
+    if task.status != "doing":
+        return json.dumps(
+            error_response(
+                message=(
+                    f"Cannot report progress on task {task_id}: task is in '{task.status}' status, "
+                    f"not 'doing'. Only claimed tasks in 'doing' status support heartbeats."
+                ),
+                data={"task_id": task_id, "current_status": task.status},
+                available_actions=["vtf_next_work", "vtf_claim_and_start"],
+            )
+        )
+
+    # Extend claim_expires_at (matches heartbeat action in views.py)
+    timeout = task.claim_timeout or timedelta(minutes=DEFAULT_CLAIM_TIMEOUT_MINUTES)
+    task.claim_expires_at = timezone.now() + timeout
+    task.save(update_fields=["claim_expires_at", "updated_at"])
+
+    # Optionally record a progress note as an event
+    note_added = False
+    if note:
+        actor = agent_id or task.claimed_by or ""
+        record_event(
+            task,
+            "progress_note",
+            data={"note": note, "agent_id": actor},
+            triggered_by=actor,
+        )
+        note_added = True
+
+    claim_expires_display = task.claim_expires_at.strftime("%H:%M UTC") if task.claim_expires_at else ""
+    note_msg = " Note recorded." if note_added else ""
+    message = f"Heartbeat received. Claim extended to {claim_expires_display}.{note_msg}"
+
+    data = {
+        "task_id": task_id,
+        "claim_expires_at": task.claim_expires_at.isoformat() if task.claim_expires_at else None,
+        "note_added": note_added,
+    }
+
+    return json.dumps(
+        success_response(
+            data=data,
+            message=message,
+            available_actions=["vtf_report_progress", "vtf_submit_work", "vtf_manage_task(action=fail)"],
         )
     )

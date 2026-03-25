@@ -1,13 +1,16 @@
 """
-Tests for the vtf_next_work MCP tool (P2.1) and vtf_claim_and_start MCP tool (P2.2).
+Tests for the vtf_next_work MCP tool (P2.1), vtf_claim_and_start MCP tool (P2.2),
+and vtf_report_progress MCP tool (P2.3).
 
 Tests call the tool Python functions directly (not via MCP protocol).
 """
 import json
+from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 
-from mcp_server.tools.workflow import vtf_claim_and_start, vtf_next_work
+from mcp_server.tools.workflow import vtf_claim_and_start, vtf_next_work, vtf_report_progress
 from tests.factories import LinkFactory, ProjectFactory, TaskFactory
 
 
@@ -336,5 +339,109 @@ def test_claim_and_start_deps_unmet_error():
     assert "data" in result
     assert result["data"] is not None
     # available_actions should guide agent to next steps
+    assert "available_actions" in result
+    assert len(result["available_actions"]) > 0
+
+
+# ===========================================================================
+# vtf_report_progress tests (P2.3)
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# test_report_progress_extends_claim
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_report_progress_extends_claim():
+    """vtf_report_progress extends claim_expires_at on a doing task."""
+    old_expires = timezone.now() + timedelta(minutes=5)
+    task = TaskFactory(
+        status="doing",
+        claimed_by="agent-1",
+        claimed_at=timezone.now() - timedelta(minutes=25),
+        claim_expires_at=old_expires,
+    )
+
+    result = json.loads(vtf_report_progress(task_id=task.id))
+
+    assert result["success"] is True
+    # claim_expires_at should be extended beyond the old expiry
+    task.refresh_from_db()
+    assert task.claim_expires_at > old_expires
+    # Response data must include the updated claim_expires_at
+    assert "claim_expires_at" in result["data"]
+    assert result["data"]["task_id"] == task.id
+
+
+# ---------------------------------------------------------------------------
+# test_report_progress_adds_note
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_report_progress_adds_note():
+    """vtf_report_progress creates an event via record_event() when a note is provided."""
+    from events.models import TaskEvent
+
+    task = TaskFactory(
+        status="doing",
+        claimed_by="agent-1",
+        claimed_at=timezone.now() - timedelta(minutes=5),
+        claim_expires_at=timezone.now() + timedelta(minutes=25),
+    )
+
+    result = json.loads(vtf_report_progress(task_id=task.id, note="Halfway done"))
+
+    assert result["success"] is True
+    assert result["data"]["note_added"] is True
+    # An event should have been created for the note
+    events = TaskEvent.objects.filter(task=task, event_type="progress_note")
+    assert events.exists()
+    assert events.first().data.get("note") == "Halfway done"
+
+
+# ---------------------------------------------------------------------------
+# test_report_progress_without_note
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_report_progress_without_note():
+    """vtf_report_progress with no note extends claim but does NOT create an event."""
+    from events.models import TaskEvent
+
+    task = TaskFactory(
+        status="doing",
+        claimed_by="agent-1",
+        claimed_at=timezone.now() - timedelta(minutes=5),
+        claim_expires_at=timezone.now() + timedelta(minutes=25),
+    )
+
+    result = json.loads(vtf_report_progress(task_id=task.id))
+
+    assert result["success"] is True
+    assert result["data"]["note_added"] is False
+    # No progress_note event should have been created
+    events = TaskEvent.objects.filter(task=task, event_type="progress_note")
+    assert not events.exists()
+
+
+# ---------------------------------------------------------------------------
+# test_report_progress_not_doing_error
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_report_progress_not_doing_error():
+    """vtf_report_progress returns an error when task is not in 'doing' status."""
+    task = TaskFactory(status="todo")
+
+    result = json.loads(vtf_report_progress(task_id=task.id))
+
+    assert result["success"] is False
+    assert result["message"] != ""
+    assert "doing" in result["message"].lower()
     assert "available_actions" in result
     assert len(result["available_actions"]) > 0
