@@ -48,7 +48,13 @@ mcp = VtfMCP("vtf", instructions="vtaskforge task management server")
 for _module_info in pkgutil.iter_modules(_tools_pkg.__path__):
     importlib.import_module(f"mcp_server.tools.{_module_info.name}")
 
-if __name__ == "__main__":
+def run_server():
+    """Start the MCP server using the configured transport.
+
+    Called from docker-compose or __main__. Uses the module-level `mcp`
+    instance so tool registrations are on the correct object (avoids the
+    __main__ double-import issue with `python -m`).
+    """
     transport = os.environ.get("VTF_MCP_TRANSPORT", "stdio")
     if transport == "http":
         import uvicorn
@@ -60,6 +66,14 @@ if __name__ == "__main__":
         mcp.settings.host = host
         mcp.settings.port = port
 
+        # Allow connections from Docker service names and k8s DNS.
+        # Default allowed_hosts only permits localhost/127.0.0.1.
+        allowed_hosts = os.environ.get("VTF_MCP_ALLOWED_HOSTS", "*:*")
+        host_list = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
+        mcp.settings.transport_security.allowed_hosts = host_list
+        # Disable origin check for non-browser API clients (agents).
+        mcp.settings.transport_security.enable_dns_rebinding_protection = False
+
         # Build the Starlette app and attach token auth middleware.
         app = mcp.streamable_http_app()
         app.add_middleware(TokenAuthMiddleware)
@@ -67,3 +81,7 @@ if __name__ == "__main__":
         uvicorn.run(app, host=host, port=port)
     else:
         mcp.run(transport="stdio")
+
+
+if __name__ == "__main__":
+    run_server()

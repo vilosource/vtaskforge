@@ -71,7 +71,7 @@ services:
 
   mcp:
     build: .
-    command: python src/mcp_server/server.py
+    command: python -c "from mcp_server.server import run_server; run_server()"
     volumes:
       - ./src:/app/src
     environment:
