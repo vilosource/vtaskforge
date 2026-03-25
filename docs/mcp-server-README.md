@@ -614,6 +614,67 @@ def vtf_my_tool(param: str) -> str:
 
 The server discovers all modules in `mcp_server/tools/` via `pkgutil.iter_modules` and imports them before the server starts listening.
 
+## E2E Testing
+
+The vtf MCP server has an end-to-end test suite that exercises the full stack: Postgres, the Django API, and the MCP server together in an isolated Docker environment.
+
+### What the tests cover
+
+Four test scenarios verify the MCP server's behavior end-to-end:
+
+1. **Executor workflow** — claim a task, report progress, and submit work; verifies the full executor lifecycle through MCP tools
+2. **Supervisor workflow** — board overview, find next available task, and lifecycle management via `vtf_manage_task`
+3. **Task lifecycle** — transitions through all major states (draft → todo → doing → done) using MCP tools
+4. **Error handling** — invalid transitions, missing tasks, unmet dependencies, and bad auth tokens return structured errors
+
+### How to run
+
+From the repo root:
+
+```bash
+./scripts/run-e2e.sh
+```
+
+The script:
+1. Brings up an isolated stack (db + api + mcp) using `docker-compose.e2e.yml`
+2. Runs Django migrations and seeds test data
+3. Waits for the MCP server to become ready
+4. Runs `pytest tests/e2e/ -v --tb=short`
+5. Tears down the stack on exit (success or failure)
+
+Exit code reflects test results — zero on pass, non-zero on failure.
+
+### Isolated stack details
+
+| Service | Host port | Notes |
+|---------|-----------|-------|
+| api | 18000 | Django runserver, E2E settings |
+| mcp | 18002 | HTTP transport mode |
+| db | (internal) | Ephemeral — tmpfs, destroyed on teardown |
+
+The E2E database (`vtf_e2e`) is completely separate from dev and dogfood. It is destroyed when the stack is torn down, so each run starts clean.
+
+### Debugging failures
+
+If the tests fail, inspect the container logs before the stack tears down by opening a second terminal:
+
+```bash
+docker compose -f docker-compose.e2e.yml -p vtf-e2e logs
+docker compose -f docker-compose.e2e.yml -p vtf-e2e logs api
+docker compose -f docker-compose.e2e.yml -p vtf-e2e logs mcp
+```
+
+To keep the stack running after a failure for manual inspection, run the script steps individually instead of using `run-e2e.sh`:
+
+```bash
+docker compose -f docker-compose.e2e.yml -p vtf-e2e up -d --build --wait
+docker compose -f docker-compose.e2e.yml -p vtf-e2e exec -T api python src/manage.py migrate --run-syncdb
+docker compose -f docker-compose.e2e.yml -p vtf-e2e exec -T api python -c "exec(open('/app/tests/e2e/seed.py').read())"
+pytest tests/e2e/ -v --tb=short
+# Inspect logs, then tear down manually:
+docker compose -f docker-compose.e2e.yml -p vtf-e2e down -v
+```
+
 ## Troubleshooting
 
 ### MCP server not appearing in Claude Code
