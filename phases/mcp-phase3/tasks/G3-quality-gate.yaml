@@ -1,0 +1,70 @@
+id: "G3"
+name: "Quality Gate: Phase 3 complete"
+depends_on: [P3.5]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Quality gate for Phase 3 (Management and Review Tools). Run the complete
+  test suite to verify no regressions across the entire codebase, then
+  verify the Phase 3 checklist from the implementation plan.
+
+  This is the ONLY task in Phase 3 that runs the full test suite.
+  Per-task testing during Phase 3 used unit tests only.
+
+files:
+  create: []
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md for test commands
+
+    Step 2: Run the full backend test suite
+    - docker compose exec api pytest --tb=short
+    - Record exact count: X passed, Y failed
+    - If ANY failures: investigate, determine if pre-existing or new
+
+    Step 3: Run the CLI test suite
+    - cd cli && pytest --tb=short
+    - Record exact count
+
+    Step 4: Verify Phase 3 checklist
+    - All 4 new tools exist and are registered: vtf_search_tasks,
+      vtf_task_detail, vtf_manage_task, vtf_review_task
+    - All 9 MCP tools total have integration tests
+    - Both workflow e2e tests pass (executor + supervisor)
+    - Error responses include valid transitions and actionable guidance
+    - Response schemas match the SPECIFICATION for all tools
+    - Each tool lives in its own file under src/mcp_server/tools/
+
+    Step 5: Produce quality gate report with:
+    - Total test count (backend + CLI)
+    - Checklist results
+    - Updated baseline for Phase 4
+
+  constraints:
+    - This is a verification task — do not modify any code
+    - If tests fail, report them — do not fix them
+    - The goal is 0 failures across all suites
+    - Report the exact baseline for Phase 4
+
+  references:
+    - CLAUDE.md
+    - docs/vtf-mcp-server-IMPLEMENTATION-PLAN.md
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "Full backend test suite: 0 failures"
+  - "CLI test suite: 0 failures"
+  - "All 9 MCP tools registered and functional"
+  - "Both workflow e2e tests pass (executor + supervisor)"
+  - "Error messages are actionable with valid transitions"
+  - "Response format matches SPECIFICATION.md"
+  - "Updated baseline count recorded"
+
+test_command:
+  full: "docker compose exec api pytest --tb=short"
+  cli: "cd cli && pytest --tb=short"

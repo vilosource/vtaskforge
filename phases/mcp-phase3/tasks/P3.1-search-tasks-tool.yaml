@@ -1,0 +1,97 @@
+id: "P3.1"
+name: "Implement vtf_search_tasks MCP tool"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_search_tasks tool that finds tasks by criteria with
+  enriched results. Uses Django ORM queries with pagination, filtering by
+  status/project/milestone/labels/assigned_to/text, and includes
+  available_actions per task.
+
+files:
+  create:
+    - src/mcp_server/tools/search.py
+    - tests/mcp_server/test_search_tools.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read CLAUDE.md, existing MCP server code, and the specification
+    - src/mcp_server/server.py, responses.py, tools/board.py, tools/workflow.py (for patterns)
+    - docs/vtf-mcp-server-SPECIFICATION.md — section 4.7 vtf_search_tasks
+    - src/tasks/models.py — Task model fields, filtering options
+    - src/tasks/services.py — get_available_actions()
+
+    Step 2: Create src/mcp_server/tools/search.py
+
+    @mcp.tool()
+    def vtf_search_tasks(
+        status: str = "",
+        project_id: str = "",
+        workplan_id: str = "",
+        milestone_id: str = "",
+        labels: str = "",
+        assigned_to: str = "",
+        query: str = "",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> str:
+        """Search for tasks matching specific criteria."""
+        - Convert empty strings to None
+        - Build queryset with filters:
+          - status filter (exact match)
+          - project_id filter
+          - workplan_id filter (via milestone__workplan)
+          - milestone_id filter
+          - labels filter (comma-separated, AND match)
+          - assigned_to filter
+          - query text search (title__icontains or description__icontains)
+        - Apply pagination (offset, limit clamped to 1-100)
+        - For each task: build enriched dict with id, title, status, milestone,
+          claimed_by, labels, has_spec, judge, available_actions
+        - Return success_response with tasks list + pagination metadata
+          (total_count, has_more, offset, limit)
+
+    Step 3: Register in server.py
+    - Add: import mcp_server.tools.search
+
+    Step 4: Create tests/mcp_server/test_search_tools.py
+    - test_search_by_status — filter returns only matching status
+    - test_search_by_project — filter by project_id
+    - test_search_by_milestone — filter by milestone_id
+    - test_search_by_labels — comma-separated label filter
+    - test_search_text_query — title/description text search
+    - test_search_pagination — offset and limit work correctly
+    - test_search_includes_available_actions_per_task — each task has actions
+
+  constraints:
+    - Use Task.objects queries, not raw SQL
+    - Use get_available_actions() from services for per-task actions
+    - Clamp limit to 1-100, default 20
+    - Response format must match SPECIFICATION.md section 4.7
+    - Follow same patterns as tools/board.py and tools/workflow.py
+    - New file src/mcp_server/tools/search.py (not in workflow.py)
+
+  references:
+    - src/mcp_server/tools/board.py
+    - src/mcp_server/tools/workflow.py
+    - src/mcp_server/responses.py
+    - src/tasks/models.py
+    - src/tasks/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_search_tasks tool exists in src/mcp_server/tools/search.py"
+  - "Tool registered via @mcp.tool() decorator"
+  - "Supports all filter parameters: status, project_id, workplan_id, milestone_id, labels, assigned_to, query"
+  - "Returns paginated results with total_count, has_more, offset, limit"
+  - "Each task includes available_actions from get_available_actions()"
+  - "7 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_search_tools.py -v --tb=short"

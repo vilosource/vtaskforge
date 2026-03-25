@@ -1,0 +1,84 @@
+id: "P3.4"
+name: "Implement vtf_review_task MCP tool"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_review_task tool that submits a review decision for
+  a task in review status. Uses submit_review() from the ReviewService
+  (P0.5). Supports approved, changes_requested, and rejected decisions
+  with milestone progress tracking.
+
+files:
+  create:
+    - src/mcp_server/tools/review.py
+    - tests/mcp_server/test_review_tools.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing MCP server code and the specification
+    - docs/vtf-mcp-server-SPECIFICATION.md — section 4.10 vtf_review_task
+    - src/reviews/services.py — submit_review(), ReviewError
+    - src/tasks/models.py — Task model, milestone relationship
+
+    Step 2: Create src/mcp_server/tools/review.py
+
+    @mcp.tool()
+    def vtf_review_task(
+        task_id: str,
+        decision: str,
+        reason: str = "",
+        reviewer_id: str = "mcp-reviewer",
+        reviewer_type: str = "agent",
+    ) -> str:
+        """Submit a review for a task awaiting review."""
+        - Validate decision is one of: approved, changes_requested, rejected
+        - Require reason for changes_requested and rejected
+        - Try submit_review(task_id, decision, reason, reviewer_id, reviewer_type)
+        - On success:
+          - Get previous_status from result
+          - Refresh task for new status
+          - Build milestone_progress if task has milestone
+          - Return success_response with task status change + milestone progress
+        - On ReviewError: return error_response with actionable message
+
+    Step 3: Register in server.py
+    - Add: import mcp_server.tools.review
+
+    Step 4: Create tests/mcp_server/test_review_tools.py
+    - test_review_approve_start — pending_start_review → todo
+    - test_review_approve_completion — pending_completion_review → done
+    - test_review_changes_requested — with reason, returns changes_requested status
+    - test_review_not_in_review_status_error — actionable error
+    - test_review_includes_milestone_progress — response has progress data
+
+  constraints:
+    - Must call submit_review() from reviews.services, not manipulate state directly
+    - Catch ReviewError and return error_response (not raise)
+    - Require reason for non-approved decisions
+    - Include milestone progress in response (same pattern as vtf_submit_work)
+    - Response format must match SPECIFICATION.md section 4.10
+    - New file src/mcp_server/tools/review.py (not in workflow.py)
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - src/mcp_server/responses.py
+    - src/reviews/services.py
+    - src/tasks/models.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_review_task tool exists in src/mcp_server/tools/review.py"
+  - "Tool registered via @mcp.tool() decorator"
+  - "Calls submit_review() from reviews.services"
+  - "Supports approved, changes_requested, rejected decisions"
+  - "Includes milestone progress in response"
+  - "5 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_review_tools.py -v --tb=short"

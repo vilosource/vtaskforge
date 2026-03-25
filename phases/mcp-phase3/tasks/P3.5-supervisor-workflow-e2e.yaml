@@ -1,0 +1,73 @@
+id: "P3.5"
+name: "Supervisor workflow end-to-end test"
+depends_on: [P3.1, P3.2, P3.3, P3.4]
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Create end-to-end tests that exercise the supervisor and judge workflows:
+  board overview → search → detail → review cycle. Proves the full MCP
+  tool chain works for non-executor roles.
+
+files:
+  create:
+    - tests/mcp_server/test_supervisor_workflow.py
+  modify: []
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read all tool modules for available functions
+    - src/mcp_server/tools/board.py — vtf_board_overview
+    - src/mcp_server/tools/search.py — vtf_search_tasks
+    - src/mcp_server/tools/detail.py — vtf_task_detail
+    - src/mcp_server/tools/review.py — vtf_review_task
+    - src/mcp_server/tools/manage.py — vtf_manage_task
+    - src/mcp_server/tools/workflow.py — vtf_claim_and_start, vtf_submit_work
+
+    Step 2: Create tests/mcp_server/test_supervisor_workflow.py
+
+    @pytest.mark.django_db
+    def test_supervisor_board_to_review_workflow():
+        """Supervisor checks board, finds pending review, reviews it."""
+        # Setup: project with tasks in various states, one pending_completion_review
+        # Step 1: vtf_board_overview — sees pending review count > 0
+        # Step 2: vtf_search_tasks(status="pending_completion_review") — finds the task
+        # Step 3: vtf_task_detail(task_id) — gets full context
+        # Step 4: vtf_review_task(task_id, decision="approved") — approves it
+        # Verify: task is done, milestone progress updated
+
+    @pytest.mark.django_db
+    def test_supervisor_manage_lifecycle():
+        """Supervisor creates, submits, blocks, and unblocks a task."""
+        # Setup: project with milestone
+        # Step 1: vtf_manage_task(action="create", title=..., project_id=...)
+        # Step 2: vtf_manage_task(action="submit", task_id=...)
+        # Step 3: vtf_manage_task(action="block", task_id=..., reason=...)
+        # Step 4: vtf_manage_task(action="unblock", task_id=...)
+        # Verify: task is in todo status, events recorded
+
+  constraints:
+    - Call the tool functions directly (same as other MCP tests)
+    - Use factories for test data setup
+    - Verify the complete lifecycle, not just individual tools
+    - Check that events are recorded at each step
+
+  references:
+    - src/mcp_server/tools/board.py
+    - src/mcp_server/tools/search.py
+    - src/mcp_server/tools/detail.py
+    - src/mcp_server/tools/review.py
+    - src/mcp_server/tools/manage.py
+    - tests/mcp_server/test_executor_workflow.py
+
+acceptance_criteria:
+  - "test_supervisor_board_to_review_workflow passes"
+  - "test_supervisor_manage_lifecycle passes"
+  - "Tests exercise board, search, detail, review, and manage tools"
+  - "Events are recorded at each step"
+  - "2 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_supervisor_workflow.py -v --tb=short"

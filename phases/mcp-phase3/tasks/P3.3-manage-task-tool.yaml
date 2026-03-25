@@ -1,0 +1,118 @@
+id: "P3.3"
+name: "Implement vtf_manage_task MCP tool"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_manage_task tool — a unified tool for task creation,
+  updates, and lifecycle transitions. Combines CRUD and state management
+  into a single tool with an 'action' parameter that dispatches to the
+  appropriate service function.
+
+files:
+  create:
+    - src/mcp_server/tools/manage.py
+    - tests/mcp_server/test_manage_tools.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing MCP server code, state machine, and specification
+    - docs/vtf-mcp-server-SPECIFICATION.md — section 4.9 vtf_manage_task
+    - src/tasks/state_machine.py — perform_transition(), get_valid_transitions()
+    - src/tasks/models.py — Task model fields
+    - src/events/services.py — record_event()
+    - src/tasks/services.py — get_available_actions()
+
+    Step 2: Create src/mcp_server/tools/manage.py
+
+    @mcp.tool()
+    def vtf_manage_task(
+        action: str,
+        task_id: str = "",
+        title: str = "",
+        project_id: str = "",
+        description: str = "",
+        labels: str = "",
+        spec: str = "",
+        agent_model: str = "",
+        judge: str = "",
+        isolation: str = "",
+        milestone_id: str = "",
+        workplan_id: str = "",
+        assigned_to: str = "",
+        reason: str = "",
+    ) -> str:
+        """Create, update, or change the status of a task."""
+        Route by action:
+        - "create": Create a new Task in draft status
+          - Requires title and project_id
+          - Set optional fields: description, labels, spec, agent_model, judge, isolation, milestone_id
+          - Return the created task with available_actions
+        - "update": Update task fields (title, description, labels, spec, agent_model, judge, isolation, assigned_to)
+          - Requires task_id
+          - Only update non-empty fields
+        - "submit": Transition draft → todo (or through start review)
+          - Use perform_transition()
+        - "block": Transition to blocked
+          - Record reason as event if provided
+        - "unblock": Transition blocked → todo
+        - "defer": Transition to deferred
+        - "cancel": Transition to cancelled
+        - "delete": Actually delete the task (Task.objects.get(pk=task_id).delete())
+        - "assign": Set assigned_to field
+          - Requires assigned_to parameter
+        - "unassign": Clear assigned_to field
+        - "reset": Admin force-transition to target_status (not implemented in v1, return error)
+
+        For transition actions: use perform_transition(), catch TransitionError,
+        return error_response with current status and valid transitions.
+
+    Step 3: Register in server.py
+    - Add: import mcp_server.tools.manage
+
+    Step 4: Create tests/mcp_server/test_manage_tools.py
+    - test_manage_create_task — creates task in draft status
+    - test_manage_update_title — updates existing task title
+    - test_manage_submit_task — transitions draft to todo
+    - test_manage_block_task — transitions to blocked with reason
+    - test_manage_unblock_task — transitions blocked to todo
+    - test_manage_defer_task — transitions to deferred
+    - test_manage_cancel_task — transitions to cancelled
+    - test_manage_delete_task — deletes task from database
+    - test_manage_assign_task — sets assigned_to
+    - test_manage_invalid_transition_error — returns valid transitions in error
+    - test_manage_unknown_action_error — unknown action returns error
+    - test_manage_create_missing_title_error — create without title fails
+
+  constraints:
+    - Use perform_transition() for all state changes, not direct status assignment
+    - Use record_event() for recording reasons (block, cancel)
+    - Catch TransitionError and return error_response with valid_transitions
+    - "judge" parameter is string ("true"/"false") since MCP params are flat typed
+    - Error responses must list valid transitions from current status
+    - Response format must match SPECIFICATION.md section 4.9
+    - New file src/mcp_server/tools/manage.py (not in workflow.py)
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - src/mcp_server/responses.py
+    - src/tasks/state_machine.py
+    - src/tasks/models.py
+    - src/events/services.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_manage_task tool exists in src/mcp_server/tools/manage.py"
+  - "Tool registered via @mcp.tool() decorator"
+  - "Supports actions: create, update, submit, block, unblock, defer, cancel, delete, assign"
+  - "Uses perform_transition() for state changes"
+  - "Invalid transition errors include valid_transitions list"
+  - "12 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_manage_tools.py -v --tb=short"

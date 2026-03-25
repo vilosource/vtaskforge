@@ -1,0 +1,79 @@
+id: "P3.2"
+name: "Implement vtf_task_detail MCP tool"
+depends_on: []
+agent_model: sonnet
+isolation: sequential
+judge: true
+
+description: |
+  Implement the vtf_task_detail tool that returns complete details for
+  a single task. Uses get_task_context() from P0.7 enriched with reviews,
+  recent events, notes, and available transitions. This is the deep-dive
+  tool for when agents need the full picture before acting.
+
+files:
+  create:
+    - src/mcp_server/tools/detail.py
+    - tests/mcp_server/test_detail_tools.py
+  modify:
+    - src/mcp_server/server.py
+  affected: []
+
+implementation:
+  approach: |
+    Step 1: Read existing MCP server code and the specification
+    - docs/vtf-mcp-server-SPECIFICATION.md — section 4.8 vtf_task_detail
+    - src/tasks/services.py — get_task_context(), get_available_actions()
+    - src/reviews/models.py — Review model for review history
+    - src/events/models.py — TaskEvent model for event timeline
+
+    Step 2: Create src/mcp_server/tools/detail.py
+
+    @mcp.tool()
+    def vtf_task_detail(task_id: str) -> str:
+        """Get complete details for a specific task."""
+        - Fetch task, return error_response if not found
+        - Call get_task_context(task_id) for base context
+        - Enrich with:
+          - reviews: list of Review records (decision, reason, reviewer, type, created_at)
+          - recent_events: last 10 TaskEvent records (event_type, data, triggered_by, created_at)
+          - notes: filter events for progress_note and completion_note types
+          - available_actions: from get_available_actions()
+        - Build contextual message based on task status
+          (e.g., "has changes requested: '...'", "blocked: '...'", "ready to claim")
+        - Return success_response with full task detail
+
+    Step 3: Register in server.py
+    - Add: import mcp_server.tools.detail
+
+    Step 4: Create tests/mcp_server/test_detail_tools.py
+    - test_task_detail_includes_all_sections — spec, deps, reviews, events, notes
+    - test_task_detail_shows_available_actions — actions based on current status
+    - test_task_detail_not_found_error — returns error_response
+
+  constraints:
+    - Use get_task_context() from services as the base, enrich on top
+    - Use get_available_actions() from services for transition list
+    - Limit recent_events to last 10 for response size
+    - Error when task not found — include available_actions
+    - Response format must match SPECIFICATION.md section 4.8
+    - New file src/mcp_server/tools/detail.py (not in workflow.py)
+
+  references:
+    - src/mcp_server/tools/workflow.py
+    - src/mcp_server/responses.py
+    - src/tasks/services.py
+    - src/reviews/models.py
+    - src/events/models.py
+    - docs/vtf-mcp-server-SPECIFICATION.md
+
+acceptance_criteria:
+  - "vtf_task_detail tool exists in src/mcp_server/tools/detail.py"
+  - "Tool registered via @mcp.tool() decorator"
+  - "Returns full context: spec, deps, reviews, events, notes, available_actions"
+  - "Returns contextual message based on task status"
+  - "Returns error_response when task not found"
+  - "3 new tests pass"
+
+test_command:
+  unit: "docker compose exec api pytest tests/mcp_server/test_detail_tools.py -v --tb=short"
