@@ -30,12 +30,30 @@ LLM -> vtf_claim_and_start(task_id="abc", agent_id="executor-1")
 
 The MCP server runs embedded in the Django application process. Tools call the same service layer functions used by the REST API — no HTTP overhead for internal operations.
 
+Two transport modes are supported:
+
+**stdio (local dev — Claude Code on same machine):**
+
 ```
 Claude Code (MCP Client)
         |
    MCP (stdio)
         |
   vtf MCP Server (FastMCP)
+        |
+  Service Layer (tasks.services, reviews.services, events.services)
+        |
+  Django ORM + Postgres
+```
+
+**Streamable HTTP (remote agents — vafi executors, k8s pods):**
+
+```
+vafi Executor / k8s Pod
+        |
+   HTTP POST /mcp  (Authorization: Token <key>)
+        |
+  vtf MCP Server (uvicorn + Starlette + TokenAuthMiddleware)
         |
   Service Layer (tasks.services, reviews.services, events.services)
         |
@@ -54,7 +72,7 @@ The vtf Docker stack must be running:
 docker compose up -d
 ```
 
-### Configure Claude Code
+### stdio transport (default — Claude Code on local machine)
 
 Copy the `.mcp.json` from the repo root to your Claude Code workspace, or add the `vtf` entry to your existing `.mcp.json`:
 
@@ -63,7 +81,7 @@ Copy the `.mcp.json` from the repo root to your Claude Code workspace, or add th
   "mcpServers": {
     "vtf": {
       "command": "docker",
-      "args": ["compose", "exec", "-T", "api", "python", "-m", "mcp_server.server"],
+      "args": ["compose", "exec", "-T", "api", "python", "src/mcp_server/server.py"],
       "env": {}
     }
   }
@@ -72,29 +90,91 @@ Copy the `.mcp.json` from the repo root to your Claude Code workspace, or add th
 
 This runs the MCP server inside the `api` container via stdio transport. The `-T` flag disables TTY allocation, which is required for MCP stdio communication.
 
-### Transport limitations
+Note: the server must be started with `python src/mcp_server/server.py` (not `python -m mcp_server.server`) to avoid a double-import issue — see the Development section below.
 
-The current implementation only supports **stdio transport**. This means the MCP client (Claude Code) must be able to spawn the server process — i.e., it must run on the same machine as the Docker compose stack.
+### HTTP transport (remote agents)
 
-For remote agents (e.g., vafi executor containers in Kubernetes), stdio won't work. Streamable HTTP transport is needed — see the [specification](vtf-mcp-server-SPECIFICATION.md) section on transports.
+The `mcp` service in `docker-compose.yml` runs the server in HTTP mode on port 8002. Start it alongside the API:
 
-### Django async safety
+```bash
+docker compose up -d mcp
+```
 
-The MCP server sets `DJANGO_ALLOW_ASYNC_UNSAFE=true` because FastMCP runs tool functions inside an async event loop, but the tools use synchronous Django ORM calls. This is safe for single-client stdio transport. If multi-client HTTP transport is added in the future, tools should be wrapped with `sync_to_async` or dispatched to a thread pool instead.
+Verify the server is reachable:
 
-### Verify the connection
+```bash
+curl http://localhost:8002/health
+```
 
-After adding `.mcp.json`, Claude Code will show `vtf` in its MCP tool list. You can test by asking Claude to call `vtf_board_overview`.
+Create an agent token for the remote client:
+
+```bash
+vtf agent register --name "my-remote-agent" --tags executor,sonnet
+# Returns: token <key>
+```
+
+Remote agents then connect by sending MCP requests to `http://<host>:8002/mcp` with the header:
+
+```
+Authorization: Token <key>
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `VTF_MCP_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
+| `VTF_MCP_HOST` | `0.0.0.0` | Bind address (HTTP mode only) |
+| `VTF_MCP_PORT` | `8002` | Listen port (HTTP mode only) |
 
 ### Authentication
 
-The MCP server uses the same agent token system as the REST API. Agents register via:
+**stdio transport:** Authentication is not enforced. Tools operate against the Django database directly without a token check. This matches the dev CLI behavior.
+
+**HTTP transport:** All requests (except `GET /` and `GET /health`) must include an `Authorization: Token <key>` header. The token is validated against the Django authtoken table. Requests without a valid token receive a `401` response.
+
+Create a token via the vtf CLI:
 
 ```bash
 vtf agent register --name "my-agent" --tags executor,sonnet
+# Returns the token to use in Authorization headers
 ```
 
-The returned token can be passed as the `VTF_TOKEN` environment variable, or tools will operate in unauthenticated mode (same as CLI usage in the dev environment).
+The returned token must be set on the remote agent, for example as an environment variable:
+
+```bash
+export VTF_TOKEN=<key>
+```
+
+Tool implementations can read this value to include in outbound MCP calls.
+
+### Remote agent configuration
+
+**vafi executor containers:** Connect to the MCP service using its Docker Compose service name:
+
+```
+http://vtf-mcp:8002/mcp
+```
+
+The service name resolves automatically within a shared Docker network. Set `Authorization: Token <key>` using the agent's registered token.
+
+**Kubernetes internal:** Use the Kubernetes service DNS:
+
+```
+http://vtf-mcp.<namespace>.svc.cluster.local:8002/mcp
+```
+
+**External access:** Expose the service via ingress and configure your ingress controller to route `<host>/mcp` to port 8002 on the mcp pod.
+
+### Verify the connection
+
+After adding `.mcp.json` (stdio), Claude Code will show `vtf` in its MCP tool list. You can test by asking Claude to call `vtf_board_overview`.
+
+For HTTP transport, verify with a direct curl (replace `<token>` with a valid agent token):
+
+```bash
+curl -H "Authorization: Token <token>" http://localhost:8002/mcp
+```
 
 ## Tool Reference
 
@@ -480,8 +560,9 @@ The MCP server lives at `src/mcp_server/` inside the Django project. It bootstra
 ```
 src/
   mcp_server/
-    server.py          # Entry point, FastMCP instance, auto-discovery
+    server.py          # Entry point, FastMCP instance, auto-discovery, transport selection
     auth.py            # Token validation against Django authtoken table
+    http_auth.py       # Starlette TokenAuthMiddleware for HTTP transport
     responses.py       # success_response() and error_response() helpers
     tools/
       __init__.py
@@ -583,7 +664,7 @@ To connect Claude Code to the dogfood instance instead of the dev stack, change 
   "mcpServers": {
     "vtf": {
       "command": "docker",
-      "args": ["compose", "-f", "docker-compose.dogfood.yml", "exec", "-T", "dogfood-api", "python", "-m", "mcp_server.server"],
+      "args": ["compose", "-f", "docker-compose.dogfood.yml", "exec", "-T", "dogfood-api", "python", "src/mcp_server/server.py"],
       "env": {}
     }
   }
@@ -598,6 +679,22 @@ To connect Claude Code to the dogfood instance instead of the dev stack, change 
 4. Use `available_actions` to guide the agent toward logical next steps
 5. Never return raw tracebacks — catch exceptions and return `error_response` with actionable guidance
 6. Restart the container so auto-discovery picks up the new module
+
+### Double-import issue with `python -m`
+
+When the server is run via `python -m mcp_server.server`, Python imports the module twice: once as `__main__` and once as `mcp_server.server`. This means tool registrations on the `mcp` instance in `mcp_server/tools/*.py` (imported as `from mcp_server.server import mcp`) go to a different `mcp` instance than the one that actually runs. The tools are silently not registered.
+
+The fix is to run the server directly as a script, not as a module:
+
+```bash
+# Correct — tools register on the running instance
+python src/mcp_server/server.py
+
+# Broken — double-import causes tools to be on the wrong mcp instance
+python -m mcp_server.server
+```
+
+The `docker-compose.yml` `mcp` service and the `.mcp.json` stdio configuration both use the script form to avoid this. If you encounter a situation where the server starts but no tools are visible, check how the server process was invoked.
 
 For full design context and the original specification, see:
 - `docs/vtf-mcp-server-SPECIFICATION.md` — complete tool contracts, architecture decisions, and implementation phases

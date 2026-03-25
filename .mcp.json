@@ -1,9 +1,18 @@
 {
+  "_readme": "Use 'vtf' for local dev (stdio via docker compose exec). Use 'vtf-http' for remote/HTTP transport — requires 'docker compose up -d mcp' and a valid agent token.",
   "mcpServers": {
     "vtf": {
+      "_transport": "stdio — runs MCP server inside the api container. No auth required. Default for Claude Code on the same machine.",
       "command": "docker",
-      "args": ["compose", "exec", "-T", "api", "python", "-m", "mcp_server.server"],
+      "args": ["compose", "exec", "-T", "api", "python", "src/mcp_server/server.py"],
       "env": {}
+    },
+    "vtf-http": {
+      "_transport": "streamable HTTP — connects to the mcp service on port 8002. Requires 'docker compose up -d mcp' and an agent token from 'vtf agent register'.",
+      "url": "http://localhost:8002/mcp",
+      "headers": {
+        "Authorization": "Token <your-agent-token>"
+      }
     }
   }
 }
