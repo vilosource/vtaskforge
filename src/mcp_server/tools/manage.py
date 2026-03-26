@@ -36,6 +36,11 @@ def vtf_manage_task(
     workplan_id: str = "",
     assigned_to: str = "",
     reason: str = "",
+    acceptance_criteria: str = "",
+    requires: str = "",
+    needs_review_before_start: str = "",
+    needs_review_on_completion: str = "",
+    test_command: str = "",
 ) -> str:
     """Create, update, or change the status of a task.
 
@@ -46,10 +51,14 @@ def vtf_manage_task(
     # Route by action
     if action == "create":
         return _action_create(title, project_id, description, labels, spec,
-                               agent_model, judge, isolation, milestone_id, workplan_id)
+                               agent_model, judge, isolation, milestone_id, workplan_id,
+                               acceptance_criteria, requires, needs_review_before_start,
+                               needs_review_on_completion, test_command)
     elif action == "update":
         return _action_update(task_id, title, description, labels, spec,
-                               agent_model, judge, isolation, milestone_id, workplan_id)
+                               agent_model, judge, isolation, milestone_id, workplan_id,
+                               acceptance_criteria, requires, needs_review_before_start,
+                               needs_review_on_completion, test_command)
     elif action == "submit":
         return _action_transition(task_id, "todo", "submitted")
     elif action == "block":
@@ -96,7 +105,9 @@ def _get_task(task_id: str):
 
 
 def _action_create(title, project_id, description, labels, spec,
-                   agent_model, judge, isolation, milestone_id, workplan_id=""):
+                   agent_model, judge, isolation, milestone_id, workplan_id="",
+                   acceptance_criteria="", requires="", needs_review_before_start="",
+                   needs_review_on_completion="", test_command=""):
     """Create a new task in draft status."""
     if not title:
         return json.dumps(
@@ -184,6 +195,45 @@ def _action_create(title, project_id, description, labels, spec,
         except Milestone.DoesNotExist:
             pass
 
+    # acceptance_criteria — JSON array or comma-separated string
+    if acceptance_criteria:
+        try:
+            kwargs["acceptance_criteria"] = json.loads(acceptance_criteria)
+        except json.JSONDecodeError:
+            kwargs["acceptance_criteria"] = [c.strip() for c in acceptance_criteria.split(",") if c.strip()]
+
+    # requires — comma-separated task IDs, validate they exist
+    if requires:
+        req_ids = [r.strip() for r in requires.split(",") if r.strip()]
+        existing = set(Task.objects.filter(pk__in=req_ids).values_list("pk", flat=True))
+        missing = set(req_ids) - existing
+        if missing:
+            return json.dumps(error_response(
+                message=f"Required task(s) not found: {', '.join(missing)}",
+                data={"missing_ids": list(missing)},
+                available_actions=["vtf_search_tasks"],
+            ))
+        kwargs["requires"] = req_ids
+
+    # needs_review_before_start
+    if needs_review_before_start:
+        kwargs["needs_review_before_start"] = needs_review_before_start.lower() in ("true", "1", "yes")
+
+    # needs_review_on_completion
+    if needs_review_on_completion:
+        kwargs["needs_review_on_completion"] = needs_review_on_completion.lower() in ("true", "1", "yes")
+
+    # test_command — JSON dict
+    if test_command:
+        try:
+            kwargs["test_command"] = json.loads(test_command)
+        except json.JSONDecodeError:
+            return json.dumps(error_response(
+                message="test_command must be valid JSON (e.g. '{\"unit\": \"pytest tests/...\"}').",
+                data={},
+                available_actions=["vtf_manage_task"],
+            ))
+
     task = Task.objects.create(**kwargs)
 
     return json.dumps(
@@ -209,7 +259,9 @@ def _action_create(title, project_id, description, labels, spec,
 
 
 def _action_update(task_id, title, description, labels, spec,
-                   agent_model, judge, isolation, milestone_id, workplan_id=""):
+                   agent_model, judge, isolation, milestone_id, workplan_id="",
+                   acceptance_criteria="", requires="", needs_review_before_start="",
+                   needs_review_on_completion="", test_command=""):
     """Update mutable task fields."""
     if not task_id:
         return json.dumps(
@@ -275,6 +327,50 @@ def _action_update(task_id, title, description, labels, spec,
                     update_fields.append("milestone")
         except Workplan.DoesNotExist:
             pass
+
+    # acceptance_criteria — JSON array or comma-separated string
+    if acceptance_criteria:
+        try:
+            task.acceptance_criteria = json.loads(acceptance_criteria)
+        except json.JSONDecodeError:
+            task.acceptance_criteria = [c.strip() for c in acceptance_criteria.split(",") if c.strip()]
+        update_fields.append("acceptance_criteria")
+
+    # requires — comma-separated task IDs, validate they exist
+    if requires:
+        req_ids = [r.strip() for r in requires.split(",") if r.strip()]
+        existing = set(Task.objects.filter(pk__in=req_ids).values_list("pk", flat=True))
+        missing = set(req_ids) - existing
+        if missing:
+            return json.dumps(error_response(
+                message=f"Required task(s) not found: {', '.join(missing)}",
+                data={"missing_ids": list(missing)},
+                available_actions=["vtf_search_tasks"],
+            ))
+        task.requires = req_ids
+        update_fields.append("requires")
+
+    # needs_review_before_start
+    if needs_review_before_start:
+        task.needs_review_before_start = needs_review_before_start.lower() in ("true", "1", "yes")
+        update_fields.append("needs_review_before_start")
+
+    # needs_review_on_completion
+    if needs_review_on_completion:
+        task.needs_review_on_completion = needs_review_on_completion.lower() in ("true", "1", "yes")
+        update_fields.append("needs_review_on_completion")
+
+    # test_command — JSON dict
+    if test_command:
+        try:
+            task.test_command = json.loads(test_command)
+        except json.JSONDecodeError:
+            return json.dumps(error_response(
+                message="test_command must be valid JSON (e.g. '{\"unit\": \"pytest tests/...\"}').",
+                data={},
+                available_actions=["vtf_manage_task"],
+            ))
+        update_fields.append("test_command")
 
     task.save(update_fields=update_fields)
 

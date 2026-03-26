@@ -448,3 +448,213 @@ def test_create_task_invalid_workplan_id():
 
     assert result["success"] is False
     assert "nonexistent-workplan-id" in result["message"] or "not found" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_acceptance_criteria_json
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_acceptance_criteria_json():
+    """vtf_manage_task(action=create) accepts acceptance_criteria as JSON array."""
+    from tasks.models import Task
+
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="AC JSON test",
+        project_id=project.id,
+        acceptance_criteria='["AC1: must pass", "AC2: must be fast"]',
+    ))
+
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert task.acceptance_criteria == ["AC1: must pass", "AC2: must be fast"]
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_acceptance_criteria_csv
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_acceptance_criteria_csv():
+    """vtf_manage_task(action=create) accepts acceptance_criteria as comma-separated string."""
+    from tasks.models import Task
+
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="AC CSV test",
+        project_id=project.id,
+        acceptance_criteria="AC1: must pass, AC2: must be fast",
+    ))
+
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert task.acceptance_criteria == ["AC1: must pass", "AC2: must be fast"]
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_requires_valid
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_requires_valid():
+    """vtf_manage_task(action=create) sets requires field with valid task IDs."""
+    from tasks.models import Task
+
+    project = ProjectFactory()
+    dep1 = TaskFactory(status="draft", project=project)
+    dep2 = TaskFactory(status="draft", project=project)
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Task with dependencies",
+        project_id=project.id,
+        requires=f"{dep1.id},{dep2.id}",
+    ))
+
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert set(task.requires) == {dep1.id, dep2.id}
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_requires_invalid
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_requires_invalid():
+    """vtf_manage_task(action=create) returns error when required task IDs don't exist."""
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Task with bad deps",
+        project_id=project.id,
+        requires="nonexistent-task-id-1,nonexistent-task-id-2",
+    ))
+
+    assert result["success"] is False
+    assert "not found" in result["message"].lower()
+    assert "missing_ids" in result["data"]
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_review_booleans
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_review_booleans():
+    """vtf_manage_task(action=create) sets needs_review_* fields from string true/false."""
+    from tasks.models import Task
+
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Review flags test",
+        project_id=project.id,
+        needs_review_before_start="true",
+        needs_review_on_completion="false",
+    ))
+
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert task.needs_review_before_start is True
+    assert task.needs_review_on_completion is False
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_test_command
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_test_command():
+    """vtf_manage_task(action=create) sets test_command from valid JSON dict."""
+    from tasks.models import Task
+
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Test command test",
+        project_id=project.id,
+        test_command='{"unit": "pytest tests/mcp_server/", "full": "pytest tests/"}',
+    ))
+
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert task.test_command == {"unit": "pytest tests/mcp_server/", "full": "pytest tests/"}
+
+
+# ---------------------------------------------------------------------------
+# test_create_with_test_command_invalid_json
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_with_test_command_invalid_json():
+    """vtf_manage_task(action=create) returns error for non-JSON test_command."""
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Bad test command",
+        project_id=project.id,
+        test_command="not valid json",
+    ))
+
+    assert result["success"] is False
+    assert "test_command" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# test_update_acceptance_criteria
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_update_acceptance_criteria():
+    """vtf_manage_task(action=update) modifies acceptance_criteria on existing task."""
+    task = TaskFactory(status="draft", acceptance_criteria=["old criterion"])
+
+    result = json.loads(vtf_manage_task(
+        action="update",
+        task_id=task.id,
+        acceptance_criteria='["new criterion A", "new criterion B"]',
+    ))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.acceptance_criteria == ["new criterion A", "new criterion B"]
+
+
+# ---------------------------------------------------------------------------
+# test_update_requires
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_update_requires():
+    """vtf_manage_task(action=update) modifies requires field on existing task."""
+    task = TaskFactory(status="draft", requires=[])
+    dep = TaskFactory(status="draft", project=task.project)
+
+    result = json.loads(vtf_manage_task(
+        action="update",
+        task_id=task.id,
+        requires=dep.id,
+    ))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.requires == [dep.id]
