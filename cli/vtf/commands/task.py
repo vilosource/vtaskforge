@@ -411,8 +411,17 @@ def delete(ctx, id, yes):
 @click.option("--agent-model", default=None, help="Agent model override")
 @click.option("--judge/--no-judge", default=None, help="Enable/disable judge review")
 @click.option("--isolation", default=None, help="Isolation mode")
+@click.option("--workplan", default=None, help="Workplan ID")
+@click.option("--milestone", default=None, help="Milestone ID")
+@click.option("--acceptance-criteria", default=None, help="JSON array of criteria")
+@click.option("--requires", default=None, help="Comma-separated task IDs")
+@click.option("--test-command", default=None, help="JSON test command dict")
+@click.option("--needs-review-before-start/--no-review-before-start", default=None, help="Require review before start")
+@click.option("--needs-review-on-completion/--no-review-on-completion", default=None, help="Require review on completion")
 @click.pass_context
-def update(ctx, id, title, description, labels, spec, spec_file, agent_model, judge, isolation):
+def update(ctx, id, title, description, labels, spec, spec_file, agent_model, judge, isolation,
+           workplan, milestone, acceptance_criteria, requires, test_command,
+           needs_review_before_start, needs_review_on_completion):
     """Update task fields."""
     data = {}
     if title is not None:
@@ -432,6 +441,28 @@ def update(ctx, id, title, description, labels, spec, spec_file, agent_model, ju
         data["judge"] = judge
     if isolation is not None:
         data["isolation"] = isolation
+    if workplan is not None:
+        data["workplan"] = workplan
+    if milestone is not None:
+        data["milestone"] = milestone
+    if acceptance_criteria is not None:
+        try:
+            data["acceptance_criteria"] = json.loads(acceptance_criteria)
+        except json.JSONDecodeError:
+            click.echo("Error: --acceptance-criteria has invalid JSON", err=True)
+            raise SystemExit(1)
+    if requires is not None:
+        data["requires"] = [t.strip() for t in requires.split(",")]
+    if test_command is not None:
+        try:
+            data["test_command"] = json.loads(test_command)
+        except json.JSONDecodeError:
+            click.echo("Error: --test-command has invalid JSON", err=True)
+            raise SystemExit(1)
+    if needs_review_before_start is not None:
+        data["needs_review_before_start"] = needs_review_before_start
+    if needs_review_on_completion is not None:
+        data["needs_review_on_completion"] = needs_review_on_completion
 
     if not data:
         click.echo("Error: no fields to update. Use --title, --description, --labels, etc.", err=True)

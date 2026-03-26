@@ -882,3 +882,136 @@ def test_task_update_api_error(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["task", "update", "task-abc", "--title", "X"])
     assert result.exit_code == 1
+
+
+def test_task_update_workplan(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--workplan", "wp-123"])
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with("/v1/tasks/task-abc/", {"workplan": "wp-123"})
+
+
+def test_task_update_milestone(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["task", "update", "task-abc", "--milestone", "ms-456"])
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with("/v1/tasks/task-abc/", {"milestone": "ms-456"})
+
+
+def test_task_update_acceptance_criteria(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    criteria = '["AC1: does X", "AC2: does Y"]'
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--acceptance-criteria", criteria]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"acceptance_criteria": ["AC1: does X", "AC2: does Y"]}
+    )
+
+
+def test_task_update_requires(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--requires", "task-1,task-2"]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"requires": ["task-1", "task-2"]}
+    )
+
+
+def test_task_update_test_command(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    test_cmd = '{"unit": "pytest tests/", "full": "pytest"}'
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--test-command", test_cmd]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/",
+        {"test_command": {"unit": "pytest tests/", "full": "pytest"}},
+    )
+
+
+def test_task_update_needs_review_before_start(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--needs-review-before-start"]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"needs_review_before_start": True}
+    )
+
+
+def test_task_update_no_review_before_start(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--no-review-before-start"]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"needs_review_before_start": False}
+    )
+
+
+def test_task_update_needs_review_on_completion(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--needs-review-on-completion"]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"needs_review_on_completion": True}
+    )
+
+
+def test_task_update_no_review_on_completion(runner, mock_client):
+    mock_client.patch.return_value = {"id": "task-abc", "status": "draft"}
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--no-review-on-completion"]
+        )
+    assert result.exit_code == 0
+    mock_client.patch.assert_called_once_with(
+        "/v1/tasks/task-abc/", {"needs_review_on_completion": False}
+    )
+
+
+def test_task_update_acceptance_criteria_invalid_json(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--acceptance-criteria", "not-json"]
+        )
+    assert result.exit_code == 1
+    assert "invalid json" in result.output.lower()
+
+
+def test_task_update_test_command_invalid_json(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli, ["task", "update", "task-abc", "--test-command", "not-json"]
+        )
+    assert result.exit_code == 1
+    assert "invalid json" in result.output.lower()
+
+
+def test_task_update_help_shows_new_flags(runner):
+    result = runner.invoke(cli, ["task", "update", "--help"])
+    assert result.exit_code == 0
+    assert "--workplan" in result.output
+    assert "--milestone" in result.output
+    assert "--acceptance-criteria" in result.output
+    assert "--requires" in result.output
+    assert "--test-command" in result.output
+    assert "--needs-review-before-start" in result.output
+    assert "--needs-review-on-completion" in result.output
