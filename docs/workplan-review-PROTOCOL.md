@@ -62,6 +62,7 @@ Evaluate the workplan as a whole. This phase may produce structural changes (spl
 3. **Dependencies** — Map the dependency graph. Identify tasks that must complete before others can start.
 4. **Risk ordering** — Which task, if it fails, blocks the most others? Foundational tasks execute first.
 5. **Blast radius** — Which tasks touch the most files? These carry higher regression risk and may need tighter gates.
+6. **Quality gate** — Does the milestone end with a quality gate task? Per the [simulation protocol](guides/simulation-protocol-GUIDE.md), every milestone must have one. The gate task depends on ALL other tasks in the milestone, runs the full test suite, and verifies the milestone checklist. If missing, create it.
 
 **Structural actions** (applied immediately, not deferred):
 - **Split** overloaded tasks — create new tasks via vtf, move scope from the original
@@ -201,7 +202,9 @@ vtf has a `requires` field on tasks for system-enforced blocking. However, as of
 
 5. **Dependencies need dual documentation** — Prose in the spec ("Depends On: foundation task") for human readability, plus vtf `requires` field (when supported) for system enforcement. Neither alone is sufficient.
 
-6. **Verification agents should be read-only** — The Phase 2 agents explored the codebase but made no changes. This is the right boundary: read to verify, then act to enrich. Mixing the two risks making changes based on incomplete understanding.
+6. **Quality gate task is a structural requirement, not an afterthought** — The simulation protocol requires every milestone to end with a quality gate task. Phase 3 initially missed this check, meaning we almost moved to execution without a full regression gate. Added as Phase 3 step 6.
+
+7. **Verification agents should be read-only** — The Phase 2 agents explored the codebase but made no changes. This is the right boundary: read to verify, then act to enrich. Mixing the two risks making changes based on incomplete understanding.
 
 ---
 
@@ -224,6 +227,7 @@ Phase 3: Structure Assessment
   [ ] Cohesion check — all tasks contribute to goal
   [ ] Decomposition check — no overloaded tasks
   [ ] Dependency graph mapped
+  [ ] Quality gate task exists for the milestone
   [ ] Structural changes applied (splits/merges/creates/cancels)
 
 Phase 4: Task Enrichment
