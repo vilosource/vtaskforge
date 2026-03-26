@@ -109,6 +109,9 @@ Prompt template:
 ---
 You are implementing a vtf task. Work in /home/jasonvi/GitHub/vtaskforge/ on branch task/<task-id>.
 
+## Task ID
+<task-id>
+
 ## Task Spec
 <paste spec YAML here>
 
@@ -116,10 +119,13 @@ You are implementing a vtf task. Work in /home/jasonvi/GitHub/vtaskforge/ on bra
 Check out branch: task/<task-id>
 
 Implement the task following your methodology. Commit when done.
+After committing, call vtf_submit_work(task_id="<task-id>", agent_id="executor-<task-id>") to submit your work.
 ---
 ```
 
 Model: `sonnet` (or as specified in spec's `agent_model` field)
+
+**Important:** The executor calls `vtf_submit_work` directly — the supervisor does NOT relay this call. This establishes the executor's identity in vtf for the reviewer != claimer enforcement.
 
 ### 6. Review the Executor Output
 
@@ -127,8 +133,11 @@ The executor returns a completion report. Read it. Note:
 - Were all acceptance criteria claimed as MET?
 - Any spec deviations?
 - Any blast radius discoveries?
+- Did the executor successfully call `vtf_submit_work`? If not, the supervisor calls it with `agent_id="executor-<task-id>"` (not the supervisor's own ID).
 
 Do NOT verify the executor's claims yourself — that's the judge's job. You just read the report to understand what was done.
+
+Do NOT call `vtf_review_task` yourself — that's the judge's job. vtf enforces this: the reviewer cannot be the same agent that claimed the task.
 
 ### 7. Dispatch the Judge
 
@@ -138,6 +147,9 @@ Use the Agent tool with `subagent_type: vtf-judge`:
 Prompt template:
 ---
 Verify the implementation for a vtf task. Work in /home/jasonvi/GitHub/vtaskforge/.
+
+## Task ID
+<task-id>
 
 ## Task Spec
 <paste spec YAML here>
@@ -150,29 +162,33 @@ Base branch: develop
 <paste executor's report here>
 
 Run the task-specific tests (test_command.unit from the spec), review the code, and produce your verdict.
+After producing your verdict, call vtf_review_task(task_id="<task-id>", decision="approved" or "changes_requested", reviewer_id="judge-<task-id>", reason="<summary>").
 ---
 ```
 
 Model: `opus` (judge needs deeper reasoning)
 
 The judge will:
-1. Run the full test suite and compare against the baseline
-2. If tests regressed → automatic FAIL, skip code review
+1. Run the task-specific tests
+2. If tests fail → automatic FAIL, skip code review
 3. If tests pass → full code review, blast radius check, pattern compliance
 4. Produce a structured verdict
+5. Call `vtf_review_task` directly with the verdict
+
+**Important:** The judge calls `vtf_review_task` directly — the supervisor does NOT relay this call. vtf enforces that the reviewer is a different agent than the claimer.
 
 ### 8. Decision
 
-Based on the judge verdict:
+Based on the judge verdict (check vtf task status — if the judge approved, it's already `done`):
 
-#### PASS → Accept and Merge
+#### PASS → Merge
 
 ```bash
 cd ~/GitHub/vtaskforge
 git checkout develop
 git merge task/<task-id>
 git branch -d task/<task-id>
-vtf task complete <task-id>
+# Task is already done — judge approved it via vtf_review_task
 ```
 
 #### FAIL → Rework

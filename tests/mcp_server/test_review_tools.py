@@ -141,3 +141,49 @@ def test_review_fuzzy_no_match_no_suggestion():
 
     assert result["success"] is False
     assert "Did you mean" not in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# Reviewer != claimer enforcement tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_review_rejected_when_reviewer_is_claimer():
+    """vtf_review_task rejects when reviewer_id matches task.claimed_by."""
+    task = TaskFactory(status="pending_completion_review", claimed_by="supervisor")
+
+    result = json.loads(
+        vtf_review_task(task_id=task.id, decision="approved", reviewer_id="supervisor")
+    )
+
+    assert result["success"] is False
+    assert "same agent" in result["message"].lower()
+    task.refresh_from_db()
+    assert task.status == "pending_completion_review"  # unchanged
+
+
+@pytest.mark.django_db
+def test_review_accepted_when_reviewer_differs_from_claimer():
+    """vtf_review_task succeeds when reviewer_id differs from claimed_by."""
+    task = TaskFactory(status="pending_completion_review", claimed_by="supervisor")
+
+    result = json.loads(
+        vtf_review_task(task_id=task.id, decision="approved", reviewer_id="judge-abc")
+    )
+
+    assert result["success"] is True
+    assert result["data"]["task"]["status"] == "done"
+
+
+@pytest.mark.django_db
+def test_review_allowed_when_no_claimer():
+    """vtf_review_task succeeds when task has no claimed_by (e.g., imported tasks)."""
+    task = TaskFactory(status="pending_completion_review", claimed_by=None)
+
+    result = json.loads(
+        vtf_review_task(task_id=task.id, decision="approved", reviewer_id="anyone")
+    )
+
+    assert result["success"] is True
+    assert result["data"]["task"]["status"] == "done"

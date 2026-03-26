@@ -45,6 +45,25 @@ def vtf_review_task(
             )
         )
 
+    # Enforce reviewer != claimer (independent verification)
+    try:
+        task = Task.objects.get(pk=task_id)
+        if task.claimed_by and reviewer_id == task.claimed_by:
+            return json.dumps(
+                error_response(
+                    message=(
+                        f"Cannot review task {task_id}: reviewer '{reviewer_id}' "
+                        f"is the same agent that claimed this task. "
+                        f"Reviews must come from an independent agent (e.g., a judge)."
+                    ),
+                    data={"task_id": task_id, "reviewer_id": reviewer_id,
+                          "claimed_by": task.claimed_by},
+                    available_actions=["vtf_task_detail"],
+                )
+            )
+    except Task.DoesNotExist:
+        pass  # Let submit_review handle the not-found error
+
     # Require reason for non-approved decisions
     if decision in {"changes_requested", "rejected"} and not reason:
         return json.dumps(
