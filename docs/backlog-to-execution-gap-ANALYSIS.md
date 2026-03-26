@@ -183,9 +183,23 @@ Project
 
 **Workspace** — the active working context within a Project. This is where
 the human and agent collaborate on origination. Unstructured things accumulate
-here before they become structured workplans. Session continuity lives here —
-handoffs, journal entries, "what are we working on right now." Inspired by
-mykb's workspace concept (handoff, journal, notes, state tracking), but
+here before they become structured workplans. The workspace captures:
+
+- **Session context** — handoffs, journal, state ("what are we working on")
+- **Observations** — user-perspective notes captured during product usage
+- **Decisions** — choices made during planning, with rationale and rejected
+  alternatives (e.g., "use React context for sidebar, not useParams — because
+  the sidebar is outside route params scope")
+- **Gotchas** — surprises discovered during exploration that would trip up an
+  executor (e.g., "milestone field is `order` not `sort_order`", "tasks
+  without milestones are invisible in workplan UI")
+
+Decisions and gotchas are not free-text journal entries — they are typed,
+structured entries that can be queried and surfaced to agents during execution.
+When an executor picks up a task, the workspace's decisions explain the "why"
+behind the spec, and the gotchas warn about pitfalls. Inspired by mykb's
+workspace concept (handoff, journal, notes, state tracking) and its knowledge
+types (decisions with `why`/`rejected`, gotchas with `source`/`failed`), but
 applied to the spec-driven development workflow.
 
 **Workplans** — the output of a completed planning session. Structured,
