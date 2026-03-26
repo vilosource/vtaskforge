@@ -307,6 +307,36 @@ in the same repo document why.
    is unstructured and lives in the database. Everything after it (plan,
    decisions, gotchas, task breakdown) is structured and lives in the repo.
 
+### Prior art: mykb workspace artifacts
+
+The mykb knowledge management system (`kb` CLI) already implements a workspace
+artifact concept that closely resembles what `.vtf/` needs. The `kb wsa`
+command provides:
+
+- **Typed artifacts** — each has a type (plan, design, analysis, report, etc.)
+- **Metadata** — description, tags, creation/update timestamps
+- **Area links** — artifacts link to knowledge areas for context
+- **Search** — full-text search across artifact content
+- **CRUD** — add, list, show, update, delete, sync
+
+Example from this session — saving the breadcrumb implementation plan:
+```
+kb wsa add breadcrumb-navigation-PLAN.md \
+  --from ~/.claude/plans/kind-riding-otter.md \
+  --type plan \
+  --tags breadcrumbs,navigation \
+  --areas vtaskforge
+```
+
+The `.vtf/` directory could follow a similar pattern: each artifact is a
+markdown file with typed metadata (in frontmatter or a sidecar manifest),
+linked to observations and tasks. The `vtf` CLI and MCP tools would provide
+the same add/list/show/search operations that `kb wsa` provides today.
+
+This is not theoretical — we used `kb wsa` in this session to persist the
+breadcrumb plan because vtf had no native way to store it. The mykb workspace
+is filling the gap that `.vtf/` should eventually fill within the project repo.
+
 ### What needs more thinking
 
 - How does the organize step work in practice? Agent reads observations and
