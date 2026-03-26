@@ -247,3 +247,204 @@ def test_manage_create_missing_title_error():
     assert result["success"] is False
     assert result["message"] != ""
     assert "title" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy action suggestion tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_manage_fuzzy_cancelled_suggests_cancel():
+    """vtf_manage_task(action='cancelled') suggests 'cancel'."""
+    result = json.loads(vtf_manage_task(action="cancelled", task_id="fake-id"))
+
+    assert result["success"] is False
+    assert "Did you mean 'cancel'?" in result["message"]
+
+
+@pytest.mark.django_db
+def test_manage_fuzzy_submitted_suggests_submit():
+    """vtf_manage_task(action='submitted') suggests 'submit'."""
+    result = json.loads(vtf_manage_task(action="submitted", task_id="fake-id"))
+
+    assert result["success"] is False
+    assert "Did you mean 'submit'?" in result["message"]
+
+
+@pytest.mark.django_db
+def test_manage_fuzzy_blocked_suggests_block():
+    """vtf_manage_task(action='blocked') suggests 'block'."""
+    result = json.loads(vtf_manage_task(action="blocked", task_id="fake-id"))
+
+    assert result["success"] is False
+    assert "Did you mean 'block'?" in result["message"]
+
+
+@pytest.mark.django_db
+def test_manage_fuzzy_blocking_suggests_block():
+    """vtf_manage_task(action='blocking') suggests 'block' via -ing stripping."""
+    result = json.loads(vtf_manage_task(action="blocking", task_id="fake-id"))
+
+    assert result["success"] is False
+    assert "Did you mean 'block'?" in result["message"]
+
+
+@pytest.mark.django_db
+def test_manage_fuzzy_assigns_suggests_assign():
+    """vtf_manage_task(action='assigns') suggests 'assign' via -s stripping."""
+    result = json.loads(vtf_manage_task(action="assigns", task_id="fake-id"))
+
+    assert result["success"] is False
+    assert "Did you mean 'assign'?" in result["message"]
+
+
+@pytest.mark.django_db
+def test_manage_fuzzy_frobnicate_no_suggestion():
+    """vtf_manage_task(action='frobnicate') does NOT suggest anything."""
+    result = json.loads(vtf_manage_task(action="frobnicate", task_id="fake-id"))
+
+    assert result["success"] is False
+    assert "Did you mean" not in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# test_create_task_with_workplan_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_task_with_workplan_id():
+    """vtf_manage_task(action=create, workplan_id=WP_ID) creates task with workplan set."""
+    from tests.factories import WorkplanFactory
+
+    project = ProjectFactory()
+    workplan = WorkplanFactory(project=project)
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Task in workplan",
+        project_id=project.id,
+        workplan_id=workplan.id,
+    ))
+
+    assert result["success"] is True
+    task_data = result["data"]["task"]
+    assert task_data["status"] == "draft"
+
+    from tasks.models import Task
+    task = Task.objects.get(pk=task_data["id"])
+    assert task.workplan_id == workplan.id
+    assert task.milestone is None
+
+
+# ---------------------------------------------------------------------------
+# test_create_task_with_workplan_and_milestone
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_task_with_workplan_and_milestone():
+    """When both workplan_id and milestone_id are provided on create, milestone wins."""
+    from tests.factories import MilestoneFactory, WorkplanFactory
+
+    project = ProjectFactory()
+    workplan_a = WorkplanFactory(project=project)
+    workplan_b = WorkplanFactory(project=project)
+    milestone = MilestoneFactory(workplan=workplan_b)
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Task with both",
+        project_id=project.id,
+        workplan_id=workplan_a.id,
+        milestone_id=milestone.id,
+    ))
+
+    assert result["success"] is True
+    task_data = result["data"]["task"]
+
+    from tasks.models import Task
+    task = Task.objects.get(pk=task_data["id"])
+    # milestone_id takes precedence — workplan should be milestone's workplan
+    assert task.milestone_id == milestone.id
+    assert task.workplan_id == workplan_b.id
+
+
+# ---------------------------------------------------------------------------
+# test_update_task_workplan_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_update_task_workplan_id():
+    """vtf_manage_task(action=update, workplan_id=WP_ID) moves task to new workplan."""
+    from tests.factories import WorkplanFactory
+
+    task = TaskFactory(status="draft")
+    new_workplan = WorkplanFactory(project=task.project)
+
+    result = json.loads(vtf_manage_task(
+        action="update",
+        task_id=task.id,
+        workplan_id=new_workplan.id,
+    ))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.workplan_id == new_workplan.id
+
+
+# ---------------------------------------------------------------------------
+# test_update_task_workplan_clears_mismatched_milestone
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_update_task_workplan_clears_mismatched_milestone():
+    """Moving task to new workplan clears a milestone that belongs to the old workplan."""
+    from tests.factories import MilestoneFactory, WorkplanFactory
+
+    project = ProjectFactory()
+    workplan_a = WorkplanFactory(project=project)
+    workplan_b = WorkplanFactory(project=project)
+    milestone_a = MilestoneFactory(workplan=workplan_a)
+
+    task = TaskFactory(
+        status="draft",
+        project=project,
+        workplan=workplan_a,
+        milestone=milestone_a,
+    )
+
+    result = json.loads(vtf_manage_task(
+        action="update",
+        task_id=task.id,
+        workplan_id=workplan_b.id,
+    ))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.workplan_id == workplan_b.id
+    assert task.milestone is None
+
+
+# ---------------------------------------------------------------------------
+# test_create_task_invalid_workplan_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_create_task_invalid_workplan_id():
+    """vtf_manage_task(action=create) with invalid workplan_id returns error."""
+    project = ProjectFactory()
+
+    result = json.loads(vtf_manage_task(
+        action="create",
+        title="Task with bad workplan",
+        project_id=project.id,
+        workplan_id="nonexistent-workplan-id",
+    ))
+
+    assert result["success"] is False
+    assert "nonexistent-workplan-id" in result["message"] or "not found" in result["message"].lower()

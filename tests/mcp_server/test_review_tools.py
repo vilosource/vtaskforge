@@ -114,3 +114,30 @@ def test_review_includes_milestone_progress():
     assert "completed" in ms
     assert "total" in ms
     assert "pct" in ms
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy decision suggestion tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_review_fuzzy_approve_suggests_approved():
+    """vtf_review_task(decision='approve') suggests 'approved'."""
+    task = TaskFactory(status="pending_completion_review")
+
+    result = json.loads(vtf_review_task(task_id=task.id, decision="approve"))
+
+    assert result["success"] is False
+    assert "Did you mean 'approved'?" in result["message"]
+
+
+@pytest.mark.django_db
+def test_review_fuzzy_no_match_no_suggestion():
+    """vtf_review_task(decision='frobnicate') gives no suggestion."""
+    task = TaskFactory(status="pending_completion_review")
+
+    result = json.loads(vtf_review_task(task_id=task.id, decision="frobnicate"))
+
+    assert result["success"] is False
+    assert "Did you mean" not in result["message"]

@@ -8,10 +8,12 @@ import json
 
 from mcp_server.responses import error_response, success_response
 from mcp_server.server import mcp
+from mcp_server.utils import _suggest_action
 from reviews.services import ReviewError, submit_review
 from tasks.models import Task
 
 VALID_DECISIONS = {"approved", "changes_requested", "rejected"}
+VALID_DECISIONS_LIST = sorted(VALID_DECISIONS)
 
 
 @mcp.tool()
@@ -30,11 +32,13 @@ def vtf_review_task(
     """
     # Validate decision
     if decision not in VALID_DECISIONS:
+        suggestion = _suggest_action(decision, VALID_DECISIONS_LIST)
+        hint = f" Did you mean '{suggestion}'?" if suggestion else ""
         return json.dumps(
             error_response(
                 message=(
-                    f"Invalid decision '{decision}'. "
-                    f"Must be one of: {', '.join(sorted(VALID_DECISIONS))}."
+                    f"Invalid decision '{decision}'.{hint} "
+                    f"Must be one of: {', '.join(VALID_DECISIONS_LIST)}."
                 ),
                 data={"task_id": task_id, "decision": decision},
                 available_actions=["vtf_task_detail", "vtf_board_overview"],

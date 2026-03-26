@@ -9,9 +9,15 @@ import json
 from events.services import record_event
 from mcp_server.responses import error_response, success_response
 from mcp_server.server import mcp
+from mcp_server.utils import _suggest_action
 from tasks.exceptions import InvalidTransition
 from tasks.models import Task
 from tasks.state_machine import get_valid_transitions, perform_transition
+
+VALID_ACTIONS = [
+    "create", "update", "submit", "block", "unblock",
+    "defer", "cancel", "delete", "assign", "unassign",
+]
 
 
 @mcp.tool()
@@ -27,6 +33,7 @@ def vtf_manage_task(
     judge: str = "",
     isolation: str = "",
     milestone_id: str = "",
+    workplan_id: str = "",
     assigned_to: str = "",
     reason: str = "",
 ) -> str:
@@ -39,10 +46,10 @@ def vtf_manage_task(
     # Route by action
     if action == "create":
         return _action_create(title, project_id, description, labels, spec,
-                               agent_model, judge, isolation, milestone_id)
+                               agent_model, judge, isolation, milestone_id, workplan_id)
     elif action == "update":
         return _action_update(task_id, title, description, labels, spec,
-                               agent_model, judge, isolation, milestone_id)
+                               agent_model, judge, isolation, milestone_id, workplan_id)
     elif action == "submit":
         return _action_transition(task_id, "todo", "submitted")
     elif action == "block":
@@ -60,13 +67,12 @@ def vtf_manage_task(
     elif action == "unassign":
         return _action_unassign(task_id)
     else:
+        suggestion = _suggest_action(action, VALID_ACTIONS)
+        hint = f" Did you mean '{suggestion}'?" if suggestion else ""
+        message = f"Unknown action '{action}'.{hint} Valid actions: {', '.join(VALID_ACTIONS)}."
         return json.dumps(
             error_response(
-                message=(
-                    f"Unknown action '{action}'. "
-                    "Valid actions: create, update, submit, block, unblock, "
-                    "defer, cancel, delete, assign, unassign."
-                ),
+                message=message,
                 data={"action": action},
                 available_actions=["vtf_manage_task"],
             )
@@ -90,7 +96,7 @@ def _get_task(task_id: str):
 
 
 def _action_create(title, project_id, description, labels, spec,
-                   agent_model, judge, isolation, milestone_id):
+                   agent_model, judge, isolation, milestone_id, workplan_id=""):
     """Create a new task in draft status."""
     if not title:
         return json.dumps(
@@ -154,7 +160,20 @@ def _action_create(title, project_id, description, labels, spec,
     if isolation:
         kwargs["isolation"] = isolation
 
-    # Resolve optional milestone
+    # Resolve optional workplan (milestone_id takes precedence if both provided)
+    if workplan_id:
+        from workplans.models import Workplan
+        try:
+            workplan = Workplan.objects.get(pk=workplan_id)
+            kwargs["workplan"] = workplan
+        except Workplan.DoesNotExist:
+            return json.dumps(error_response(
+                message=f"Workplan {workplan_id} not found.",
+                data={"workplan_id": workplan_id},
+                available_actions=["vtf_board_overview"],
+            ))
+
+    # Resolve optional milestone (overwrites workplan from above if set)
     if milestone_id:
         from workplans.models import Milestone
 
@@ -190,7 +209,7 @@ def _action_create(title, project_id, description, labels, spec,
 
 
 def _action_update(task_id, title, description, labels, spec,
-                   agent_model, judge, isolation, milestone_id):
+                   agent_model, judge, isolation, milestone_id, workplan_id=""):
     """Update mutable task fields."""
     if not task_id:
         return json.dumps(
@@ -240,6 +259,21 @@ def _action_update(task_id, title, description, labels, spec,
             task.workplan = milestone.workplan
             update_fields.extend(["milestone", "workplan"])
         except Milestone.DoesNotExist:
+            pass
+
+    if workplan_id:
+        from workplans.models import Workplan
+        try:
+            workplan = Workplan.objects.get(pk=workplan_id)
+            task.workplan = workplan
+            if "workplan" not in update_fields:
+                update_fields.append("workplan")
+            # If task has a milestone from a different workplan, clear it
+            if task.milestone and task.milestone.workplan_id != workplan.id:
+                task.milestone = None
+                if "milestone" not in update_fields:
+                    update_fields.append("milestone")
+        except Workplan.DoesNotExist:
             pass
 
     task.save(update_fields=update_fields)

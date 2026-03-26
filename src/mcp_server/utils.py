@@ -7,10 +7,40 @@ safely in a thread pool when called from FastMCP's async event loop.
 Note: The primary async wrapping for registered tools is done via post-
 registration patching in server.py. This module provides a standalone
 decorator for cases where explicit wrapping is preferred.
+
+Also provides _suggest_action for fuzzy "did you mean" hints in error messages.
 """
 import functools
 
 from asgiref.sync import sync_to_async
+
+
+def _suggest_action(invalid_action: str, valid_actions: list) -> str | None:
+    """Return the closest valid action as a fuzzy suggestion, or None.
+
+    Strategy (no external dependencies):
+    1. Strip common verb suffixes ("ed", "ing", "s") from the input.
+    2. If the stripped form exactly matches a valid action, return it.
+    3. Fall back to checking if any valid action starts with the stripped input
+       (prefix match) — handles truncations like "approv" → "approved".
+    4. If nothing matches, return None.
+    """
+    suffixes = ["ing", "led", "red", "ted", "ned", "ed", "s"]
+    stripped = invalid_action
+    for suffix in suffixes:
+        if invalid_action.endswith(suffix) and len(invalid_action) > len(suffix):
+            candidate = invalid_action[: -len(suffix)]
+            if candidate in valid_actions:
+                return candidate
+            stripped = candidate
+            break
+
+    # Prefix match: any valid action that starts with stripped form
+    for action in valid_actions:
+        if action.startswith(stripped) and stripped:
+            return action
+
+    return None
 
 
 def async_tool(fn):
