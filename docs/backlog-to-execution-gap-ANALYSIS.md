@@ -214,28 +214,79 @@ A project without an active workspace is just a bag of workplans (execution
 only). A project with an active workspace is a living collaboration space
 where the next workplan is taking shape.
 
-### Spec artifacts
+### Where things live
 
-Following the spec-driven development (SDD) pattern, the origination process
-produces structured artifacts:
+The origination process splits across two storage layers:
 
-1. **Observations** — user-perspective notes captured during product usage.
-   Quick, unstructured, varying granularity. The raw input.
+**vtf database (project-level):**
+- Observations — quick captures from web UI, MCP, or CLI. No repo context
+  needed. Linked to the project.
+- Workspace state — handoff, active theme, session context.
+- Workplans, milestones, tasks — execution-side entities with state machines.
 
-2. **Spec** — what needs to change and why. Consolidates related observations
-   into a coherent description of the problem and desired outcome. User
-   journeys, success criteria, scope boundaries.
+**`.vtf/` directory in the project's repo (code-level):**
+- Spec artifacts — spec (PRD), plan, task breakdown.
+- Decisions — choices made during planning, with rationale.
+- Gotchas — pitfalls discovered during exploration.
 
-3. **Plan** — how to implement it. Design decisions, trade-offs, technical
-   approach, codebase analysis. Produced by human-agent collaboration.
+The `.vtf/` directory is committed to the repo and travels with the code. Like
+`.github/` is read by GitHub's platform, `.vtf/` is read by vtaskforge. Any
+agent that clones the repo has immediate access to the planning context without
+needing an API call.
 
-4. **Tasks** — ordered implementation steps with precise specs. The plan
-   decomposed into executable work units with dependencies.
+```
+.vtf/
+├── specs/
+│   └── navigation/
+│       ├── spec.md        # what and why (PRD)
+│       ├── plan.md        # how (design decisions, approach)
+│       └── tasks.md       # implementation breakdown
+├── decisions/
+│   └── use-react-context-for-sidebar.md
+└── gotchas/
+    └── tasks-without-milestone-invisible.md
+```
 
-These artifacts can be backed by markdown files in a git repo — versioned,
-diffable, portable. vtf indexes them, links them to tasks, and makes them
-queryable via MCP and visible in the web UI. The repo is the source of truth;
-vtf is the access layer.
+**Why this split:**
+- Observations are ephemeral inputs — they arrive before any structure exists,
+  from any context (web UI, mobile, conversation). They belong in the database.
+- Spec artifacts are durable outputs — they describe the code, should be
+  versioned with it, and need to be readable by agents at execution time
+  without an API call. They belong in the repo.
+- The planning session is the bridge: agent reads observations from the
+  database, explores code in the repo, writes spec artifacts to `.vtf/`.
+
+### The origination flow
+
+Following the spec-driven development (SDD) pattern, mapped to agile concepts:
+
+**1. Capture** — observations land in vtf database.
+Quick, unstructured, varying granularity. Like user stories in a product
+backlog. No repo context needed.
+
+**2. Organize** — human + agent consolidate related observations into a spec.
+This is the PRD step — grouping related observations and asking "what is the
+actual requirement here?" The output is `.vtf/specs/<name>/spec.md`. The
+observations that fed into it are linked. In agile terms: stories grouped
+into an epic with acceptance criteria.
+
+**3. Plan** — human + agent produce the technical approach.
+Design decisions, trade-offs, codebase analysis. The output is
+`.vtf/specs/<name>/plan.md`. Decisions and gotchas are captured in `.vtf/`
+as separate typed files. In agile terms: technical design / architecture
+decision records.
+
+**4. Transform** — agent breaks the plan into executable tasks.
+The output is `.vtf/specs/<name>/tasks.md` in the repo AND a workplan with
+milestones and tasks created in vtf via MCP. Each task's spec references
+back to the plan for context. In agile terms: sprint backlog items broken
+from the design.
+
+**5. Trace** — the chain is preserved.
+Tasks → plan → spec → observations. An executor agent reads the spec
+artifacts from `.vtf/` for context. A stakeholder can trace any task back
+to the user need that triggered it. When code ships, the spec artifacts
+in the same repo document why.
 
 ### Key principles
 
@@ -248,18 +299,29 @@ vtf is the access layer.
    layer provides structured access for agents to read observations, produce
    specs, generate plans, and create tasks.
 
-3. **Spec artifacts are the bridge** between what the user observed and what
-   the developer builds. They provide traceability, preserve planning context,
-   and survive between sessions.
+3. **Spec artifacts travel with the code.** They're committed to the repo in
+   `.vtf/`, versioned alongside the code they describe. An agent cloning the
+   repo has the full planning context without any external dependency.
+
+4. **The spec (PRD) is the pivot point.** Everything before it (observations)
+   is unstructured and lives in the database. Everything after it (plan,
+   decisions, gotchas, task breakdown) is structured and lives in the repo.
 
 ### What needs more thinking
 
-- What is the workspace entity? New model, or extension of Project?
-- How do observations relate to the existing draft task concept?
-- How does theming/grouping work? Tags, manual grouping, agent-suggested?
-- What does the repo-backed storage look like? One repo per project?
-- How does the agent produce specs and plans? MCP tool? Conversation flow?
-- What does the workspace look like in the web UI?
-- How does the handoff/journal/state from mykb translate to vtf's workspace?
+- How does the organize step work in practice? Agent reads observations and
+  proposes a spec draft? Human curates manually? Both?
+- What is the workspace entity in the database? New model, or extension of
+  Project?
+- How do observations relate to the existing draft task concept? Do draft
+  tasks become observations, or do they coexist?
+- Multi-repo projects — observations are project-level, but which repo gets
+  the `.vtf/` spec artifacts?
+- How does the agent know to read `.vtf/` when executing a task? Convention?
+  Task spec reference? vtf CLI integration?
+- What does multi-session planning look like? Workspace state tracks
+  "currently planning: navigation" across sessions?
+- What MCP tools are needed for the origination flow?
+- What does this look like in the web UI when we build it?
 
 These questions will be explored in subsequent design sessions.
