@@ -154,3 +154,50 @@ It is NOT about:
 
 The problem is the missing middle: the transformation from "what the user
 observed" to "what the developer should build."
+
+## Solution Direction
+
+### Where it lives
+
+The origination process belongs inside vtaskforge, not in a separate system.
+The human is already working within a Project — capturing observations in the
+web UI, looking at the board, interacting via MCP. The planning process should
+happen in the same place, not require switching to a different tool.
+
+### How the Project changes
+
+The Project is currently a thin container — a name, description, and a bag of
+workplans. It needs to become the hub for the entire upstream process:
+
+1. **Observations accumulate** — the human captures them while using the product.
+   These are not implementation tasks. They're user-perspective notes about what
+   needs to change.
+
+2. **Themes emerge** — related observations get grouped, either manually or with
+   agent assistance. Patterns become visible.
+
+3. **Planning happens** — human and agent collaborate within the Project context
+   to explore scope, make design decisions, and produce an implementation
+   breakdown. The planning session's context (decisions, trade-offs, rationale)
+   is preserved.
+
+4. **Workplans are born** — the planning output flows directly into a workplan
+   with milestones and executable tasks. Traceability is maintained from
+   implementation tasks back to the observations that triggered them.
+
+### Key principle
+
+The human collaborates with an agent inside the Project to drive this
+origination process. vtaskforge becomes the place where this collaboration
+happens — not just the place where the output is executed.
+
+### What needs more thinking
+
+- What is an "observation" vs a draft task? New entity or evolution of existing?
+- How does grouping/theming work? Tags, manual grouping, agent-suggested?
+- Where does planning context live? Workplan description, linked document, new entity?
+- How is traceability maintained? Links from tasks back to observations?
+- What does the agent's role look like in the planning session?
+- What does this look like in the web UI?
+
+These questions will be explored in subsequent design sessions.
