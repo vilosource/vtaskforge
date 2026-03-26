@@ -86,11 +86,17 @@ Four test files (`test_mcp_protocol.py`, `test_http_protocol.py`, `test_http_aut
 
 **Fix:** Replace count assertions with set membership assertions. Track as a follow-up task.
 
-### 4. Quality gates were rubber-stamped
+### 4. Supervisor did the judge's work — protocol violation
 
-The protocol says quality gates go through executor → judge, but the supervisor ran the test suites directly and self-approved all 4 gates. This was expedient but violated the protocol's own principle: "The supervisor doesn't do work."
+The protocol is explicit: "The supervisor orchestrates. The executor implements. The judge verifies. No role does another role's work." But the supervisor self-approved every task: read the executor report, ran tests directly, approved the review. No judge agent was dispatched for any non-quality-gate task.
 
-**Mitigation:** For simulation mode (manual supervisor), document a "lightweight quality gate" option where the supervisor runs the suite and self-approves. Reserve the full executor → judge flow for high-risk milestones or vafi automated execution.
+This wasn't just a shortcut on quality gates — it was a systematic protocol violation across all 14 tasks. The judge exists to provide independent verification. When the supervisor both dispatches the executor and approves the result, there's no independence.
+
+**Root cause:** Expedience. Dispatching a judge for each task would have doubled the wall-clock time. But the protocol doesn't offer a "skip judge" option — it assumes every task gets independent verification.
+
+**What should have happened:** After each executor completed, dispatch a `vtf-judge` agent with the spec + executor report. The judge runs tests, reviews code, and produces a verdict. The supervisor acts on the verdict.
+
+**Action:** This is not a protocol improvement request — the protocol is correct. The supervisor needs to follow it. If judge dispatch is too slow for manual simulation, that's a tooling problem (faster judge, lighter judge scope), not a protocol problem.
 
 ### 5. Chicken-and-egg: can't create milestones via MCP to track MCP milestone work
 
@@ -137,16 +143,13 @@ assert expected_tools.issubset(set(tool_names))
 
 New tools don't break existing tests. Track as a vtf backlog item.
 
-### 4. Document quality gate execution models
+### 4. Enforce judge dispatch — don't offer a shortcut
 
-Two options for the simulation protocol:
+The simulation protocol already requires judge dispatch for every task. This session violated that requirement for every non-quality-gate task. The fix is not to document a "lightweight" option that legitimizes skipping judges — that weakens the protocol. The fix is:
 
-| Model | When to use | How it works |
-|-------|-------------|-------------|
-| **Lightweight** | Low-risk milestones, manual supervisor | Supervisor runs full suite, self-approves if green |
-| **Full** | High-risk milestones, vafi automation | Dispatch executor to run suite + judge to verify independently |
-
-The current protocol only describes the full model. Document both.
+1. **Make judge dispatch the default.** The supervisor should not self-approve.
+2. **Invest in faster judges.** If judge dispatch is too slow, make the judge faster (smaller scope, focused on test verification + blast radius, skip style review).
+3. **Track judge skip as a deviation.** If the supervisor skips the judge for a specific task, record it as a spec deviation in the completion report so it's visible in the retrospective.
 
 ### 5. Add bootstrap handling to review protocol
 
@@ -169,9 +172,11 @@ M2 shows 60% (3/5) but 2 tasks were cancelled. Cancelled tasks shouldn't count t
 
 Submitting 11 tasks to todo required 11 serial MCP calls. This was the most tedious part of the review protocol's Phase 5. The deferred bulk ops task should be prioritized for the next workplan that creates many tasks.
 
-### 3. `needs_review_on_completion` default is too aggressive for simulation
+### 3. `needs_review_on_completion` default is correct — the supervisor was wrong
 
-Every task went through `pending_completion_review` even though the supervisor was approving their own executors. For simulation mode, default should be `false` on non-judge tasks. The full review flow is valuable for vafi automated execution where trust boundaries matter, but adds friction in manual simulation.
+Initially flagged as "too aggressive" because every task went through `pending_completion_review`. But the real issue is that the supervisor self-approved instead of dispatching judge agents (see What Went Wrong #4). The review gate exists precisely to force independent verification. The default is correct — it ensures no task silently completes without a judge looking at it. The friction is a feature, not a bug.
+
+**Lesson:** When a safety mechanism feels like friction, question the workflow, not the mechanism.
 
 ### 4. Plan-to-workplan conversion is manual
 
@@ -201,5 +206,6 @@ Both workplans achieved zero rework. The key difference is scale (7 vs 18 tasks)
 2. **Add merge verification step** to simulation protocol (Protocol Improvement #2)
 3. **Create vtf task** for brittle tool count tests fix
 4. **Create vtf task** for milestone percentage bug (cancelled tasks in denominator)
-5. **Document lightweight quality gate** option in simulation protocol
+5. **Enforce judge dispatch** in next workplan — no self-approval by supervisor (Protocol Improvement #4)
 6. **Prioritize bulk operations** for next workplan
+7. **Invest in faster judge agent** — if judge dispatch is the bottleneck, make the judge lighter, not the protocol weaker
