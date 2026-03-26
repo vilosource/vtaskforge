@@ -164,40 +164,88 @@ The human is already working within a Project — capturing observations in the
 web UI, looking at the board, interacting via MCP. The planning process should
 happen in the same place, not require switching to a different tool.
 
-### How the Project changes
+### The Project structure
 
 The Project is currently a thin container — a name, description, and a bag of
-workplans. It needs to become the hub for the entire upstream process:
+workplans. It needs two distinct sides:
 
-1. **Observations accumulate** — the human captures them while using the product.
-   These are not implementation tasks. They're user-perspective notes about what
-   needs to change.
+```
+Project
+├── Workspace (upstream — origination)
+│   ├── Observations
+│   ├── Planning sessions / spec artifacts
+│   ├── Session context (handoff, journal, state)
+│   └── Themes / groupings
+└── Workplans (downstream — execution)
+    ├── Milestones
+    └── Tasks (with specs)
+```
 
-2. **Themes emerge** — related observations get grouped, either manually or with
-   agent assistance. Patterns become visible.
+**Workspace** — the active working context within a Project. This is where
+the human and agent collaborate on origination. Unstructured things accumulate
+here before they become structured workplans. Session continuity lives here —
+handoffs, journal entries, "what are we working on right now." Inspired by
+mykb's workspace concept (handoff, journal, notes, state tracking), but
+applied to the spec-driven development workflow.
 
-3. **Planning happens** — human and agent collaborate within the Project context
-   to explore scope, make design decisions, and produce an implementation
-   breakdown. The planning session's context (decisions, trade-offs, rationale)
-   is preserved.
+**Workplans** — the output of a completed planning session. Structured,
+ordered, executable. This is what already exists in vtf and works well.
 
-4. **Workplans are born** — the planning output flows directly into a workplan
-   with milestones and executable tasks. Traceability is maintained from
-   implementation tasks back to the observations that triggered them.
+The workspace feeds workplans. When a planning session concludes, its output
+flows from the workspace into a new workplan with milestones and tasks. The
+observations that triggered it stay in the workspace with links to the
+workplan they produced — that's the traceability.
 
-### Key principle
+A project without an active workspace is just a bag of workplans (execution
+only). A project with an active workspace is a living collaboration space
+where the next workplan is taking shape.
 
-The human collaborates with an agent inside the Project to drive this
-origination process. vtaskforge becomes the place where this collaboration
-happens — not just the place where the output is executed.
+### Spec artifacts
+
+Following the spec-driven development (SDD) pattern, the origination process
+produces structured artifacts:
+
+1. **Observations** — user-perspective notes captured during product usage.
+   Quick, unstructured, varying granularity. The raw input.
+
+2. **Spec** — what needs to change and why. Consolidates related observations
+   into a coherent description of the problem and desired outcome. User
+   journeys, success criteria, scope boundaries.
+
+3. **Plan** — how to implement it. Design decisions, trade-offs, technical
+   approach, codebase analysis. Produced by human-agent collaboration.
+
+4. **Tasks** — ordered implementation steps with precise specs. The plan
+   decomposed into executable work units with dependencies.
+
+These artifacts can be backed by markdown files in a git repo — versioned,
+diffable, portable. vtf indexes them, links them to tasks, and makes them
+queryable via MCP and visible in the web UI. The repo is the source of truth;
+vtf is the access layer.
+
+### Key principles
+
+1. **The human collaborates with an agent inside the Project** to drive the
+   origination process. vtaskforge becomes the place where this collaboration
+   happens — not just the place where the output is executed.
+
+2. **The web UI is for the human; the underlying system is for agentic
+   workflow.** The UI provides visibility, review, and steering. The API/MCP
+   layer provides structured access for agents to read observations, produce
+   specs, generate plans, and create tasks.
+
+3. **Spec artifacts are the bridge** between what the user observed and what
+   the developer builds. They provide traceability, preserve planning context,
+   and survive between sessions.
 
 ### What needs more thinking
 
-- What is an "observation" vs a draft task? New entity or evolution of existing?
-- How does grouping/theming work? Tags, manual grouping, agent-suggested?
-- Where does planning context live? Workplan description, linked document, new entity?
-- How is traceability maintained? Links from tasks back to observations?
-- What does the agent's role look like in the planning session?
-- What does this look like in the web UI?
+- What is the workspace entity? New model, or extension of Project?
+- How do observations relate to the existing draft task concept?
+- How does theming/grouping work? Tags, manual grouping, agent-suggested?
+- What does the repo-backed storage look like? One repo per project?
+- How does the agent produce specs and plans? MCP tool? Conversation flow?
+- What does the workspace look like in the web UI?
+- How does the handoff/journal/state from mykb translate to vtf's workspace?
 
 These questions will be explored in subsequent design sessions.
