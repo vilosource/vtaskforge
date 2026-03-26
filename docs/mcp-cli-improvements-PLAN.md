@@ -75,7 +75,33 @@ non-browser client that doesn't manage CSRF cookies.
 tasks. No `vtf milestone create` command exists (only `vtf milestone stats`).
 No MCP tool for milestone management.
 
-### 5. Action name mismatch in MCP
+### 5. Tasks without milestones are invisible in workplan UI
+
+**What happened:** After creating 5 tasks and assigning them to the "Web UI UX
+Improvements" workplan, the workplan detail page showed 5 tasks in the stats bar
+but no way to see or access them. The WorkplanDetail page only renders tasks
+grouped under milestones — tasks that belong to a workplan but have no milestone
+are effectively hidden.
+
+**Workaround:** Created a milestone via kubectl exec into the prod pod and moved
+all 5 tasks into it.
+
+**Decision context:** This is a UI bug, not just a DX issue. The data model
+supports tasks belonging to a workplan without a milestone (backlog-style tasks
+within a workplan). The UI should either show an "Unassigned" section for these
+tasks or make it clear they exist and need to be organized.
+
+### 6. Milestone model field name confusion
+
+**What happened:** When creating a milestone via Django shell, used `sort_order`
+as the field name (a reasonable guess). The actual field is `order`. This caused
+a TypeError and required reading the model source code to fix.
+
+**Decision context:** This reinforces why milestone CRUD tools are needed — agents
+and users shouldn't need to read model source code to create a milestone. A proper
+MCP tool or CLI command would expose named parameters and validate them.
+
+### 7. Action name mismatch in MCP
 
 **What happened:** Tried `vtf_manage_task(action=cancelled)` — the status name
 is "cancelled" but the action is "cancel". Error message was helpful ("Valid
@@ -238,6 +264,18 @@ These ensure the CLI can do everything the MCP can (and vice versa).
     - Simple fuzzy match or mapping: strip common suffixes (ed, ing) and check
     - Low effort, high DX value for LLM callers that might use status names
       instead of action names
+
+### Theme D+ : Web UI bugs found during this session
+
+15. **Tasks without milestones are invisible in workplan detail page**
+    - WorkplanDetail only renders tasks grouped by milestone
+    - Tasks assigned to a workplan but with no milestone don't appear anywhere
+    - The stats bar counts them (shows "5 Tasks") but they can't be viewed
+    - Fix: Add an "Unassigned" or "Backlog" section to WorkplanDetail that shows
+      tasks where `milestone IS NULL` but `workplan` matches
+    - **Decision context:** This is a data display bug — the model supports this
+      state (workplan without milestone), the import flow can produce it, and the
+      MCP create flow produces it by default. The UI must handle it.
 
 ### Theme E: Quality of life
 
