@@ -308,6 +308,202 @@ def test_milestone_help(runner):
     assert "milestone" in result.output.lower()
 
 
+# --- milestone create ---
+
+def test_milestone_create_success(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "ms-001",
+        "name": "Sprint 1",
+        "workplan": "wp-abc",
+        "description": "",
+        "order": 1,
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "create", "--name", "Sprint 1", "--workplan", "wp-abc"])
+    assert result.exit_code == 0
+    assert "ms-001" in result.output
+    assert "Sprint 1" in result.output
+    mock_client.post.assert_called_once_with(
+        "/v1/milestones/", {"name": "Sprint 1", "workplan": "wp-abc"}
+    )
+
+
+def test_milestone_create_with_description_and_order(runner, mock_client):
+    mock_client.post.return_value = {
+        "id": "ms-002",
+        "name": "Sprint 2",
+        "workplan": "wp-abc",
+        "description": "Second sprint",
+        "order": 2,
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(
+            cli,
+            [
+                "milestone", "create",
+                "--name", "Sprint 2",
+                "--workplan", "wp-abc",
+                "--description", "Second sprint",
+                "--sort-order", "2",
+            ],
+        )
+    assert result.exit_code == 0
+    call_data = mock_client.post.call_args[0][1]
+    assert call_data["description"] == "Second sprint"
+    assert call_data["order"] == 2
+
+
+def test_milestone_create_missing_name(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "create", "--workplan", "wp-abc"])
+    assert result.exit_code != 0
+
+
+def test_milestone_create_missing_workplan(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "create", "--name", "Sprint 1"])
+    assert result.exit_code != 0
+
+
+def test_milestone_create_api_error(runner, mock_client):
+    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Bad request"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "create", "--name", "Fail", "--workplan", "wp-abc"])
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+# --- milestone list ---
+
+def test_milestone_list_success(runner, mock_client):
+    mock_client.get.return_value = [
+        {"id": "ms-001", "name": "Sprint 1", "order": 1, "status": "active"},
+        {"id": "ms-002", "name": "Sprint 2", "order": 2, "status": "active"},
+    ]
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "list", "--workplan", "wp-abc"])
+    assert result.exit_code == 0
+    assert "ms-001" in result.output
+    assert "Sprint 1" in result.output
+    assert "ms-002" in result.output
+    assert "Sprint 2" in result.output
+    mock_client.get.assert_called_once_with("/v1/workplans/wp-abc/milestones/")
+
+
+def test_milestone_list_empty(runner, mock_client):
+    mock_client.get.return_value = []
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "list", "--workplan", "wp-abc"])
+    assert result.exit_code == 0
+    assert "No milestones found" in result.output
+
+
+def test_milestone_list_missing_workplan(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "list"])
+    assert result.exit_code != 0
+
+
+def test_milestone_list_api_error(runner, mock_client):
+    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "list", "--workplan", "wp-missing"])
+    assert result.exit_code == 1
+
+
+# --- milestone show ---
+
+def test_milestone_show_success(runner, mock_client):
+    mock_client.get.return_value = {
+        "id": "ms-001",
+        "name": "Sprint 1",
+        "workplan": "wp-abc",
+        "description": "First sprint",
+        "order": 1,
+        "status": "active",
+        "created_at": "2025-01-01T00:00:00Z",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "show", "ms-001"])
+    assert result.exit_code == 0
+    assert "ms-001" in result.output
+    assert "Sprint 1" in result.output
+    assert "First sprint" in result.output
+    assert "active" in result.output
+    mock_client.get.assert_called_once_with("/v1/milestones/ms-001/")
+
+
+def test_milestone_show_not_found(runner, mock_client):
+    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "show", "nonexistent"])
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+# --- milestone update ---
+
+def test_milestone_update_name(runner, mock_client):
+    mock_client.patch.return_value = {
+        "id": "ms-001",
+        "name": "Updated Sprint",
+        "workplan": "wp-abc",
+        "description": "",
+        "order": 1,
+        "status": "active",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "update", "ms-001", "--name", "Updated Sprint"])
+    assert result.exit_code == 0
+    assert "Updated milestone ms-001" in result.output
+    mock_client.patch.assert_called_once_with("/v1/milestones/ms-001/", {"name": "Updated Sprint"})
+
+
+def test_milestone_update_description(runner, mock_client):
+    mock_client.patch.return_value = {
+        "id": "ms-001",
+        "name": "Sprint 1",
+        "description": "New desc",
+        "order": 1,
+        "status": "active",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "update", "ms-001", "--description", "New desc"])
+    assert result.exit_code == 0
+    call_data = mock_client.patch.call_args[0][1]
+    assert call_data["description"] == "New desc"
+
+
+def test_milestone_update_order(runner, mock_client):
+    mock_client.patch.return_value = {
+        "id": "ms-001",
+        "name": "Sprint 1",
+        "description": "",
+        "order": 5,
+        "status": "active",
+    }
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "update", "ms-001", "--sort-order", "5"])
+    assert result.exit_code == 0
+    call_data = mock_client.patch.call_args[0][1]
+    assert call_data["order"] == 5
+
+
+def test_milestone_update_no_fields(runner, mock_client):
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "update", "ms-001"])
+    assert result.exit_code == 1
+    assert "No fields" in result.output or "nothing" in result.output.lower() or "no fields" in result.output.lower()
+
+
+def test_milestone_update_api_error(runner, mock_client):
+    mock_client.patch.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["milestone", "update", "missing", "--name", "Fail"])
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
 # --- help ---
 
 def test_workplan_help(runner):
