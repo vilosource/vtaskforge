@@ -114,7 +114,7 @@ def test_auth_missing_token():
 
 
 def test_all_tools_registered():
-    """All 10 vtf tools are registered after auto-discovery imports all modules."""
+    """All 12 vtf tools are registered after auto-discovery imports all modules."""
     from mcp_server.server import mcp
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
@@ -128,7 +128,9 @@ def test_all_tools_registered():
         "vtf_review_task",
         "vtf_task_detail",
         "vtf_manage_task",
+        "vtf_manage_milestone",
         "vtf_manage_workplan",
+        "vtf_workplan_tree",
     }
     assert expected == set(tool_names), f"Tool mismatch. Registered: {tool_names}"
 
@@ -144,7 +146,7 @@ def test_auto_discovery_finds_all_tool_modules():
         name
         for _, name, _ in pkgutil.iter_modules(tools_pkg.__path__)
     }
-    expected = {"board", "workflow", "search", "review", "detail", "manage", "workplan"}
+    expected = {"board", "workflow", "search", "review", "detail", "manage", "workplan", "structure", "milestone"}
     assert expected == discovered, f"Module mismatch. Discovered: {discovered}"
 
 

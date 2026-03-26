@@ -143,7 +143,7 @@ def mcp_http_auth_server():
 
 @pytest.mark.django_db(transaction=True)
 def test_http_auth_valid_token_lists_tools(mcp_http_auth_server):
-    """Valid token: tools/list succeeds and returns exactly 10 tools."""
+    """Valid token: tools/list succeeds and returns exactly 12 tools."""
     from django.contrib.auth.models import User
     from rest_framework.authtoken.models import Token
 
@@ -162,7 +162,7 @@ def test_http_auth_valid_token_lists_tools(mcp_http_auth_server):
                     tools_result = await session.list_tools()
                     tool_names = sorted(t.name for t in tools_result.tools)
 
-                    assert len(tool_names) == 10
+                    assert len(tool_names) == 12
                     assert "vtf_board_overview" in tool_names
 
     asyncio.run(run())
