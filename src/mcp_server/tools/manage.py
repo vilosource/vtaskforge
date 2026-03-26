@@ -16,7 +16,7 @@ from tasks.state_machine import get_valid_transitions, perform_transition
 
 VALID_ACTIONS = [
     "create", "update", "submit", "block", "unblock",
-    "defer", "cancel", "delete", "assign", "unassign",
+    "defer", "cancel", "delete", "assign", "unassign", "note",
 ]
 
 
@@ -47,6 +47,9 @@ def vtf_manage_task(
     Use the 'action' parameter to specify the operation. For status changes,
     only valid transitions are allowed — the error message will tell you what
     transitions are available from the current status.
+
+    The 'note' action adds a free-text note to any task regardless of its
+    current status. Pass the note text via the 'reason' parameter.
     """
     # Route by action
     if action == "create":
@@ -75,6 +78,8 @@ def vtf_manage_task(
         return _action_assign(task_id, assigned_to)
     elif action == "unassign":
         return _action_unassign(task_id)
+    elif action == "note":
+        return _action_note(task_id, reason)
     else:
         suggestion = _suggest_action(action, VALID_ACTIONS)
         hint = f" Did you mean '{suggestion}'?" if suggestion else ""
@@ -637,6 +642,40 @@ def _action_unassign(task_id):
                 }
             },
             message=f"Task {task.id} unassigned.",
+            available_actions=["vtf_task_detail"],
+        )
+    )
+
+
+def _action_note(task_id, note_text):
+    """Add a free-text note to a task in any status."""
+    if not task_id:
+        return json.dumps(
+            error_response(
+                message="Cannot add note: 'task_id' is required.",
+                data={},
+                available_actions=["vtf_search_tasks"],
+            )
+        )
+    if not note_text:
+        return json.dumps(
+            error_response(
+                message="Cannot add note: 'reason' parameter is required for the note text.",
+                data={"task_id": task_id},
+                available_actions=["vtf_manage_task(action=note)"],
+            )
+        )
+
+    task, err = _get_task(task_id)
+    if err:
+        return err
+
+    record_event(task, "note", data={"text": note_text}, triggered_by="")
+
+    return json.dumps(
+        success_response(
+            data={"task": {"id": task.id, "title": task.title, "status": task.status}},
+            message=f"Note added to task {task.id}.",
             available_actions=["vtf_task_detail"],
         )
     )

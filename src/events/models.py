@@ -12,6 +12,7 @@ EVENT_TYPE_CHOICES = [
     ("link_removed", "Link Removed"),
     ("field_updated", "Field Updated"),
     ("force_transition", "Force Transition"),
+    ("note", "Note"),
 ]
 
 

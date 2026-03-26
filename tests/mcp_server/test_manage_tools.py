@@ -658,3 +658,112 @@ def test_update_requires():
     assert result["success"] is True
     task.refresh_from_db()
     assert task.requires == [dep.id]
+
+
+# ---------------------------------------------------------------------------
+# test_manage_note_on_draft_task
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_manage_note_on_draft_task():
+    """vtf_manage_task(action=note) adds a note event to a task in draft status."""
+    from events.models import TaskEvent
+
+    task = TaskFactory(status="draft")
+
+    result = json.loads(vtf_manage_task(
+        action="note",
+        task_id=task.id,
+        reason="This is a note on a draft task",
+    ))
+
+    assert result["success"] is True
+    assert result["data"]["task"]["id"] == task.id
+    assert result["data"]["task"]["status"] == "draft"
+    assert TaskEvent.objects.filter(task=task, event_type="note").exists()
+    event = TaskEvent.objects.get(task=task, event_type="note")
+    assert event.data["text"] == "This is a note on a draft task"
+
+
+# ---------------------------------------------------------------------------
+# test_manage_note_on_todo_task
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_manage_note_on_todo_task():
+    """vtf_manage_task(action=note) adds a note event to a task in todo status."""
+    from events.models import TaskEvent
+
+    task = TaskFactory(status="todo")
+
+    result = json.loads(vtf_manage_task(
+        action="note",
+        task_id=task.id,
+        reason="Note on a todo task",
+    ))
+
+    assert result["success"] is True
+    assert result["data"]["task"]["status"] == "todo"
+    assert TaskEvent.objects.filter(task=task, event_type="note").exists()
+
+
+# ---------------------------------------------------------------------------
+# test_manage_note_on_done_task
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_manage_note_on_done_task():
+    """vtf_manage_task(action=note) adds a note event to a task in done status."""
+    from events.models import TaskEvent
+
+    task = TaskFactory(status="done")
+
+    result = json.loads(vtf_manage_task(
+        action="note",
+        task_id=task.id,
+        reason="Retrospective note on completed task",
+    ))
+
+    assert result["success"] is True
+    assert result["data"]["task"]["status"] == "done"
+    assert TaskEvent.objects.filter(task=task, event_type="note").exists()
+
+
+# ---------------------------------------------------------------------------
+# test_manage_note_missing_task_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_manage_note_missing_task_id():
+    """vtf_manage_task(action=note) returns error when task_id is missing."""
+    result = json.loads(vtf_manage_task(
+        action="note",
+        reason="Some note text",
+    ))
+
+    assert result["success"] is False
+    assert "task_id" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# test_manage_note_missing_note_text
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_manage_note_missing_note_text():
+    """vtf_manage_task(action=note) returns error when reason (note text) is missing."""
+    task = TaskFactory(status="todo")
+
+    result = json.loads(vtf_manage_task(
+        action="note",
+        task_id=task.id,
+        # no reason
+    ))
+
+    assert result["success"] is False
+    assert "reason" in result["message"].lower()
