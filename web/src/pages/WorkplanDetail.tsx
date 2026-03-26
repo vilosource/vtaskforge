@@ -7,6 +7,8 @@ import { useMilestones, useMilestoneStats, useActivateMilestone, useCompleteMile
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
 import { MilestonePipeline } from '../components/MilestonePipeline';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 
 function MilestoneCard({ milestone, projectId, workplanId }: { milestone: { id: string; name: string; description: string; status: string }; projectId: string; workplanId: string }) {
   const { data: stats } = useMilestoneStats(milestone.id);
@@ -113,6 +115,7 @@ function MilestoneGroup({ title, milestones, projectId, workplanId, defaultColla
 
 export function WorkplanDetail() {
   const { id: projectId, wid: workplanId } = useParams<{ id: string; wid: string }>();
+  useSetActiveProject(projectId);
   const { data: project } = useProject(projectId);
   const { data: workplan, isLoading: wpLoading } = useWorkplan(workplanId!);
   const { data: wpStats } = useWorkplanStats(workplanId!);
@@ -139,14 +142,10 @@ export function WorkplanDetail() {
   return (
     <div className="workplan-detail">
       {/* Breadcrumbs */}
-      <div style={{ padding: '12px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Link to={`/projects/${projectId}`} style={{ color: 'var(--color-text-secondary)', textDecoration: 'none', fontSize: 14 }}>
-          {project?.name ?? 'Project'}
-        </Link>
-        <span style={{ color: 'var(--color-text)', fontSize: 14 }}>
-          / {workplan?.name ?? 'Workplan'}
-        </span>
-      </div>
+      <Breadcrumb segments={[
+        { label: project?.name ?? 'Project', to: `/projects/${projectId}` },
+        { label: workplan?.name ?? 'Workplan' }
+      ]} />
 
       {/* Project info header */}
       <div className="workplan-detail-header">

@@ -1,13 +1,16 @@
 import { useState, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 import { useProject } from '../api/projects';
 import { useBacklogTasks, type Task } from '../api/tasks';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 
 export function BacklogView() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
+  useSetActiveProject(projectId);
 
   const { data: project } = useProject(projectId);
   const { data: backlogData } = useBacklogTasks(projectId!);
@@ -52,15 +55,11 @@ export function BacklogView() {
 
   return (
     <div>
-      <div style={{ padding: '12px 24px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Link
-          to={`/projects/${projectId}`}
-          style={{ color: 'var(--color-text-secondary)', textDecoration: 'none', fontSize: 14 }}
-        >
-          {project?.name ?? 'Project'}
-        </Link>
-        <span style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>/</span>
-        <span style={{ color: 'var(--color-text)', fontSize: 14 }}>Backlog</span>
+      <div style={{ padding: '0 24px' }}>
+        <Breadcrumb segments={[
+          { label: project?.name ?? 'Project', to: `/projects/${projectId}` },
+          { label: 'Backlog' }
+        ]} />
       </div>
 
       {/* Label filter pills */}
