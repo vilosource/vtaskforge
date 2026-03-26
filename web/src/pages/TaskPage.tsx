@@ -5,12 +5,15 @@ import remarkGfm from 'remark-gfm';
 import { useTaskDetail, useDownstreamLinks } from '../api/tasks';
 import { useWorkplan } from '../api/tasks';
 import { useMilestone } from '../api/milestones';
+import { useProject } from '../api/projects';
 import { parseSpec } from '../utils/parseSpec';
 import { SpecSection } from '../components/SpecSection';
 import { DependencyChain } from '../components/DependencyChain';
 import { EventTimeline } from '../components/EventTimeline';
 import { ActionButtons } from '../components/ActionButtons';
 import { AddNoteForm } from '../components/AddNoteForm';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 
 function isAgent(actorId: string) {
   return actorId.includes('agent') || actorId.includes('supervisor') || actorId.includes('executor');
@@ -22,6 +25,8 @@ export function TaskPage() {
   const { data: downstream } = useDownstreamLinks(id ?? null);
   const { data: workplan } = useWorkplan(task?.workplan ?? '');
   const { data: milestone } = useMilestone(task?.milestone ?? undefined);
+  const { data: project } = useProject(task?.project);
+  useSetActiveProject(task?.project);
   const [eventsExpanded, setEventsExpanded] = useState(false);
 
   if (isLoading) {
@@ -39,30 +44,12 @@ export function TaskPage() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
       {/* Breadcrumb */}
-      <nav style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-        <Link to="/" style={{ color: '#1976d2', textDecoration: 'none' }}>Workplans</Link>
-        {workplan && (
-          <>
-            {' > '}
-            <Link to={`/workplans/${task.workplan}`} style={{ color: '#1976d2', textDecoration: 'none' }}>
-              {workplan.name}
-            </Link>
-          </>
-        )}
-        {milestone && (
-          <>
-            {' > '}
-            <Link
-              to={`/workplans/${task.workplan}/milestones/${task.milestone}`}
-              style={{ color: '#1976d2', textDecoration: 'none' }}
-            >
-              {milestone.name}
-            </Link>
-          </>
-        )}
-        {' > '}
-        <span style={{ color: '#333' }}>{task.title}</span>
-      </nav>
+      <Breadcrumb segments={[
+        { label: project?.name ?? 'Project', to: `/projects/${task.project}` },
+        ...(workplan ? [{ label: workplan.name, to: `/projects/${task.project}/workplans/${task.workplan}` }] : []),
+        ...(milestone ? [{ label: milestone.name, to: `/projects/${task.project}/workplans/${task.workplan}/milestones/${task.milestone}` }] : []),
+        { label: task.title }
+      ]} />
 
       {/* Two-column layout */}
       <div style={{
@@ -188,7 +175,7 @@ export function TaskPage() {
                 <>
                   <dt style={{ color: '#888' }}>Milestone</dt>
                   <dd style={{ margin: '2px 0 0 0' }}>
-                    <Link to={`/workplans/${task.workplan}/milestones/${task.milestone}`}
+                    <Link to={`/projects/${task.project}/workplans/${task.workplan}/milestones/${task.milestone}`}
                       style={{ color: '#1976d2', textDecoration: 'none' }}>
                       {milestone.name}
                     </Link>
@@ -199,7 +186,7 @@ export function TaskPage() {
                 <>
                   <dt style={{ color: '#888', marginTop: 6 }}>Workplan</dt>
                   <dd style={{ margin: '2px 0 0 0' }}>
-                    <Link to={`/workplans/${task.workplan}`}
+                    <Link to={`/projects/${task.project}/workplans/${task.workplan}`}
                       style={{ color: '#1976d2', textDecoration: 'none' }}>
                       {workplan.name}
                     </Link>
