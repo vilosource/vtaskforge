@@ -49,7 +49,24 @@ planning session follows:
 The output is a set of implementation tasks that differ from the input backlog
 items in quantity, granularity, ordering, and scope.
 
-**Phase 3: Execution (hours/days)**
+**Phase 3: Review — spec authoring (hours)**
+
+Draft tasks from planning have intent-level descriptions but lack the detail
+an executor needs. A review pass verifies each task's assumptions against the
+current codebase, authors detailed specs (file paths, interface contracts,
+acceptance criteria), sets dependencies, and moves tasks to `todo`.
+
+This is where the spec gets written. The planner decides *what* to do; the
+reviewer decides *how* to specify it precisely. Spec quality at this stage
+directly determines executor success rate — the breadcrumbs milestone achieved
+zero rework cycles because the review pass produced detailed, codebase-verified
+specs.
+
+See: [Workplan Review Protocol](workplan-review-PROTOCOL.md) for the formalized
+process. Research into structured spec formats (SHALL requirements, GIVEN/WHEN/THEN
+scenarios, inspired by OpenSpec) is tracked as a backlog item.
+
+**Phase 4: Execution (hours/days)**
 
 Implementation tasks are worked in dependency order. Each produces code, tests,
 and commits. Progress is tracked against the implementation plan, not the

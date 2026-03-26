@@ -2,6 +2,12 @@
 
 Manual supervisor workflow for executing vtf tasks using Claude Code subagents as executor and judge, without the vafi controller infrastructure.
 
+## Prerequisites
+
+This protocol assumes tasks are already in `todo` status with detailed specs. If tasks are in `draft`, run the [Workplan Review Protocol](../workplan-review-PROTOCOL.md) first to verify assumptions, author specs, and move tasks to `todo`.
+
+The full pipeline is: **Observation → Backlog → Workplan → Review → Execution (this protocol) → Verification**. See the review protocol for details on the upstream stages.
+
 ## Overview
 
 The simulation replaces the automated vafi controller loop with a human supervisor (you) orchestrating Claude Code subagents. The executor and judge agents do real work — the simulation is only in how they're dispatched.

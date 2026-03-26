@@ -6,7 +6,34 @@ This protocol defines how a workplan/milestone moves from `draft` to `todo` — 
 
 **Role**: Workplan Reviewer (today: human + AI, future: dedicated review agent)
 **Input**: A workplan/milestone with tasks in `draft` status
-**Output**: Tasks enriched and moved to `todo`, or flagged with issues
+**Output**: Tasks with detailed specs, enriched and moved to `todo`, or flagged with issues
+
+---
+
+## Where This Fits: The Execution Pipeline
+
+Work flows through a pipeline of stages, each with a distinct role and output. Spec authoring happens at the **review stage** — not during planning, not during execution.
+
+```
+Observation → Backlog → Workplan → Review (this protocol) → Execution → Verification
+```
+
+| Stage | Role | Input | Output | Spec Detail Level |
+|-------|------|-------|--------|-------------------|
+| **Observation** | Human | User need or pain point | Short description ("breadcrumbs are inconsistent") | None — intent only |
+| **Backlog** | Human + Planner | Observations, priorities | Scoped work item with goal and context | Low — what and why |
+| **Workplan** | Planner | Backlog items | Milestones, draft tasks, dependency sketch, ordering | Medium — task descriptions, rough scope |
+| **Review** | **Reviewer (this protocol)** | Draft tasks + codebase access | **Detailed specs, AC, verified dependencies** | **High — files, changes, interfaces, GIVEN/WHEN/THEN** |
+| **Execution** | Executor | Todo task with spec | Code + tests + commit | N/A — consumes spec |
+| **Verification** | Judge | Completed task + spec | Verdict (pass/fail) | N/A — verifies against spec |
+
+### Key design decisions
+
+**The planner decides *what* to do.** It decomposes backlog items into tasks, sets ordering and dependencies, and writes descriptions that capture intent. Planner output is rough — good enough to understand scope, not detailed enough to implement from.
+
+**The reviewer decides *how* to specify it.** It reads the codebase, verifies assumptions, and produces detailed specs with file paths, interface contracts, code patterns, and testable acceptance criteria. The reviewer's spec quality directly determines executor success rate (breadcrumbs milestone: zero rework with well-specified tasks).
+
+**The executor never questions the spec.** It implements exactly what the spec says. If the spec is wrong, that's a reviewer failure, not an executor failure. This clean separation means we can invest in spec quality (the review agent) independently of execution capability (the executor agent).
 
 ---
 
@@ -14,12 +41,12 @@ This protocol defines how a workplan/milestone moves from `draft` to `todo` — 
 
 | Role | Responsibility | Today | Future |
 |------|---------------|-------|--------|
-| **Planner** | Creates workplan, milestones, draft tasks from requirements | Human + AI | Planning agent |
-| **Reviewer** | Validates drafts against codebase, enriches to ready state | Human + AI (this protocol) | Workplan reviewer agent |
-| **Executor** | Picks up `todo` tasks, implements, submits | Human + AI (simulated) | vafi executor agent |
+| **Planner** | Decomposes backlog items into workplans, milestones, draft tasks with intent-level descriptions | Human + AI | Planning agent |
+| **Reviewer** | Verifies against codebase, authors detailed specs, enriches to ready state | Human + AI (this protocol) | Workplan review agent |
+| **Executor** | Picks up `todo` tasks, implements per spec, submits | Human + AI (simulated) | vafi executor agent |
 | **Judge** | Verifies completed work against spec and AC | Human + AI | vtf-judge agent |
 
-The reviewer never implements. The executor never questions workplan structure. Clear separation.
+The planner writes what and why. The reviewer writes how (the spec). The executor implements. The judge verifies. No role does another role's work.
 
 ---
 
