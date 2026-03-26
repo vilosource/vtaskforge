@@ -5,6 +5,8 @@ import { useBacklogTasks, type Task } from '../api/tasks';
 import { useSSE } from '../hooks/useSSE';
 import { LiveIndicator } from '../components/LiveIndicator';
 import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 
 function WorkplanCard({ workplan, projectId }: {
   workplan: { id: string; name: string; description: string; status: string; total_tasks: number; completed_percentage: number };
@@ -87,6 +89,7 @@ function WorkplanGroup({ title, workplans, projectId, defaultCollapsed = false }
 export function ProjectDashboard() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  useSetActiveProject(id);
   const { data: project, isLoading: projectLoading } = useProject(id);
   const { data: stats } = useProjectStats(id);
   const { data: workplans, isLoading: workplansLoading } = useProjectWorkplans(id);
@@ -114,6 +117,10 @@ export function ProjectDashboard() {
 
   return (
     <div className="project-dashboard">
+      <Breadcrumb segments={[
+        { label: 'Projects', to: '/' },
+        { label: project?.name ?? '' },
+      ]} />
       {/* Project info header */}
       <div className="project-dashboard-header">
         <div className="project-dashboard-header-top">
