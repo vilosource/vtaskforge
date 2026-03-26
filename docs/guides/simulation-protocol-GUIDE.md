@@ -300,6 +300,18 @@ The supervisor orchestrates — it does not run tests, write code, or review cod
 ### Tests before code review
 If the judge finds test regressions, it should FAIL immediately and skip the code review. Reviewing broken code wastes tokens and time. Tests are cheap verification; code review is expensive verification. Cheap first, expensive second.
 
+### Verify branch before dispatching executor
+The executor committed to develop instead of its task branch during the Breadcrumbs milestone. The supervisor should verify `git branch --show-current` matches the expected branch before dispatching. In vafi, the controller handles branch checkout — executors should never touch branching.
+
+### Claim just-in-time, not in batches
+Claiming all tasks up front wastes the 30-minute claim window on tasks that won't execute for a while. Claim one task (or one parallel batch) at a time, right before dispatching the executor.
+
+### Use test deltas, not absolute counts
+Branches forked from develop have different test counts because each adds its own tests. Executor and judge should report "added N tests, baseline was M at fork point" — not just the total. The quality gate is the only place the integrated count matters.
+
+### Review protocol is the highest-leverage investment
+The Breadcrumbs milestone had zero rework cycles. This is because the review protocol (draft → ready) caught false assumptions and enriched specs before execution. A well-specified task is hard for an executor to get wrong. For vafi, invest more in the review agent than the executor agent.
+
 ## Quick Reference: Task IDs (MCP Server Phase 0)
 
 | Spec ID | vtf ID | Task |
