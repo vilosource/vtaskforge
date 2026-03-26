@@ -333,9 +333,16 @@ markdown file with typed metadata (in frontmatter or a sidecar manifest),
 linked to observations and tasks. The `vtf` CLI and MCP tools would provide
 the same add/list/show/search operations that `kb wsa` provides today.
 
-This is not theoretical — we used `kb wsa` in this session to persist the
-breadcrumb plan because vtf had no native way to store it. The mykb workspace
-is filling the gap that `.vtf/` should eventually fill within the project repo.
+mykb also provides `kb work handoff` — a session continuity mechanism that
+captures what you're working on and what's next, so the next session (human
+or agent) can resume without ramp-up. This maps directly to workspace state
+in `.vtf/workspace.yaml`. The handoff pattern solves the "planning context
+evaporates between sessions" problem identified in this analysis.
+
+This is not theoretical — we used both `kb wsa` and `kb work handoff` in
+this session to persist the breadcrumb plan and session context because vtf
+had no native way to store either. The mykb workspace is filling the gap
+that `.vtf/` should eventually fill within the project repo.
 
 ### What needs more thinking
 
