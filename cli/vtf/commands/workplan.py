@@ -142,6 +142,96 @@ def milestone():
 
 
 @milestone.command()
+@click.option("--name", required=True, help="Milestone name")
+@click.option("--workplan", required=True, help="Workplan ID")
+@click.option("--description", default=None, help="Description")
+@click.option("--sort-order", default=None, type=int, help="Sort order")
+@click.pass_context
+def create(ctx, name, workplan, description, sort_order):
+    """Create a new milestone."""
+    client = ctx.obj["client"]
+    data = {"name": name, "workplan": workplan}
+    if description is not None:
+        data["description"] = description
+    if sort_order is not None:
+        data["order"] = sort_order
+    try:
+        result = client.post("/v1/milestones/", data)
+        click.echo(f"Created milestone {result['id']}: {result['name']}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@milestone.command("list")
+@click.option("--workplan", required=True, help="Workplan ID")
+@click.pass_context
+def list_milestones(ctx, workplan):
+    """List milestones for a workplan."""
+    client = ctx.obj["client"]
+    try:
+        from vtf.client import unwrap_list
+        results = unwrap_list(client.get(f"/v1/workplans/{workplan}/milestones/"))
+        if not results:
+            click.echo("No milestones found.")
+            return
+        click.echo(f"{'ID':<36} {'Order':<6} {'Name':<30}")
+        click.echo("-" * 74)
+        for ms in results:
+            click.echo(f"{ms['id']:<36} {ms.get('order', '')!s:<6} {ms['name']:<30}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@milestone.command()
+@click.argument("id")
+@click.pass_context
+def show(ctx, id):
+    """Show milestone details."""
+    client = ctx.obj["client"]
+    try:
+        ms = client.get(f"/v1/milestones/{id}/")
+        click.echo(f"ID:          {ms['id']}")
+        click.echo(f"Name:        {ms['name']}")
+        click.echo(f"Status:      {ms.get('status', '')}")
+        click.echo(f"Description: {ms.get('description', '')}")
+        click.echo(f"Order:       {ms.get('order', '')}")
+        click.echo(f"Workplan:    {ms.get('workplan', '')}")
+        click.echo(f"Created:     {ms.get('created_at', '')}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@milestone.command()
+@click.argument("id")
+@click.option("--name", default=None, help="New name")
+@click.option("--description", default=None, help="New description")
+@click.option("--sort-order", default=None, type=int, help="New sort order")
+@click.pass_context
+def update(ctx, id, name, description, sort_order):
+    """Update a milestone."""
+    client = ctx.obj["client"]
+    data = {}
+    if name is not None:
+        data["name"] = name
+    if description is not None:
+        data["description"] = description
+    if sort_order is not None:
+        data["order"] = sort_order
+    if not data:
+        click.echo("No fields to update. Provide --name, --description, or --sort-order.", err=True)
+        raise SystemExit(1)
+    try:
+        client.patch(f"/v1/milestones/{id}/", data)
+        click.echo(f"Updated milestone {id}")
+    except VTFAPIError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@milestone.command()
 @click.argument("id")
 @click.pass_context
 def stats(ctx, id):
