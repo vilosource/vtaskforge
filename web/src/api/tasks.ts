@@ -101,6 +101,15 @@ export function useBacklogTasks(projectId: string) {
   });
 }
 
+export function useOrphanTasks(workplanId: string) {
+  return useQuery({
+    queryKey: ['tasks', 'orphan', workplanId],
+    queryFn: () =>
+      apiGet<PaginatedResponse<Task>>(`/v1/tasks/?workplan=${workplanId}&milestone__isnull=true`),
+    enabled: !!workplanId,
+  });
+}
+
 export function useTaskDetail(taskId: string | null) {
   return useQuery({
     queryKey: ['task', taskId],

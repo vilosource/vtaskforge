@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useWorkplan } from '../api/tasks';
+import { useWorkplan, useOrphanTasks } from '../api/tasks';
+import type { Task } from '../api/tasks';
 import { useWorkplanStats } from '../api/workplans';
 import { useProject } from '../api/projects';
 import { useMilestones, useMilestoneStats, useActivateMilestone, useCompleteMilestone } from '../api/milestones';
@@ -9,6 +10,7 @@ import { LiveIndicator } from '../components/LiveIndicator';
 import { MilestonePipeline } from '../components/MilestonePipeline';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
+import { TaskDetail } from '../components/TaskDetail';
 
 function MilestoneCard({ milestone, projectId, workplanId }: { milestone: { id: string; name: string; description: string; status: string }; projectId: string; workplanId: string }) {
   const { data: stats } = useMilestoneStats(milestone.id);
@@ -113,6 +115,83 @@ function MilestoneGroup({ title, milestones, projectId, workplanId, defaultColla
   );
 }
 
+const STATUS_BADGE_COLORS: Record<string, string> = {
+  draft: 'badge-draft',
+  pending_start_review: 'badge-review',
+  pending_completion_review: 'badge-review',
+  todo: 'badge-ready',
+  doing: 'badge-in-progress',
+  changes_requested: 'badge-attention',
+  needs_attention: 'badge-attention',
+  blocked: 'badge-attention',
+  done: 'badge-done',
+  deferred: 'badge-deferred',
+  cancelled: 'badge-cancelled',
+};
+
+function UnassignedTasksSection({
+  tasks,
+  onTaskClick,
+}: {
+  tasks: Task[];
+  onTaskClick: (task: Task) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (tasks.length === 0) return null;
+
+  return (
+    <div className="milestone-group">
+      <button
+        className="milestone-group-header"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <svg
+          width="12" height="12" viewBox="0 0 12 12"
+          style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+        >
+          <path d="M3 4.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span className="milestone-group-title">Unassigned Tasks</span>
+        <span className="milestone-group-count">{tasks.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="unassigned-tasks-list">
+          {tasks.map((task) => (
+            <div
+              key={task.id}
+              className="unassigned-task-row"
+              onClick={() => onTaskClick(task)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onTaskClick(task);
+                }
+              }}
+            >
+              <span className="unassigned-task-title">{task.title}</span>
+              <div className="unassigned-task-meta">
+                <span className={`badge ${STATUS_BADGE_COLORS[task.status] ?? ''}`}>
+                  {task.status}
+                </span>
+                {task.labels && task.labels.length > 0 && (
+                  <div className="unassigned-task-labels">
+                    {task.labels.map((label) => (
+                      <span key={label} className="task-list-label">{label}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WorkplanDetail() {
   const { id: projectId, wid: workplanId } = useParams<{ id: string; wid: string }>();
   useSetActiveProject(projectId);
@@ -120,7 +199,10 @@ export function WorkplanDetail() {
   const { data: workplan, isLoading: wpLoading } = useWorkplan(workplanId!);
   const { data: wpStats } = useWorkplanStats(workplanId!);
   const { data: milestones, isLoading: phLoading } = useMilestones(workplanId!);
+  const { data: orphanData } = useOrphanTasks(workplanId!);
+  const orphanTasks = orphanData?.results ?? [];
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { status: sseStatus } = useSSE({
     url: `/v1/events/stream/?workplan=${workplanId}`,
     onEvent: () => {},
@@ -217,10 +299,13 @@ export function WorkplanDetail() {
           <MilestoneGroup title="Active" milestones={activeMilestones} projectId={projectId!} workplanId={workplanId!} />
           <MilestoneGroup title="Pending" milestones={pendingMilestones} projectId={projectId!} workplanId={workplanId!} />
           <MilestoneGroup title="Completed" milestones={completedMilestones} projectId={projectId!} workplanId={workplanId!} defaultCollapsed />
+          <UnassignedTasksSection tasks={orphanTasks} onTaskClick={(task) => setSelectedTaskId(task.id)} />
         </div>
       ) : (
         <MilestonePipeline milestones={milestones ?? []} projectId={projectId!} workplanId={workplanId!} />
       )}
+
+      <TaskDetail taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </div>
   );
 }
