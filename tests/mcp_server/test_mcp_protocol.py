@@ -41,7 +41,7 @@ def _server_params():
 
 @pytest.mark.django_db
 def test_mcp_initialize_and_list_tools():
-    """Server starts, completes MCP handshake, and lists all 9 tools."""
+    """Server starts, completes MCP handshake, and lists all 10 tools."""
 
     async def run():
         async with stdio_client(_server_params()) as (read, write):
@@ -51,10 +51,11 @@ def test_mcp_initialize_and_list_tools():
                 tools_result = await session.list_tools()
                 tool_names = sorted(t.name for t in tools_result.tools)
 
-                assert len(tool_names) == 9
+                assert len(tool_names) == 10
                 assert "vtf_board_overview" in tool_names
                 assert "vtf_claim_and_start" in tool_names
                 assert "vtf_manage_task" in tool_names
+                assert "vtf_manage_workplan" in tool_names
                 assert "vtf_next_work" in tool_names
                 assert "vtf_report_progress" in tool_names
                 assert "vtf_review_task" in tool_names
