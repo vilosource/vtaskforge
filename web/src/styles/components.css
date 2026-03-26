@@ -471,3 +471,10 @@
 .workplan-list tbody tr td:first-child a {
   font-weight: 500;
 }
+
+/* Breadcrumb */
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 12px 0 0; }
+.breadcrumb-link { color: var(--color-text-secondary); text-decoration: none; }
+.breadcrumb-link:hover { text-decoration: underline; }
+.breadcrumb-separator { color: var(--color-text-secondary); }
+.breadcrumb-current { color: var(--color-text); }

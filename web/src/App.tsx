@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
+import { ActiveProjectProvider } from './contexts/ActiveProjectContext';
 import { ProjectList } from './pages/ProjectList';
 import { ProjectDashboard } from './pages/ProjectDashboard';
 import { WorkplanDetail } from './pages/WorkplanDetail';
@@ -82,6 +83,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <ActiveProjectProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<AppLayout />}>
@@ -93,6 +95,7 @@ export function App() {
               <Route path="/tasks/:id" element={<TaskPage />} />
             </Route>
           </Routes>
+          </ActiveProjectProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
