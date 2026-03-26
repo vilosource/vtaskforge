@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useProjects, useProjectStats, type Project } from '../api/projects';
+import { useActiveProject } from '../contexts/ActiveProjectContext';
 
 function ProjectItem({ project, isActive }: { project: Project; isActive: boolean }) {
   const { data: stats } = useProjectStats(project.id);
@@ -31,7 +32,7 @@ function ProjectItem({ project, isActive }: { project: Project; isActive: boolea
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { id: activeProjectId } = useParams<{ id: string }>();
+  const activeProjectId = useActiveProject();
   const { data } = useProjects();
   const projects = data?.results ?? [];
 
