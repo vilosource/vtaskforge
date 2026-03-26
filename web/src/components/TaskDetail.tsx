@@ -1,6 +1,8 @@
 import { useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { useTaskDetail } from '../api/tasks';
+import { useTaskDetail, useWorkplan } from '../api/tasks';
+import { useProject } from '../api/projects';
+import { useMilestone } from '../api/milestones';
 import { ActionButtons } from './ActionButtons';
 
 interface TaskDetailProps {
@@ -10,6 +12,9 @@ interface TaskDetailProps {
 
 export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
   const { data: task, isLoading, isError } = useTaskDetail(taskId);
+  const { data: project } = useProject(task?.project);
+  const { data: workplan } = useWorkplan(task?.workplan ?? '');
+  const { data: milestone } = useMilestone(task?.milestone);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -46,6 +51,13 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
       <div className="task-detail-modal">
         {/* Header */}
         <div className="task-detail-header">
+          {task && (
+            <div className="task-detail-context">
+              {project && <Link to={`/projects/${task.project}`} onClick={onClose}>{project.name}</Link>}
+              {workplan && <><span className="task-detail-context-sep">/</span><Link to={`/projects/${task.project}/workplans/${task.workplan}`} onClick={onClose}>{workplan.name}</Link></>}
+              {milestone && <><span className="task-detail-context-sep">/</span><Link to={`/projects/${task.project}/workplans/${task.workplan}/milestones/${task.milestone}`} onClick={onClose}>{milestone.name}</Link></>}
+            </div>
+          )}
           <div className="task-detail-title-row">
             {task && <h2 className="task-detail-title">{task.title}</h2>}
             {isLoading && <h2 className="task-detail-title">Loading...</h2>}

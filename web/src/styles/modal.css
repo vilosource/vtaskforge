@@ -207,6 +207,12 @@
   color: var(--color-text-secondary);
 }
 
+/* ----- Hierarchy context line ----- */
+.task-detail-context { display: flex; align-items: center; gap: 4px; font-size: 12px; margin-bottom: 4px; }
+.task-detail-context a { color: var(--color-text-secondary); text-decoration: none; }
+.task-detail-context a:hover { text-decoration: underline; }
+.task-detail-context-sep { color: var(--color-text-secondary); }
+
 /* ----- Responsive ----- */
 @media (max-width: 767px) {
   .task-detail-overlay {

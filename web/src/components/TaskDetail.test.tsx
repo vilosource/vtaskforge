@@ -50,9 +50,20 @@ const baseTaskDetail: TaskDetailType = {
   events: [],
 };
 
+const PROJECT_URL = '/v1/projects/project-1/';
+const WORKPLAN_URL = '/v1/workplans/wp-1';
+const MILESTONE_URL = '/v1/milestones/milestone-1/';
+
+const mockProject = { id: 'project-1', name: 'My Project', description: '', status: 'active', repo_url: null, default_branch: 'main', tags: [], owner: null, created_by: 'admin', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' };
+const mockWorkplan = { id: 'wp-1', name: 'Sprint 1', description: '', status: 'active', tags: [], created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z', project: 'project-1' };
+const mockMilestone = { id: 'milestone-1', name: 'M1: Setup', description: '', workplan: 'wp-1', status: 'active', order: 1, created_at: '2024-01-01T00:00:00Z' };
+
 const server = setupServer(
   http.get(TASK_URL, () => HttpResponse.json(baseTaskDetail)),
   http.post('/v1/tasks/task-1/:action/', () => HttpResponse.json({})),
+  http.get(PROJECT_URL, () => HttpResponse.json(mockProject)),
+  http.get(WORKPLAN_URL, () => HttpResponse.json(mockWorkplan)),
+  http.get(MILESTONE_URL, () => HttpResponse.json(mockMilestone)),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
@@ -164,5 +175,87 @@ describe('TaskDetail modal (slim)', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
     });
+  });
+
+  it('shows project name in hierarchy context line', async () => {
+    renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('My Project')).toBeInTheDocument();
+    });
+  });
+
+  it('shows workplan name in hierarchy context line', async () => {
+    renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('Sprint 1')).toBeInTheDocument();
+    });
+  });
+
+  it('shows milestone name in hierarchy context line', async () => {
+    renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('M1: Setup')).toBeInTheDocument();
+    });
+  });
+
+  it('project link navigates to correct route and calls onClose', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderModal('task-1', onClose);
+    await waitFor(() => {
+      expect(screen.getByText('My Project')).toBeInTheDocument();
+    });
+    const link = screen.getByText('My Project').closest('a');
+    expect(link).toHaveAttribute('href', '/projects/project-1');
+    await user.click(screen.getByText('My Project'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('workplan link navigates to correct route', async () => {
+    renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('Sprint 1')).toBeInTheDocument();
+    });
+    const link = screen.getByText('Sprint 1').closest('a');
+    expect(link).toHaveAttribute('href', '/projects/project-1/workplans/wp-1');
+  });
+
+  it('milestone link navigates to correct route', async () => {
+    renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('M1: Setup')).toBeInTheDocument();
+    });
+    const link = screen.getByText('M1: Setup').closest('a');
+    expect(link).toHaveAttribute('href', '/projects/project-1/workplans/wp-1/milestones/milestone-1');
+  });
+
+  it('handles missing milestone gracefully', async () => {
+    const taskNoMilestone = { ...baseTaskDetail, milestone: '' };
+    server.use(
+      http.get(TASK_URL, () => HttpResponse.json(taskNoMilestone)),
+    );
+    renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('Implement login form')).toBeInTheDocument();
+    });
+    // should not throw, project still shown
+    await waitFor(() => {
+      expect(screen.getByText('My Project')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('M1: Setup')).not.toBeInTheDocument();
+  });
+
+  it('context line is above the task title', async () => {
+    const { container } = renderModal();
+    await waitFor(() => {
+      expect(screen.getByText('My Project')).toBeInTheDocument();
+    });
+    const header = container.querySelector('.task-detail-header');
+    const context = container.querySelector('.task-detail-context');
+    const titleRow = container.querySelector('.task-detail-title-row');
+    expect(header).toContainElement(context as HTMLElement);
+    // context should appear before title-row in the DOM
+    const nodes = Array.from(header!.children);
+    expect(nodes.indexOf(context as HTMLElement)).toBeLessThan(nodes.indexOf(titleRow as HTMLElement));
   });
 });
