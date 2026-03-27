@@ -33,6 +33,12 @@ spec:
             - -c
             - |
               cd /app/src
+              echo "Waiting for database..."
+              for i in $(seq 1 30); do
+                python -c "import django; django.setup(); from django.db import connection; connection.ensure_connection()" 2>/dev/null && break
+                echo "  attempt $i/30 — database not ready, waiting..."
+                sleep 2
+              done
               python manage.py migrate --noinput
               {{- if .Values.migrate.superuser.enabled }}
               python manage.py shell -c "
