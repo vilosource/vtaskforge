@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vtf.fullname" . }}-api
+  labels:
+    {{- include "vtf.labels" . | nindent 4 }}
+    {{- include "vtf.selectorLabels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      {{- include "vtf.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vtf.labels" . | nindent 8 }}
+        {{- include "vtf.selectorLabels" (dict "root" . "component" "api") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: vtf-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.api.port }}
+          env:
+            {{- include "vtf.commonEnv" . | nindent 12 }}
+            - name: ALLOWED_HOSTS
+              value: {{ include "vtf.allowedHosts" . | quote }}
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: {{ .Values.api.port }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: {{ .Values.api.port }}
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

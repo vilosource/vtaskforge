@@ -1,50 +1,43 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: vtf-db
-spec:
-  selector:
-    app: vtf-db
-  ports:
-    - port: 5432
-      targetPort: 5432
-  clusterIP: None
----
+{{- if .Values.postgresql.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: vtf-db
+  name: {{ include "vtf.dbName" . }}
+  labels:
+    {{- include "vtf.labels" . | nindent 4 }}
+    {{- include "vtf.selectorLabels" (dict "root" . "component" "db") | nindent 4 }}
 spec:
-  serviceName: vtf-db
+  serviceName: {{ include "vtf.dbName" . }}
   replicas: 1
   selector:
     matchLabels:
-      app: vtf-db
+      {{- include "vtf.selectorLabels" (dict "root" . "component" "db") | nindent 6 }}
   template:
     metadata:
       labels:
-        app: vtf-db
+        {{- include "vtf.labels" . | nindent 8 }}
+        {{- include "vtf.selectorLabels" (dict "root" . "component" "db") | nindent 8 }}
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: {{ .Values.postgresql.image }}
           ports:
             - containerPort: 5432
           env:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: vtf-secrets
+                  name: {{ include "vtf.secretName" . }}
                   key: POSTGRES_DB
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: vtf-secrets
+                  name: {{ include "vtf.secretName" . }}
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: vtf-secrets
+                  name: {{ include "vtf.secretName" . }}
                   key: POSTGRES_PASSWORD
           volumeMounts:
             - name: pgdata
@@ -54,23 +47,22 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - vtf
+                - {{ .Values.database.user }}
                 - -d
-                - vtf_dogfood
+                - {{ .Values.database.name }}
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
   volumeClaimTemplates:
     - metadata:
         name: pgdata
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- if .Values.postgresql.storageClassName }}
+        storageClassName: {{ .Values.postgresql.storageClassName | quote }}
+        {{- end }}
         resources:
           requests:
-            storage: 1Gi
+            storage: {{ .Values.postgresql.storage }}
+{{- end }}

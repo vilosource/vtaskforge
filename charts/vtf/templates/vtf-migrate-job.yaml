@@ -1,0 +1,50 @@
+{{- if .Values.migrate.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "vtf.fullname" . }}-migrate
+  labels:
+    {{- include "vtf.labels" . | nindent 4 }}
+    {{- include "vtf.selectorLabels" (dict "root" . "component" "migrate") | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migrate.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.migrate.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "vtf.labels" . | nindent 8 }}
+        {{- include "vtf.selectorLabels" (dict "root" . "component" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cd /app/src
+              python manage.py migrate --noinput
+              {{- if .Values.migrate.superuser.enabled }}
+              python manage.py shell -c "
+              from django.contrib.auth import get_user_model
+              User = get_user_model()
+              if not User.objects.filter(username='{{ .Values.migrate.superuser.username }}').exists():
+                  User.objects.create_superuser('{{ .Values.migrate.superuser.username }}', '', '{{ .Values.migrate.superuser.password }}')
+                  print('Superuser created')
+              else:
+                  print('Superuser already exists')
+              "
+              {{- end }}
+          env:
+            {{- include "vtf.commonEnv" . | nindent 12 }}
+{{- end }}

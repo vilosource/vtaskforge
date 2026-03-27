@@ -1,0 +1,18 @@
+{{- if .Values.certificate.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "vtf.fullname" . }}-tls
+  labels:
+    {{- include "vtf.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" (include "vtf.fullname" .)) }}
+  issuerRef:
+    name: {{ .Values.certificate.issuerRef.name }}
+    kind: {{ .Values.certificate.issuerRef.kind }}
+  dnsNames:
+    - {{ .Values.ingress.apiHost }}
+    {{- if and .Values.mcp.enabled .Values.ingress.mcpHost }}
+    - {{ .Values.ingress.mcpHost }}
+    {{- end }}
+{{- end }}

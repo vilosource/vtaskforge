@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vtf.fullname" . }}-celery
+  labels:
+    {{- include "vtf.labels" . | nindent 4 }}
+    {{- include "vtf.selectorLabels" (dict "root" . "component" "celery") | nindent 4 }}
+spec:
+  replicas: {{ .Values.celery.replicas }}
+  selector:
+    matchLabels:
+      {{- include "vtf.selectorLabels" (dict "root" . "component" "celery") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vtf.labels" . | nindent 8 }}
+        {{- include "vtf.selectorLabels" (dict "root" . "component" "celery") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: vtf-celery
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["celery", "-A", "vtaskforge", "worker", "-l", "info"]
+          env:
+            {{- include "vtf.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.celery.resources | nindent 12 }}

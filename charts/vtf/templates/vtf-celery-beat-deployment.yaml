@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vtf.fullname" . }}-celery-beat
+  labels:
+    {{- include "vtf.labels" . | nindent 4 }}
+    {{- include "vtf.selectorLabels" (dict "root" . "component" "celery-beat") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "vtf.selectorLabels" (dict "root" . "component" "celery-beat") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vtf.labels" . | nindent 8 }}
+        {{- include "vtf.selectorLabels" (dict "root" . "component" "celery-beat") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: vtf-celery-beat
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - vtaskforge
+            - beat
+            - -l
+            - info
+            - --scheduler
+            - django_celery_beat.schedulers:DatabaseScheduler
+          env:
+            {{- include "vtf.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.celeryBeat.resources | nindent 12 }}
