@@ -2,15 +2,8 @@ import { Link } from 'react-router-dom';
 import { useAgents, type Agent } from '../api/agents';
 import { Breadcrumb } from '../components/Breadcrumb';
 
-const STATUS_COLORS: Record<string, string> = {
-  online: '#4caf50',
-  offline: '#9e9e9e',
-  busy: '#ff9800',
-  stale: '#f44336',
-};
-
 function relativeTime(iso: string | null): string {
-  if (!iso) return '\u2014';
+  if (!iso) return 'never';
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'just now';
@@ -21,29 +14,66 @@ function relativeTime(iso: string | null): string {
   return `${days}d ago`;
 }
 
+function StatusDot({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    online: 'var(--color-done)',
+    busy: 'var(--color-review)',
+    stale: 'var(--color-attention)',
+    offline: 'var(--color-draft)',
+  };
+  return (
+    <span
+      className={status === 'online' ? 'agent-dot agent-dot--pulse' : 'agent-dot'}
+      style={{ background: colors[status] ?? 'var(--color-draft)' }}
+      title={status}
+    />
+  );
+}
+
+function FleetSummary({ agents }: { agents: Agent[] }) {
+  const total = agents.length;
+  const online = agents.filter((a) => a.effective_status === 'online').length;
+  const busy = agents.filter((a) => a.effective_status === 'busy').length;
+  const stale = agents.filter((a) => a.effective_status === 'stale').length;
+  const offline = agents.filter((a) => a.effective_status === 'offline').length;
+
+  return (
+    <div className="agent-summary">
+      <div className="agent-summary-card">
+        <div className="agent-summary-value">{total}</div>
+        <div className="agent-summary-label">Total</div>
+      </div>
+      <div className="agent-summary-card agent-summary-card--online">
+        <div className="agent-summary-value">{online}</div>
+        <div className="agent-summary-label">Online</div>
+      </div>
+      <div className="agent-summary-card agent-summary-card--busy">
+        <div className="agent-summary-value">{busy}</div>
+        <div className="agent-summary-label">Busy</div>
+      </div>
+      <div className="agent-summary-card agent-summary-card--stale">
+        <div className="agent-summary-value">{stale}</div>
+        <div className="agent-summary-label">Stale</div>
+      </div>
+      <div className="agent-summary-card agent-summary-card--offline">
+        <div className="agent-summary-value">{offline}</div>
+        <div className="agent-summary-label">Offline</div>
+      </div>
+    </div>
+  );
+}
+
 function AgentRow({ agent }: { agent: Agent }) {
-  const effectiveStatus = agent.effective_status;
+  const es = agent.effective_status;
 
   return (
     <tr>
       <td>
-        <span
-          style={{
-            display: 'inline-block',
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: STATUS_COLORS[effectiveStatus] ?? '#9e9e9e',
-            marginRight: 8,
-          }}
-          title={effectiveStatus}
-        />
+        <StatusDot status={es} />
         <Link to={`/agents/${agent.id}`}>{agent.name}</Link>
       </td>
       <td>
-        <span className={`badge badge-${effectiveStatus}`}>
-          {effectiveStatus}
-        </span>
+        <span className={`badge badge-agent-${es}`}>{es}</span>
       </td>
       <td>
         {agent.tags.length > 0
@@ -57,11 +87,23 @@ function AgentRow({ agent }: { agent: Agent }) {
           <Link to={`/tasks/${agent.current_task.id}`}>
             {agent.current_task.title}
           </Link>
-        ) : '\u2014'}
+        ) : (
+          <span className="agent-idle">idle</span>
+        )}
       </td>
-      <td>{relativeTime(agent.last_heartbeat)}</td>
-      <td>{agent.tasks_completed}</td>
-      <td>{agent.tasks_failed}</td>
+      <td>
+        <span className={agent.last_heartbeat ? '' : 'agent-idle'}>
+          {relativeTime(agent.last_heartbeat)}
+        </span>
+      </td>
+      <td className="agent-stat">{agent.tasks_completed}</td>
+      <td className="agent-stat">
+        {agent.tasks_failed > 0 ? (
+          <span style={{ color: 'var(--color-attention)' }}>{agent.tasks_failed}</span>
+        ) : (
+          agent.tasks_failed
+        )}
+      </td>
     </tr>
   );
 }
@@ -92,24 +134,27 @@ export function AgentList() {
       {agents.length === 0 ? (
         <div className="empty">No agents registered.</div>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Tags</th>
-              <th>Current Task</th>
-              <th>Last Heartbeat</th>
-              <th>Completed</th>
-              <th>Failed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((agent) => (
-              <AgentRow key={agent.id} agent={agent} />
-            ))}
-          </tbody>
-        </table>
+        <>
+          <FleetSummary agents={agents} />
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Tags</th>
+                <th>Current Task</th>
+                <th>Last Heartbeat</th>
+                <th>Completed</th>
+                <th>Failed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((agent) => (
+                <AgentRow key={agent.id} agent={agent} />
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );
