@@ -1,8 +1,11 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 from rest_framework import status
 
 from agents.models import Agent
-from tests.factories import AgentFactory
+from tests.factories import AgentFactory, TaskFactory
 
 
 @pytest.fixture
@@ -200,14 +203,133 @@ class TestAgentDelete:
 
 
 @pytest.mark.django_db
+class TestAgentComputedFields:
+    """Tests for computed fields: current_task, tasks_completed, tasks_failed, effective_status."""
+
+    def test_current_task_populated_when_agent_has_doing_task(self, api_client, agent):
+        task = TaskFactory(status="doing", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["current_task"] is not None
+        assert response.data["current_task"]["id"] == task.id
+        assert response.data["current_task"]["title"] == task.title
+        assert response.data["current_task"]["status"] == "doing"
+
+    def test_current_task_null_when_no_doing_task(self, api_client, agent):
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["current_task"] is None
+
+    def test_current_task_null_when_task_is_done(self, api_client, agent):
+        TaskFactory(status="done", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["current_task"] is None
+
+    def test_tasks_completed_count(self, api_client, agent):
+        for _ in range(3):
+            TaskFactory(status="done", claimed_by=agent.id)
+        TaskFactory(status="doing", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["tasks_completed"] == 3
+
+    def test_tasks_completed_zero_when_none(self, api_client, agent):
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["tasks_completed"] == 0
+
+    def test_tasks_failed_count(self, api_client, agent):
+        for _ in range(2):
+            TaskFactory(status="needs_attention", claimed_by=agent.id)
+        TaskFactory(status="done", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["tasks_failed"] == 2
+
+    def test_tasks_failed_zero_when_none(self, api_client, agent):
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["tasks_failed"] == 0
+
+    def test_effective_status_stale_for_old_heartbeat(self, api_client, db):
+        agent = AgentFactory(
+            status="online",
+            last_heartbeat=timezone.now() - timedelta(minutes=10),
+        )
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["effective_status"] == "stale"
+
+    def test_effective_status_online_for_recent_heartbeat(self, api_client, db):
+        agent = AgentFactory(
+            status="online",
+            last_heartbeat=timezone.now() - timedelta(seconds=30),
+        )
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["effective_status"] == "online"
+
+    def test_effective_status_stale_when_no_heartbeat(self, api_client, db):
+        agent = AgentFactory(status="online", last_heartbeat=None)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["effective_status"] == "stale"
+
+    def test_effective_status_preserves_offline(self, api_client, db):
+        agent = AgentFactory(status="offline", last_heartbeat=None)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["effective_status"] == "offline"
+
+    def test_effective_status_preserves_busy(self, api_client, db):
+        agent = AgentFactory(
+            status="busy",
+            last_heartbeat=timezone.now() - timedelta(minutes=10),
+        )
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["effective_status"] == "busy"
+
+    def test_computed_fields_in_list(self, api_client, agent):
+        TaskFactory(status="doing", claimed_by=agent.id)
+        response = api_client.get("/v1/agents/")
+        result = response.data["results"][0]
+        assert "current_task" in result
+        assert "tasks_completed" in result
+        assert "tasks_failed" in result
+        assert "effective_status" in result
+
+    def test_counts_exclude_other_agents_tasks(self, api_client, agent):
+        other = AgentFactory(name="Other Agent")
+        TaskFactory(status="done", claimed_by=other.id)
+        TaskFactory(status="done", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/")
+        assert response.data["tasks_completed"] == 1
+
+
+@pytest.mark.django_db
 class TestAgentTasks:
     def test_tasks_returns_200(self, api_client, agent):
         response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_tasks_returns_empty_list(self, api_client, agent):
+    def test_tasks_returns_claimed_tasks(self, api_client, agent):
+        t1 = TaskFactory(status="doing", claimed_by=agent.id)
+        t2 = TaskFactory(status="done", claimed_by=agent.id)
         response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
-        assert response.data == []
+        ids = [t["id"] for t in response.data["results"]]
+        assert t1.id in ids
+        assert t2.id in ids
+
+    def test_tasks_excludes_other_agents_tasks(self, api_client, agent):
+        other = AgentFactory(name="Other Agent")
+        TaskFactory(status="doing", claimed_by=other.id)
+        TaskFactory(status="doing", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
+        assert len(response.data["results"]) == 1
+
+    def test_tasks_filters_by_status(self, api_client, agent):
+        TaskFactory(status="doing", claimed_by=agent.id)
+        TaskFactory(status="done", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/tasks/?status=done")
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["status"] == "done"
+
+    def test_tasks_returns_paginated_response(self, api_client, agent):
+        TaskFactory(status="doing", claimed_by=agent.id)
+        response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
+        assert "results" in response.data
+        assert "next" in response.data
+        assert "previous" in response.data
 
     def test_tasks_nonexistent_agent_returns_404(self, api_client):
         response = api_client.get("/v1/agents/nonexistentid12345678/tasks/")

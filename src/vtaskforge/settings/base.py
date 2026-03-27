@@ -129,6 +129,9 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 50,
 }
 
+# Agent fleet
+AGENT_STALE_THRESHOLD_SECONDS = 300  # 5 minutes without heartbeat = stale
+
 # Celery
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL

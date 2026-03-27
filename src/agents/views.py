@@ -6,7 +6,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from core.pagination import VTFAgentCursorPagination
+from core.pagination import VTFAgentCursorPagination, VTFCursorPagination
+from tasks.models import Task
+from tasks.serializers import TaskSerializer
 
 from .models import Agent
 from .serializers import AgentSerializer
@@ -70,7 +72,14 @@ class AgentViewSet(ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def tasks(self, request, pk=None):
-        # Validates agent exists (raises 404 if not found)
-        self.get_object()
-        # Placeholder — task assignment will be populated in later tasks
-        return Response([])
+        agent = self.get_object()
+        qs = Task.objects.filter(claimed_by=agent.id).order_by("-updated_at")
+
+        task_status = request.query_params.get("status")
+        if task_status:
+            qs = qs.filter(status=task_status)
+
+        paginator = VTFCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = TaskSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
