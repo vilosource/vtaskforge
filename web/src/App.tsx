@@ -8,6 +8,8 @@ import { WorkplanDetail } from './pages/WorkplanDetail';
 import { BoardView } from './pages/BoardView';
 import { BacklogView } from './pages/BacklogView';
 import { TaskPage } from './pages/TaskPage';
+import { AgentList } from './pages/AgentList';
+import { AgentDetail } from './pages/AgentDetail';
 import { Sidebar } from './components/Sidebar';
 import Login from './pages/Login';
 
@@ -93,6 +95,8 @@ export function App() {
               <Route path="/projects/:id/workplans/:wid" element={<WorkplanDetail />} />
               <Route path="/projects/:id/workplans/:wid/milestones/:milestoneId" element={<BoardView />} />
               <Route path="/tasks/:id" element={<TaskPage />} />
+              <Route path="/agents" element={<AgentList />} />
+              <Route path="/agents/:id" element={<AgentDetail />} />
             </Route>
           </Routes>
           </ActiveProjectProvider>

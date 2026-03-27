@@ -81,6 +81,14 @@ export function Sidebar() {
           <div className="sidebar-empty">No projects</div>
         )}
       </nav>
+
+      <div className="sidebar-section-label">Fleet</div>
+      <nav className="sidebar-nav">
+        <Link to="/agents" className="sidebar-wp-item">
+          <span className="sidebar-wp-dot" style={{ background: 'var(--color-doing)' }} />
+          <span className="sidebar-wp-name">Agents</span>
+        </Link>
+      </nav>
     </aside>
   );
 }
