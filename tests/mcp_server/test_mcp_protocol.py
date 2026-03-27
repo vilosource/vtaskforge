@@ -19,10 +19,12 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 # The server script that runs in a subprocess.
+_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
+
 SERVER_SCRIPT = """
 import os, sys
+sys.path.insert(0, os.environ["_VTF_SRC_DIR"])
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vtaskforge.settings.dev")
-sys.path.insert(0, "/app/src")
 from mcp_server.server import mcp
 mcp.run(transport="stdio")
 """
@@ -32,6 +34,7 @@ def _server_params():
     """StdioServerParameters that spawn the MCP server as a subprocess."""
     env = dict(os.environ)
     env.setdefault("DJANGO_SETTINGS_MODULE", "vtaskforge.settings.dev")
+    env["_VTF_SRC_DIR"] = os.path.abspath(_SRC_DIR)
     return StdioServerParameters(
         command=sys.executable,
         args=["-c", SERVER_SCRIPT],

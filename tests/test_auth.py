@@ -21,7 +21,12 @@ class TestHealthNoAuth:
         """Health endpoint must be accessible without any credentials."""
         client = APIClient()
         response = client.get("/v1/health")
-        assert response.status_code == status.HTTP_200_OK
+        # 200 when all services up, 503 when Redis unavailable — both are valid
+        # (the point is it doesn't return 401/403)
+        assert response.status_code in (
+            status.HTTP_200_OK,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
 
 @pytest.mark.django_db

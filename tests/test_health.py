@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 import pytest
@@ -12,12 +13,12 @@ def client():
 @pytest.mark.django_db
 class TestHealthEndpoint:
     def test_health_returns_200(self, client):
-        """GET /v1/health returns 200 with both checks 'ok'."""
+        """GET /v1/health returns 200 with db ok and redis ok or skipped."""
         response = client.get("/v1/health")
         assert response.status_code == 200
         data = response.json()
         assert data["checks"]["db"] == "ok"
-        assert data["checks"]["redis"] == "ok"
+        assert data["checks"]["redis"] in ("ok", "skipped")
 
     def test_health_returns_503_when_db_down(self, client):
         """When DB connection fails, health returns 503."""
@@ -33,11 +34,14 @@ class TestHealthEndpoint:
 
     def test_health_returns_503_when_redis_down(self, client):
         """When Redis connection fails, health returns 503."""
-        with patch(
-            "redis.Redis.from_url",
-            side_effect=Exception("Redis connection refused"),
+        with patch.dict(
+            os.environ, {"CELERY_BROKER_URL": "redis://localhost:6379/0"}
         ):
-            response = client.get("/v1/health")
+            with patch(
+                "redis.Redis.from_url",
+                side_effect=Exception("Redis connection refused"),
+            ):
+                response = client.get("/v1/health")
         assert response.status_code == 503
         data = response.json()
         assert data["status"] == "unhealthy"
@@ -46,7 +50,7 @@ class TestHealthEndpoint:
     def test_health_response_format(self, client):
         """Verify JSON structure matches expected format."""
         response = client.get("/v1/health")
-        assert response.status_code == 200
+        assert response.status_code in (200, 503)
         data = response.json()
         # Top-level keys
         assert "status" in data

@@ -35,11 +35,11 @@ from mcp.client.streamable_http import streamable_http_client
 
 # This mirrors the HTTP branch of server.py's __main__ block exactly, but
 # avoids double-import by running as an inline -c script rather than -m.
-_HTTP_SERVER_SCRIPT = """
-import sys
-sys.path.insert(0, "/app/src")
+_SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "src")
 
-import os
+_HTTP_SERVER_SCRIPT = """
+import sys, os
+sys.path.insert(0, os.environ["_VTF_SRC_DIR"])
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vtaskforge.settings.dev")
 
 import django
@@ -110,6 +110,7 @@ def mcp_http_server_process():
     env = dict(os.environ)
     env["VTF_MCP_HOST"] = host
     env["VTF_MCP_PORT"] = str(port)
+    env["_VTF_SRC_DIR"] = os.path.abspath(_SRC_DIR)
     env.setdefault("DJANGO_SETTINGS_MODULE", "vtaskforge.settings.dev")
 
     proc = subprocess.Popen(

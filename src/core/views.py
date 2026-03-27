@@ -117,14 +117,15 @@ class HealthCheckView(APIView):
             checks['db'] = f'error: {e}'
             healthy = False
 
-        # Check Redis
+        # Check Redis (optional — degrades gracefully when not configured)
         try:
-            broker_url = os.environ.get(
-                'CELERY_BROKER_URL', 'redis://redis:6379/0'
-            )
-            r = redis.Redis.from_url(broker_url, socket_connect_timeout=3)
-            r.ping()
-            checks['redis'] = 'ok'
+            broker_url = os.environ.get('CELERY_BROKER_URL', '')
+            if broker_url:
+                r = redis.Redis.from_url(broker_url, socket_connect_timeout=3)
+                r.ping()
+                checks['redis'] = 'ok'
+            else:
+                checks['redis'] = 'skipped'
         except Exception as e:
             checks['redis'] = f'error: {e}'
             healthy = False
