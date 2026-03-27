@@ -38,10 +38,10 @@ def vtf_task_detail(task_id: str) -> str:
     # Limit recent_events to last 10
     recent_events = context["events"][:10]
 
-    # Filter notes from events: progress_note and completion_note types
+    # Filter notes from events: progress_note, completion_note, and note types
     notes = [
         e for e in context["events"]
-        if e["event_type"] in ("progress_note", "completion_note")
+        if e["event_type"] in ("progress_note", "completion_note", "note")
     ]
 
     # Get available state-machine transitions for this task

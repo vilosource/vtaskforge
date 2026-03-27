@@ -18,20 +18,25 @@ from tests.e2e.mcp_client import McpTestClient
 EXPECTED_TOOLS = [
     "vtf_board_overview",
     "vtf_claim_and_start",
+    "vtf_manage_milestone",
     "vtf_manage_task",
+    "vtf_manage_workplan",
     "vtf_next_work",
     "vtf_report_progress",
     "vtf_review_task",
     "vtf_search_tasks",
     "vtf_submit_work",
     "vtf_task_detail",
+    "vtf_workplan_tree",
 ]
 
 
 def test_e2e_stack_is_healthy(mcp_tools, rest_client):
-    """Verify that the MCP server exposes exactly 9 tools and the REST API responds."""
+    """Verify that the MCP server exposes all expected tools and the REST API responds."""
     # MCP server
-    assert len(mcp_tools) == 9, f"Expected 9 tools, got {len(mcp_tools)}: {mcp_tools}"
+    assert len(mcp_tools) == len(EXPECTED_TOOLS), (
+        f"Expected {len(EXPECTED_TOOLS)} tools, got {len(mcp_tools)}: {mcp_tools}"
+    )
     for name in EXPECTED_TOOLS:
         assert name in mcp_tools, f"Tool '{name}' not found in {mcp_tools}"
 

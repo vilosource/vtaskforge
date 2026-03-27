@@ -58,11 +58,11 @@ class McpTestClient:
         if self._http_client is not None:
             await self._http_client.aclose()
 
-    async def call_tool(self, name: str, **kwargs) -> dict:
+    async def call_tool(self, tool_name: str, **kwargs) -> dict:
         """Call an MCP tool and return the parsed JSON response body."""
         if self.session is None:
             raise RuntimeError("McpTestClient must be used as an async context manager")
-        result = await self.session.call_tool(name, kwargs)
+        result = await self.session.call_tool(tool_name, kwargs)
         return json.loads(result.content[0].text)
 
     async def list_tools(self) -> list[str]:

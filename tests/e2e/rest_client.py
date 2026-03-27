@@ -67,6 +67,42 @@ class RestTestClient:
         return r.json()["results"]
 
     # ------------------------------------------------------------------
+    # Workplans
+    # ------------------------------------------------------------------
+
+    def get_workplan(self, workplan_id: str) -> dict | None:
+        """Return workplan data or None if not found."""
+        r = self.client.get(f"/workplans/{workplan_id}/")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()
+
+    def list_workplans(self, **params) -> list[dict]:
+        """Return the results list from GET /workplans/."""
+        r = self.client.get("/workplans/", params=params)
+        r.raise_for_status()
+        return r.json()["results"]
+
+    # ------------------------------------------------------------------
+    # Milestones
+    # ------------------------------------------------------------------
+
+    def get_milestone(self, milestone_id: str) -> dict | None:
+        """Return milestone data or None if not found."""
+        r = self.client.get(f"/milestones/{milestone_id}/")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()
+
+    def list_milestones(self, **params) -> list[dict]:
+        """Return the results list from GET /milestones/."""
+        r = self.client.get("/milestones/", params=params)
+        r.raise_for_status()
+        return r.json()["results"]
+
+    # ------------------------------------------------------------------
     # Health
     # ------------------------------------------------------------------
 
