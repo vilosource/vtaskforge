@@ -53,9 +53,9 @@ curl http://localhost:8000/v1/health
 
 The API is at `http://localhost:8000`. Web UI at the same URL. MCP server at `http://localhost:8002`.
 
-### Using with Claude Code
+### Using with Claude Code (development & testing)
 
-vtf includes an MCP server that Claude Code can connect to. Add to `~/.claude/mcp.json`:
+vtf includes an MCP server that Claude Code can connect to for interactive task execution. This is useful for developing task specs, testing workflows, and trying out vtf locally. Add to `~/.claude/mcp.json`:
 
 ```json
 {
@@ -68,6 +68,8 @@ vtf includes an MCP server that Claude Code can connect to. Add to `~/.claude/mc
 Then in Claude Code: "Find the next task from vtf and implement it." Claude Code will claim a task, read the spec, implement the code, run tests, and submit the result.
 
 See [docs/guides/local-quickstart-GUIDE.md](docs/guides/local-quickstart-GUIDE.md) for a full walkthrough covering project setup, task creation, and execution with Claude Code.
+
+For **autonomous, unattended execution** (agents running as long-lived pods in Kubernetes), see [vafi](https://github.com/vilosource/vafi) — the agent fleet infrastructure that deploys executor and judge agents against a vtf instance.
 
 ## CLI (`vtf`)
 
