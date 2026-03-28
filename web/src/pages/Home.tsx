@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueries } from '@tanstack/react-query';
 import { useAuth } from '../App';
-import { useProjects, useProjectStats, useProjectWorkplans, type Project, type ProjectStats, type ProjectWorkplan } from '../api/projects';
+import { useProjects, type ProjectStats, type ProjectWorkplan } from '../api/projects';
 import { useAgents, type Agent } from '../api/agents';
+import { apiGet, apiGetPaginated } from '../api/client';
 
 /* ---------- helpers ---------- */
 
@@ -13,7 +15,6 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-/** Skeleton pulse block */
 function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse bg-surface-container-high rounded ${className ?? ''}`} />;
 }
@@ -21,21 +22,10 @@ function Skeleton({ className }: { className?: string }) {
 /* ---------- sub-components ---------- */
 
 function StatCard({
-  icon,
-  iconColor,
-  iconBg,
-  value,
-  label,
-  valueColor,
-  badge,
+  icon, iconColor, iconBg, value, label, valueColor, badge,
 }: {
-  icon: string;
-  iconColor: string;
-  iconBg: string;
-  value: string | number;
-  label: string;
-  valueColor?: string;
-  badge?: React.ReactNode;
+  icon: string; iconColor: string; iconBg: string;
+  value: string | number; label: string; valueColor?: string; badge?: React.ReactNode;
 }) {
   return (
     <div className="bg-surface-container-lowest p-6 rounded-xl shadow-[0_12px_40px_rgba(25,28,30,0.04)] transition-transform hover:-translate-y-1">
@@ -50,19 +40,10 @@ function StatCard({
 }
 
 function NeedsAttentionRow({
-  icon,
-  iconBg,
-  iconColor,
-  title,
-  meta,
-  linkTo,
+  icon, iconBg, iconColor, title, meta, linkTo,
 }: {
-  icon: string;
-  iconBg: string;
-  iconColor: string;
-  title: string;
-  meta: React.ReactNode;
-  linkTo?: string;
+  icon: string; iconBg: string; iconColor: string;
+  title: string; meta: React.ReactNode; linkTo?: string;
 }) {
   const inner = (
     <div className="px-8 py-4 flex items-center gap-4 hover:bg-surface-container-low/40 transition-colors cursor-pointer">
@@ -75,21 +56,13 @@ function NeedsAttentionRow({
       </div>
     </div>
   );
-
-  if (linkTo) {
-    return <Link to={linkTo} className="block">{inner}</Link>;
-  }
-  return inner;
+  return linkTo ? <Link to={linkTo} className="block">{inner}</Link> : inner;
 }
 
 function WorkplanCard({
-  workplan,
-  projectName,
-  projectId,
+  workplan, projectName, projectId,
 }: {
-  workplan: ProjectWorkplan;
-  projectName: string;
-  projectId: string;
+  workplan: ProjectWorkplan; projectName: string; projectId: string;
 }) {
   const pct = workplan.completed_percentage ?? 0;
   const done = workplan.total_tasks > 0 ? Math.round((pct / 100) * workplan.total_tasks) : 0;
@@ -121,58 +94,6 @@ function WorkplanCard({
   );
 }
 
-/* ---------- data hooks ---------- */
-
-/** Aggregate stats from all project stats queries */
-function useFleetStats(projects: Project[]) {
-  const statsQueries = projects.map((p) => useProjectStats(p.id));
-  const allLoaded = statsQueries.every((q) => !q.isLoading);
-  const allStats = statsQueries
-    .map((q) => q.data)
-    .filter((s): s is ProjectStats => !!s);
-
-  const totalTasks = allStats.reduce((sum, s) => sum + s.total_tasks, 0);
-  const completedTasks = allStats.reduce((sum, s) => {
-    const done = s.by_status?.['done'] ?? 0;
-    return sum + done;
-  }, 0);
-  const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-  // Collect attention items from by_status across all projects
-  const attentionStatuses = ['blocked', 'needs_attention', 'pending_completion_review', 'pending_start_review'];
-  const attentionTasks = allStats.flatMap((s) =>
-    attentionStatuses
-      .filter((status) => (s.by_status?.[status] ?? 0) > 0)
-      .map((status) => ({
-        projectId: s.project_id,
-        status,
-        count: s.by_status[status],
-      })),
-  );
-
-  return { totalTasks, completedTasks, overallProgress, attentionTasks, allLoaded, allStats };
-}
-
-/** Collect active workplans across all projects */
-function useActiveWorkplans(projects: Project[]) {
-  const workplanQueries = projects.map((p) => ({
-    projectId: p.id,
-    projectName: p.name,
-    query: useProjectWorkplans(p.id),
-  }));
-
-  const allLoaded = workplanQueries.every((wq) => !wq.query.isLoading);
-
-  const activeWorkplans = workplanQueries.flatMap((wq) => {
-    const workplans = wq.query.data ?? [];
-    return workplans
-      .filter((w) => w.status === 'active')
-      .map((w) => ({ ...w, projectId: wq.projectId, projectName: wq.projectName }));
-  });
-
-  return { activeWorkplans, allLoaded };
-}
-
 /* ---------- main component ---------- */
 
 export function Home() {
@@ -183,19 +104,57 @@ export function Home() {
   const projects = projectData?.results ?? [];
   const agents = agentData?.results ?? [];
 
-  const { totalTasks, completedTasks, overallProgress, attentionTasks, allLoaded: statsLoaded } = useFleetStats(projects);
-  const { activeWorkplans, allLoaded: workplansLoaded } = useActiveWorkplans(projects);
+  // Fetch stats for all projects using useQueries (safe with dynamic count)
+  const statsQueries = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: ['project-stats', p.id],
+      queryFn: () => apiGet<ProjectStats>(`/v1/projects/${p.id}/stats/`),
+    })),
+  });
+  const statsLoaded = !projectsLoading && statsQueries.every((q) => !q.isLoading);
+  const allStats = statsQueries.map((q) => q.data).filter((s): s is ProjectStats => !!s);
+
+  // Fetch workplans for all projects using useQueries
+  const workplanQueries = useQueries({
+    queries: projects.map((p) => ({
+      queryKey: ['project-workplans', p.id],
+      queryFn: () => apiGetPaginated<ProjectWorkplan>(`/v1/projects/${p.id}/workplans/`),
+    })),
+  });
+  const workplansLoaded = !projectsLoading && workplanQueries.every((q) => !q.isLoading);
+
+  // Aggregate stats
+  const totalTasks = allStats.reduce((sum, s) => sum + s.total_tasks, 0);
+  const completedTasks = allStats.reduce((sum, s) => sum + (s.by_status?.['done'] ?? 0), 0);
+  const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Attention items from stats
+  const attentionStatuses = ['blocked', 'needs_attention', 'pending_completion_review', 'pending_start_review'];
+  const attentionTasks = allStats.flatMap((s) =>
+    attentionStatuses
+      .filter((status) => (s.by_status?.[status] ?? 0) > 0)
+      .map((status) => ({ projectId: s.project_id, status, count: s.by_status[status] })),
+  );
+
+  // Active workplans across projects
+  const activeWorkplans = useMemo(() =>
+    workplanQueries.flatMap((wq, i) => {
+      const wps = wq.data ?? [];
+      return wps
+        .filter((w) => w.status === 'active')
+        .map((w) => ({ ...w, projectId: projects[i]?.id ?? '', projectName: projects[i]?.name ?? '' }));
+    }),
+    [workplanQueries, projects],
+  );
 
   const onlineAgents = useMemo(
     () => agents.filter((a: Agent) => a.effective_status === 'online' || a.effective_status === 'busy'),
     [agents],
   );
-
   const problemAgents = useMemo(
     () => agents.filter((a: Agent) => a.effective_status === 'stale' || a.effective_status === 'offline'),
     [agents],
   );
-
   const projectNameById = useMemo(() => {
     const map: Record<string, string> = {};
     projects.forEach((p) => { map[p.id] = p.name; });
@@ -205,7 +164,6 @@ export function Home() {
   const greeting = getGreeting();
   const displayName = username || 'there';
   const isLoading = projectsLoading || agentsLoading;
-
   const attentionCount = attentionTasks.reduce((sum, a) => sum + a.count, 0) + problemAgents.length;
 
   return (
@@ -218,7 +176,7 @@ export function Home() {
         <h1 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight">
           Welcome back, {displayName}
         </h1>
-        <p className="text-on-surface-variant mt-2">Here's what's happening across your fleet today.</p>
+        <p className="text-on-surface-variant mt-2">Here&apos;s what&apos;s happening across your fleet today.</p>
       </div>
 
       {/* Fleet-wide stats */}
@@ -234,57 +192,25 @@ export function Home() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-12">
+          <StatCard icon="folder_open" iconColor="text-primary" iconBg="bg-primary-fixed" value={projects.length} label="Projects" />
+          <StatCard icon="task_alt" iconColor="text-blue-600" iconBg="bg-blue-100" value={statsLoaded ? totalTasks : '...'} label="Total Tasks" />
+          <StatCard icon="check_circle" iconColor="text-tertiary" iconBg="bg-tertiary-container" value={statsLoaded ? completedTasks : '...'} label="Completed" valueColor="text-tertiary" />
           <StatCard
-            icon="folder_open"
-            iconColor="text-primary"
-            iconBg="bg-primary-fixed"
-            value={projects.length}
-            label="Projects"
+            icon="smart_toy" iconColor="text-secondary" iconBg="bg-secondary-fixed"
+            value={onlineAgents.length} label="Agents Online"
+            badge={onlineAgents.length > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-[999px] bg-tertiary animate-pulse" />
+                <span className="text-[10px] font-bold text-tertiary uppercase">Live</span>
+              </div>
+            ) : undefined}
           />
-          <StatCard
-            icon="task_alt"
-            iconColor="text-blue-600"
-            iconBg="bg-blue-100"
-            value={statsLoaded ? totalTasks : '...'}
-            label="Total Tasks"
-          />
-          <StatCard
-            icon="check_circle"
-            iconColor="text-tertiary"
-            iconBg="bg-tertiary-container"
-            value={statsLoaded ? completedTasks : '...'}
-            label="Completed"
-            valueColor="text-tertiary"
-          />
-          <StatCard
-            icon="smart_toy"
-            iconColor="text-secondary"
-            iconBg="bg-secondary-fixed"
-            value={onlineAgents.length}
-            label="Agents Online"
-            badge={
-              onlineAgents.length > 0 ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[999px] bg-tertiary animate-pulse" />
-                  <span className="text-[10px] font-bold text-tertiary uppercase">Live</span>
-                </div>
-              ) : undefined
-            }
-          />
-          <StatCard
-            icon="trending_up"
-            iconColor="text-primary"
-            iconBg="bg-primary-fixed"
-            value={statsLoaded ? `${overallProgress}%` : '...'}
-            label="Overall Progress"
-            valueColor="text-primary"
-          />
+          <StatCard icon="trending_up" iconColor="text-primary" iconBg="bg-primary-fixed" value={statsLoaded ? `${overallProgress}%` : '...'} label="Overall Progress" valueColor="text-primary" />
         </div>
       )}
 
-      {/* Two-column layout: Needs Attention + Recent Activity */}
+      {/* Needs Attention + Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-        {/* Needs Attention */}
         <div className="lg:col-span-2 bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(25,28,30,0.04)] overflow-hidden">
           <div className="px-8 py-5 flex items-center justify-between border-b border-outline-variant/20">
             <div className="flex items-center gap-3">
@@ -303,10 +229,7 @@ export function Home() {
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="flex items-center gap-4">
                     <Skeleton className="w-10 h-10 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="w-3/4 h-4" />
-                      <Skeleton className="w-1/2 h-3" />
-                    </div>
+                    <div className="flex-1 space-y-2"><Skeleton className="w-3/4 h-4" /><Skeleton className="w-1/2 h-3" /></div>
                   </div>
                 ))}
               </div>
@@ -317,69 +240,39 @@ export function Home() {
               </div>
             ) : (
               <>
-                {/* Blocked / needs_attention tasks from project stats */}
                 {attentionTasks.map((item) => {
                   const statusLabel =
                     item.status === 'blocked' ? 'Blocked' :
                     item.status === 'needs_attention' ? 'Needs attention' :
                     item.status === 'pending_completion_review' ? 'Pending review' :
-                    item.status === 'pending_start_review' ? 'Pending start review' :
-                    item.status;
+                    'Pending start review';
                   const isError = item.status === 'blocked' || item.status === 'needs_attention';
-                  const icon = isError ? 'block' : 'rate_review';
-                  const iconBg = isError ? 'bg-error-container' : 'bg-yellow-100';
-                  const iconColor = isError ? 'text-error' : 'text-yellow-700';
-                  const labelColor = isError ? 'text-error' : 'text-yellow-700';
-
                   return (
                     <NeedsAttentionRow
                       key={`${item.projectId}-${item.status}`}
-                      icon={icon}
-                      iconBg={iconBg}
-                      iconColor={iconColor}
+                      icon={isError ? 'block' : 'rate_review'}
+                      iconBg={isError ? 'bg-error-container' : 'bg-yellow-100'}
+                      iconColor={isError ? 'text-error' : 'text-yellow-700'}
                       title={`${item.count} ${statusLabel.toLowerCase()} task${item.count !== 1 ? 's' : ''}`}
                       linkTo={`/projects/${item.projectId}`}
-                      meta={
-                        <>
-                          <span className={`font-bold ${labelColor}`}>{statusLabel}</span>
-                          {' '}&middot; {projectNameById[item.projectId] ?? 'Unknown project'}
-                        </>
-                      }
+                      meta={<><span className={`font-bold ${isError ? 'text-error' : 'text-yellow-700'}`}>{statusLabel}</span> &middot; {projectNameById[item.projectId] ?? 'Unknown project'}</>}
                     />
                   );
                 })}
-
-                {/* Problem agents */}
-                {problemAgents.map((agent) => {
-                  const lastBeat = agent.last_heartbeat
-                    ? new Date(agent.last_heartbeat).toLocaleDateString()
-                    : 'Never';
-                  return (
-                    <NeedsAttentionRow
-                      key={agent.id}
-                      icon="sensors_off"
-                      iconBg="bg-error-container"
-                      iconColor="text-error"
-                      title={`${agent.name} is ${agent.effective_status}`}
-                      linkTo={`/agents/${agent.id}`}
-                      meta={
-                        <>
-                          <span className="font-bold text-error">Last heartbeat: {lastBeat}</span>
-                          {agent.current_task
-                            ? <> &middot; Running: {agent.current_task.title}</>
-                            : <> &middot; No tasks running</>
-                          }
-                        </>
-                      }
-                    />
-                  );
-                })}
+                {problemAgents.map((agent) => (
+                  <NeedsAttentionRow
+                    key={agent.id}
+                    icon="sensors_off" iconBg="bg-error-container" iconColor="text-error"
+                    title={`${agent.name} is ${agent.effective_status}`}
+                    linkTo={`/agents/${agent.id}`}
+                    meta={<><span className="font-bold text-error">Last heartbeat: {agent.last_heartbeat ? new Date(agent.last_heartbeat).toLocaleDateString() : 'Never'}</span> &middot; {agent.current_task ? `Running: ${agent.current_task.title}` : 'No tasks running'}</>}
+                  />
+                ))}
               </>
             )}
           </div>
         </div>
 
-        {/* Recent Activity */}
         <div className="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(25,28,30,0.04)] overflow-hidden">
           <div className="px-6 py-5 flex items-center justify-between border-b border-outline-variant/20">
             <h2 className="text-lg font-headline font-bold text-on-surface">Recent Activity</h2>
@@ -402,10 +295,7 @@ export function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="bg-surface-container-lowest p-6 rounded-xl shadow-[0_12px_40px_rgba(25,28,30,0.04)]">
-                <Skeleton className="w-24 h-4 mb-3" />
-                <Skeleton className="w-3/4 h-5 mb-2" />
-                <Skeleton className="w-full h-3 mb-4" />
-                <Skeleton className="w-full h-1.5 mb-2" />
+                <Skeleton className="w-24 h-4 mb-3" /><Skeleton className="w-3/4 h-5 mb-2" /><Skeleton className="w-full h-3 mb-4" /><Skeleton className="w-full h-1.5 mb-2" />
               </div>
             ))}
           </div>
@@ -417,12 +307,7 @@ export function Home() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {activeWorkplans.map((wp) => (
-              <WorkplanCard
-                key={wp.id}
-                workplan={wp}
-                projectName={wp.projectName}
-                projectId={wp.projectId}
-              />
+              <WorkplanCard key={wp.id} workplan={wp} projectName={wp.projectName} projectId={wp.projectId} />
             ))}
           </div>
         )}
