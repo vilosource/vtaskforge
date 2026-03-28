@@ -244,6 +244,30 @@ class TestMilestoneActivate:
         response = api_client.post(f"/v1/milestones/{completed_milestone.id}/activate/")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_activate_skips_to_completed_when_all_tasks_terminal(self, api_client, workplan):
+        """Activating a milestone where all tasks are done goes straight to completed."""
+        ms = MilestoneFactory(name="All Done", workplan=workplan, status="pending")
+        TaskFactory(title="T1", milestone=ms, workplan=workplan, status="done")
+        TaskFactory(title="T2", milestone=ms, workplan=workplan, status="cancelled")
+        response = api_client.post(f"/v1/milestones/{ms.id}/activate/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "completed"
+
+    def test_activate_goes_to_active_when_tasks_remain(self, api_client, workplan):
+        ms = MilestoneFactory(name="Has Work", workplan=workplan, status="pending")
+        TaskFactory(title="T1", milestone=ms, workplan=workplan, status="done")
+        TaskFactory(title="T2", milestone=ms, workplan=workplan, status="draft")
+        response = api_client.post(f"/v1/milestones/{ms.id}/activate/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "active"
+
+    def test_activate_empty_milestone_goes_to_active(self, api_client, workplan):
+        """Empty milestone (no tasks) activates normally."""
+        ms = MilestoneFactory(name="Empty", workplan=workplan, status="pending")
+        response = api_client.post(f"/v1/milestones/{ms.id}/activate/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "active"
+
 
 @pytest.mark.django_db
 class TestMilestoneComplete:

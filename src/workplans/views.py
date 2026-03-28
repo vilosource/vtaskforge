@@ -144,7 +144,12 @@ class MilestoneViewSet(ModelViewSet):
                 {"detail": "Only pending milestones can be activated."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        milestone.status = "active"
+        # If all tasks are already terminal, skip to completed
+        from tasks.state_machine import TERMINAL_STATUSES
+        if milestone.tasks.exists() and not milestone.tasks.exclude(status__in=TERMINAL_STATUSES).exists():
+            milestone.status = "completed"
+        else:
+            milestone.status = "active"
         milestone.save()
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)

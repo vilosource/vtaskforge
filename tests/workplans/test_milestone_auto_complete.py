@@ -92,15 +92,16 @@ class TestMaybeCompleteMilestoneNonTerminalRemain:
 
 @pytest.mark.django_db
 class TestMaybeCompleteMilestoneGuards:
-    def test_pending_milestone_not_completed(self, workplan):
+    def test_pending_milestone_completed_when_all_tasks_terminal(self, workplan):
+        """Pending milestones auto-complete when all tasks are terminal."""
         pending_milestone = MilestoneFactory(
             name="Pending Milestone", workplan=workplan, status="pending"
         )
         make_task(pending_milestone, "done")
         result = maybe_complete_milestone(pending_milestone.tasks.first())
         pending_milestone.refresh_from_db()
-        assert pending_milestone.status == "pending"
-        assert result is None
+        assert pending_milestone.status == "completed"
+        assert result == pending_milestone
 
     def test_already_completed_milestone_is_noop(self, workplan):
         completed_milestone = MilestoneFactory(
