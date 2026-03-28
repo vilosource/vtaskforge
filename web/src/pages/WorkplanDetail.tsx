@@ -11,6 +11,7 @@ import { MilestonePipeline } from '../components/MilestonePipeline';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 import { TaskDetail } from '../components/TaskDetail';
+import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 
 function MilestoneCard({ milestone, projectId, workplanId }: { milestone: { id: string; name: string; description: string; status: string }; projectId: string; workplanId: string }) {
   const { data: stats } = useMilestoneStats(milestone.id);
@@ -115,20 +116,6 @@ function MilestoneGroup({ title, milestones, projectId, workplanId, defaultColla
   );
 }
 
-const STATUS_BADGE_COLORS: Record<string, string> = {
-  draft: 'badge-draft',
-  pending_start_review: 'badge-review',
-  pending_completion_review: 'badge-review',
-  todo: 'badge-ready',
-  doing: 'badge-in-progress',
-  changes_requested: 'badge-attention',
-  needs_attention: 'badge-attention',
-  blocked: 'badge-attention',
-  done: 'badge-done',
-  deferred: 'badge-deferred',
-  cancelled: 'badge-cancelled',
-};
-
 function UnassignedTasksSection({
   tasks,
   onTaskClick,
@@ -156,37 +143,13 @@ function UnassignedTasksSection({
         <span className="milestone-group-count">{tasks.length}</span>
       </button>
       {!collapsed && (
-        <div className="unassigned-tasks-list">
-          {tasks.map((task) => (
-            <div
-              key={task.id}
-              className="unassigned-task-row"
-              onClick={() => onTaskClick(task)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onTaskClick(task);
-                }
-              }}
-            >
-              <span className="unassigned-task-title">{task.title}</span>
-              <div className="unassigned-task-meta">
-                <span className={`badge ${STATUS_BADGE_COLORS[task.status] ?? ''}`}>
-                  {task.status}
-                </span>
-                {task.labels && task.labels.length > 0 && (
-                  <div className="unassigned-task-labels">
-                    {task.labels.map((label) => (
-                      <span key={label} className="task-list-label">{label}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <TaskListTable
+          tasks={tasks}
+          columns={BACKLOG_COLUMNS}
+          onTaskClick={onTaskClick}
+          pageSize={10}
+          emptyMessage="No unassigned tasks"
+        />
       )}
     </div>
   );
