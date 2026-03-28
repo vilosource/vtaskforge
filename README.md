@@ -1,19 +1,20 @@
 # vtaskforge
 
-A distributed task execution system for LLM agents. Agents claim tasks from a pool, execute them, and report results. The system manages the full lifecycle — from draft through review, execution, and completion — with structured specs so any agent can pick up any task cold.
+A task execution platform for AI agents. Agents claim tasks from a board, execute them, and report results. The system manages the full lifecycle — from draft through review, execution, and completion — with structured specs so any agent can pick up any task cold.
 
 ## How it works
 
 ```
-Workplan → Phases → Tasks → Agents claim and execute
+Project → Workplan → Milestones → Tasks → Agents claim and execute
 ```
 
+- **Projects** contain workplans and link to a source repository
 - **Workplans** group related work (e.g., "Auth system rewrite")
-- **Phases** are ordered stages within a workplan
+- **Milestones** are ordered stages within a workplan — tasks can only be worked when the milestone is active
 - **Tasks** are self-contained agent work packets with full implementation specs
-- **Agents** claim tasks, execute them, and report results
+- **Agents** (executor and judge) claim tasks, execute them, and report results autonomously
 
-Tasks carry everything an agent needs: description, acceptance criteria, implementation approach, file lists, constraints, references, and test commands. No filesystem access or prior context required.
+Tasks carry everything an agent needs: description, acceptance criteria, implementation approach, file lists, constraints, references, and test commands.
 
 ## Architecture
 
@@ -22,8 +23,21 @@ Tasks carry everything an agent needs: description, acceptance criteria, impleme
 | API Server | Django 5.1 + DRF | REST API, task state machine, SSE events |
 | Database | PostgreSQL 16 | Central store, atomic claims |
 | Background | Celery + Redis | Claim expiry, periodic tasks |
-| Web UI | React 18 + TypeScript | Kanban board, task detail, pipeline view |
+| Web UI | React 18 + TypeScript | Kanban board, task detail, agent fleet view |
+| MCP Server | FastMCP | Tool interface for Claude Code agents |
 | CLI | Python (Click) | `vtf` command-line tool |
+
+## Task lifecycle
+
+```
+draft → todo → doing → pending_completion_review → done
+                 ↑                    ↓
+                 └── changes_requested ←
+```
+
+- **Milestone enforcement**: tasks can only be submitted when their milestone is active
+- **Review gate**: tasks with `needs_review_on_completion` go to `pending_completion_review` for judge verification
+- **Rework flow**: judge rejects → `changes_requested` → any executor reclaims and fixes based on feedback
 
 ## Quick start
 
@@ -64,35 +78,37 @@ vtf task fail <id>                         # Mark failed → needs_attention
 
 ## Web UI
 
-The React SPA provides a Kanban board, full-page task detail view with parsed spec rendering, and a pipeline visualization.
+The React SPA provides a Kanban board, full-page task detail view with parsed spec rendering, agent fleet overview, and execution trace links (via CXDB integration).
 
 ```bash
 cd web && npm install && npm run dev    # Development (port 3000, proxies API)
 ```
 
-Or use the dogfood stack (built image, production settings):
+## Deployment
+
+vtf deploys via Helm chart at `charts/vtf/`. Environment-specific values and release scripts live in a separate deploy repo.
 
 ```bash
-docker compose -f docker-compose.dogfood.yml up -d    # Port 8001
+helm upgrade --install vtf charts/vtf/ -n vtf-dev -f values.yaml
 ```
 
 ## Running tests
 
 ```bash
-# Backend (Django + DRF)
-docker compose exec api pytest                    # All tests
-docker compose exec api pytest tests/tasks/       # Specific app
+# Backend (1105+ tests)
+pytest tests/                              # All tests
+pytest tests/tasks/                        # Specific app
 
-# Frontend (React)
-cd web && npx vitest run                          # All frontend tests
+# Frontend (122+ tests)
+cd web && npx vitest run                   # All frontend tests
 
 # CLI
-cd cli && pytest tests/                           # CLI tests
+cd cli && pytest tests/                    # CLI tests
 ```
 
 ## Task specs
 
-Tasks store their full implementation contract in the `spec` field — a YAML document containing:
+Tasks store their full implementation contract in the `spec` field — a YAML document:
 
 ```yaml
 description: |
@@ -101,11 +117,10 @@ description: |
 files:
   create: [new_file.py]
   modify: [existing_file.py]
-  affected: [related_file.py]
 
 implementation:
   approach: |
-    Step-by-step instructions with code examples.
+    Step-by-step instructions.
   constraints:
     - Hard rules the implementation must follow
   references:
@@ -118,7 +133,9 @@ test_command:
   unit: "pytest tests/specific_test.py"
 ```
 
-Agents read the spec from the API (`vtf task show <id> --json`) and have everything they need to execute.
+## Integration with vafi
+
+[vafi](https://github.com/vilosource/vafi) (Viloforge Agentic Fleet Infrastructure) deploys autonomous executor and judge agents that work against the vtf API. Agents pull tasks, execute them via Claude Code CLI, and report results. Execution traces are captured in CXDB and linked back to tasks via the `?expand=traces` API.
 
 ## Documentation
 
@@ -127,22 +144,11 @@ Agents read the spec from the API (`vtf task show <id> --json`) and have everyth
 | [docs/design/vtaskforge-DESIGN.md](docs/design/vtaskforge-DESIGN.md) | Core design: concepts, entity shapes, decisions |
 | [docs/design/api-surface-DESIGN.md](docs/design/api-surface-DESIGN.md) | REST API endpoints, SSE events, error model |
 | [docs/design/actor-model-DESIGN.md](docs/design/actor-model-DESIGN.md) | Agent roles, interaction patterns |
+| [docs/e2e-testing-STRATEGY.md](docs/e2e-testing-STRATEGY.md) | E2E testing strategy: local and post-deploy |
 | [docs/guides/quickstart-GUIDE.md](docs/guides/quickstart-GUIDE.md) | Zero to running in 5 minutes |
 | [docs/guides/phase-process-GUIDE.md](docs/guides/phase-process-GUIDE.md) | How to plan and execute phases |
 | [docs/guides/task-breakdown-GUIDE.md](docs/guides/task-breakdown-GUIDE.md) | Decomposing work into agent tasks |
-| [WORKPLAN.md](WORKPLAN.md) | Phase index and status |
-
-## Claude Code agents
-
-Four agents automate the development workflow:
-
-| Agent | Role |
-|-------|------|
-| `vtf-supervisor` | Orchestrates phase execution, dispatches executors, runs verification gates |
-| `vtf-executor` | Implements a single task from its spec, runs tests, commits |
-| `vtf-judge` | Reviews code changes for design compliance and architectural issues |
-| `vtf-blackbox-tester` | End-to-end API testing via HTTP requests only |
 
 ## License
 
-Private — not yet open source.
+MIT
