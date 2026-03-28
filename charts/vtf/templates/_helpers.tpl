@@ -119,4 +119,12 @@ Common environment variables shared by api, mcp, celery, celery-beat, and migrat
     secretKeyRef:
       name: {{ include "vtf.secretName" . }}
       key: SECRET_KEY
+{{- if .Values.cxdb.baseUrl }}
+- name: CXDB_BASE_URL
+  value: {{ .Values.cxdb.baseUrl | quote }}
+{{- end }}
+{{- if .Values.cxdb.webUrl }}
+- name: CXDB_WEB_URL
+  value: {{ .Values.cxdb.webUrl | quote }}
+{{- end }}
 {{- end }}

@@ -138,6 +138,14 @@ broker:
   celeryBrokerUrl: ""
 
 # ---------------------------------------------------------------------------
+# CXDB — execution trace store (read-only consumer)
+# Leave empty to use in-cluster default (cxdb-server.vafi-agents.svc.cluster.local).
+# ---------------------------------------------------------------------------
+cxdb:
+  baseUrl: ""
+  webUrl: ""
+
+# ---------------------------------------------------------------------------
 # Django settings
 # ---------------------------------------------------------------------------
 django:

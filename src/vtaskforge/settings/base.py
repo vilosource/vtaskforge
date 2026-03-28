@@ -145,3 +145,9 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': timedelta(seconds=60),
     },
 }
+
+# CXDB — execution trace store (read-only consumer)
+CXDB_BASE_URL = os.environ.get('CXDB_BASE_URL', 'http://cxdb-server.vafi-agents.svc.cluster.local')
+CXDB_WEB_URL = os.environ.get('CXDB_WEB_URL', CXDB_BASE_URL)
+CXDB_TIMEOUT_CONNECT = float(os.environ.get('CXDB_TIMEOUT_CONNECT', '3.0'))
+CXDB_TIMEOUT_READ = float(os.environ.get('CXDB_TIMEOUT_READ', '5.0'))

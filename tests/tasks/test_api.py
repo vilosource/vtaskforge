@@ -455,6 +455,29 @@ class TestTaskDetailExpand:
         assert response.data["reviews"] == []
         assert response.data["events"] == []
 
+    @pytest.mark.parametrize("mock_return,expected", [
+        ([{"context_id": 3, "title": "trace", "web_url": "https://cxdb/c/3"}], 1),
+        ([], 0),
+    ])
+    def test_expand_traces_returns_cxdb_data(self, api_client, task, mock_return, expected):
+        with pytest.importorskip("unittest.mock").patch("tasks.cxdb.fetch_traces", return_value=mock_return):
+            response = api_client.get(f"/v1/tasks/{task.id}/?expand=traces")
+        assert response.status_code == status.HTTP_200_OK
+        assert isinstance(response.data["traces"], list)
+        assert len(response.data["traces"]) == expected
+
+    def test_expand_traces_null_on_cxdb_failure(self, api_client, task):
+        from unittest.mock import patch
+        with patch("tasks.cxdb.fetch_traces", return_value=None):
+            response = api_client.get(f"/v1/tasks/{task.id}/?expand=traces")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["traces"] is None
+
+    def test_traces_not_in_response_without_expand(self, api_client, task):
+        response = api_client.get(f"/v1/tasks/{task.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        assert "traces" not in response.data
+
 
 # ---------------------------------------------------------------------------
 # Multi-status filter: ?status=doing,blocked

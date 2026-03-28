@@ -200,6 +200,58 @@ export function TaskPage() {
             </dl>
           </div>
 
+          {/* Execution Traces */}
+          {task.traces && (
+            <div style={{
+              background: '#fafafa',
+              border: '1px solid #e0e0e0',
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+            }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: 13, color: '#666' }}>Execution Traces</h4>
+              {task.traces.length === 0 ? (
+                <p style={{ color: '#999', fontSize: 13, margin: 0 }}>No traces recorded</p>
+              ) : (
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                  {task.traces.map((trace, i) => (
+                    <li key={trace.context_id} style={{
+                      padding: '6px 0',
+                      borderBottom: i < task.traces!.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      fontSize: 13,
+                    }}>
+                      <a
+                        href={trace.web_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#1976d2', textDecoration: 'none' }}
+                      >
+                        {trace.title || `Attempt ${i + 1}`}
+                      </a>
+                      <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                        {trace.is_live && (
+                          <span style={{
+                            display: 'inline-block',
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            background: '#4caf50',
+                            marginRight: 4,
+                            verticalAlign: 'middle',
+                          }} />
+                        )}
+                        {trace.head_depth} turns
+                        {trace.created_at_unix_ms > 0 && (
+                          <> &middot; {new Date(trace.created_at_unix_ms).toLocaleDateString()}</>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           {/* Actions */}
           <div style={{
             background: '#fafafa',

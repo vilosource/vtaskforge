@@ -49,6 +49,15 @@ export interface TaskNote {
   created_at: string;
 }
 
+export interface CxdbTrace {
+  context_id: number;
+  title: string;
+  is_live: boolean;
+  head_depth: number;
+  created_at_unix_ms: number;
+  web_url: string;
+}
+
 export interface TaskLink {
   id: string;
   source_type: string;
@@ -74,6 +83,7 @@ export interface TaskDetail extends Omit<Task, 'notes'> {
   links: TaskLink[];
   reviews: TaskReview[];
   events: TaskEvent[];
+  traces: CxdbTrace[] | null;
   notes: TaskNote[];
 }
 
@@ -114,7 +124,7 @@ export function useTaskDetail(taskId: string | null) {
   return useQuery({
     queryKey: ['task', taskId],
     queryFn: () =>
-      apiGet<TaskDetail>(`/v1/tasks/${taskId}/?expand=links,reviews,events`),
+      apiGet<TaskDetail>(`/v1/tasks/${taskId}/?expand=links,reviews,events,traces`),
     enabled: !!taskId,
   });
 }

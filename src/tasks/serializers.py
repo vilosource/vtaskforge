@@ -93,9 +93,10 @@ class TaskDetailSerializer(TaskSerializer):
     links = serializers.SerializerMethodField()
     reviews = serializers.SerializerMethodField()
     events = serializers.SerializerMethodField()
+    traces = serializers.SerializerMethodField()
 
     class Meta(TaskSerializer.Meta):
-        fields = TaskSerializer.Meta.fields + ["links", "reviews", "events"]
+        fields = TaskSerializer.Meta.fields + ["links", "reviews", "events", "traces"]
 
     def _expand_requested(self, field_name):
         expand = self.context.get("expand", [])
@@ -120,3 +121,9 @@ class TaskDetailSerializer(TaskSerializer):
             return None
         from events.serializers import TaskEventSerializer
         return TaskEventSerializer(obj.events.all(), many=True).data
+
+    def get_traces(self, obj):
+        if not self._expand_requested("traces"):
+            return None
+        from tasks.cxdb import fetch_traces
+        return fetch_traces(obj.id)
