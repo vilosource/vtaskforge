@@ -1,42 +1,48 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useProjects, useProjectStats, type Project } from '../api/projects';
-import { useActiveProject } from '../contexts/ActiveProjectContext';
+import { Link, useLocation } from 'react-router-dom';
 
-function ProjectItem({ project, isActive }: { project: Project; isActive: boolean }) {
-  const { data: stats } = useProjectStats(project.id);
-  const pct = stats?.completed_percentage ?? 0;
+interface NavItem {
+  to: string;
+  icon: string;
+  label: string;
+  /** If true, only exact path match counts as active. Otherwise prefix match. */
+  exact?: boolean;
+}
 
-  const statusDotColor =
-    project.status === 'completed' ? 'bg-tertiary' :
-    project.status === 'active' ? 'bg-primary' :
-    'bg-outline';
+const NAV_ITEMS: NavItem[] = [
+  { to: '/', icon: 'dashboard', label: 'Home', exact: true },
+  { to: '/projects', icon: 'folder_open', label: 'Projects' },
+  { to: '/agents', icon: 'smart_toy', label: 'Agents' },
+];
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const isActive = item.exact
+    ? pathname === item.to
+    : pathname === item.to || pathname.startsWith(item.to + '/');
 
   return (
     <Link
-      to={`/projects/${project.id}`}
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm font-medium
+      to={item.to}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm
         ${isActive
           ? 'text-blue-600 font-bold bg-white shadow-sm'
-          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'
+          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 font-medium'
         }`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDotColor}`} />
-      <span className="truncate flex-1 min-w-0">{project.name}</span>
-      {stats && stats.total_tasks > 0 && (
-        <span className={`text-[10px] font-bold flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-on-surface-variant'}`}>
-          {pct}%
-        </span>
-      )}
+      <span
+        className="material-symbols-outlined"
+        style={isActive ? { fontVariationSettings: "'FILL' 1" } : undefined}
+      >
+        {item.icon}
+      </span>
+      <span>{item.label}</span>
     </Link>
   );
 }
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const activeProjectId = useActiveProject();
-  const { data } = useProjects();
-  const projects = data?.results ?? [];
+  const { pathname } = useLocation();
 
   if (collapsed) {
     return (
@@ -81,28 +87,20 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1">
-          <div className="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-4 px-4">Projects</div>
-          {projects.map((project) => (
-            <ProjectItem
-              key={project.id}
-              project={project}
-              isActive={project.id === activeProjectId}
-            />
+          <div className="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-4 px-4">Navigation</div>
+          {NAV_ITEMS.map((item) => (
+            <NavLink key={item.to} item={item} pathname={pathname} />
           ))}
-          {projects.length === 0 && (
-            <div className="px-4 py-3 text-sm text-on-surface-variant text-center">No projects</div>
-          )}
         </nav>
 
-        {/* Fleet section */}
+        {/* Settings */}
         <div className="pt-6 border-t border-slate-200 space-y-1">
-          <div className="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-2 px-4">Fleet</div>
           <Link
-            to="/agents"
-            className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors duration-200 rounded-lg text-sm font-medium"
+            to="#"
+            className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors rounded-lg text-sm font-medium"
           >
-            <span className="material-symbols-outlined">smart_toy</span>
-            <span>Agents</span>
+            <span className="material-symbols-outlined">settings</span>
+            <span>Settings</span>
           </Link>
         </div>
       </div>

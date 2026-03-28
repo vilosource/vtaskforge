@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { ActiveProjectProvider } from './contexts/ActiveProjectContext';
+import { Home } from './pages/Home';
 import { ProjectList } from './pages/ProjectList';
 import { ProjectDashboard } from './pages/ProjectDashboard';
 import { WorkplanDetail } from './pages/WorkplanDetail';
@@ -89,7 +90,8 @@ export function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<AppLayout />}>
-              <Route path="/" element={<ProjectList />} />
+              <Route path="/" element={<Home />} />
+              <Route path="/projects" element={<ProjectList />} />
               <Route path="/projects/:id" element={<ProjectDashboard />} />
               <Route path="/projects/:id/backlog" element={<BacklogView />} />
               <Route path="/projects/:id/workplans/:wid" element={<WorkplanDetail />} />
