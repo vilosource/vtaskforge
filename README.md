@@ -51,9 +51,23 @@ docker compose exec api python src/manage.py createsuperuser
 curl http://localhost:8000/v1/health
 ```
 
-The API is at `http://localhost:8000`. Django admin at `http://localhost:8000/admin/`.
+The API is at `http://localhost:8000`. Web UI at the same URL. MCP server at `http://localhost:8002`.
 
-See [docs/guides/quickstart-GUIDE.md](docs/guides/quickstart-GUIDE.md) for a full walkthrough.
+### Using with Claude Code
+
+vtf includes an MCP server that Claude Code can connect to. Add to `~/.claude/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "vtf": { "type": "http", "url": "http://localhost:8002/mcp" }
+  }
+}
+```
+
+Then in Claude Code: "Find the next task from vtf and implement it." Claude Code will claim a task, read the spec, implement the code, run tests, and submit the result.
+
+See [docs/guides/local-quickstart-GUIDE.md](docs/guides/local-quickstart-GUIDE.md) for a full walkthrough covering project setup, task creation, and execution with Claude Code.
 
 ## CLI (`vtf`)
 
