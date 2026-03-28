@@ -184,8 +184,8 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
         except Task.DoesNotExist:
             raise
 
-        # Status check
-        if task.status != "todo":
+        # Status check — todo (new work) and changes_requested (rework) are claimable
+        if task.status not in ("todo", "changes_requested"):
             raise ClaimError(
                 message="Task is not claimable",
                 code="ALREADY_CLAIMED",

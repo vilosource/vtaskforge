@@ -105,6 +105,45 @@ class TestClaimSuccess:
 
 
 # ---------------------------------------------------------------------------
+# Rework claim: changes_requested → doing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestClaimRework:
+    def test_claim_changes_requested_returns_200(self, api_client, milestone, workplan, agent1):
+        task = make_task(milestone, workplan, "changes_requested")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_claim_changes_requested_transitions_to_doing(self, api_client, milestone, workplan, agent1):
+        task = make_task(milestone, workplan, "changes_requested")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
+        )
+        assert response.data["status"] == "doing"
+
+    def test_claim_changes_requested_sets_claimed_by(self, api_client, milestone, workplan, agent1):
+        task = make_task(milestone, workplan, "changes_requested")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
+        )
+        assert response.data["claimed_by"] == agent1.id
+
+    def test_claim_changes_requested_different_agent(self, api_client, milestone, workplan, agent1):
+        """Any agent can claim a changes_requested task, not just the original executor."""
+        agent2 = AgentFactory(name="Agent Two", tags=["executor"])
+        task = make_task(milestone, workplan, "changes_requested", claimed_by="original-agent")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/claim/", {"agent_id": agent2.id}, format="json"
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["claimed_by"] == agent2.id
+
+
+# ---------------------------------------------------------------------------
 # VALIDATION_ERROR: missing agent_id (400)
 # ---------------------------------------------------------------------------
 
