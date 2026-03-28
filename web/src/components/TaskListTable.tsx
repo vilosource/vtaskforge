@@ -2,19 +2,19 @@ import { useState, type ReactNode } from 'react';
 import type { Task } from '../api/tasks';
 import { Pagination } from './Pagination';
 
-// Reuse the same badge mapping as TaskCard
-const STATUS_BADGE_COLORS: Record<string, string> = {
-  draft: 'badge-draft',
-  pending_start_review: 'badge-review',
-  pending_completion_review: 'badge-review',
-  todo: 'badge-ready',
-  doing: 'badge-in-progress',
-  changes_requested: 'badge-attention',
-  needs_attention: 'badge-attention',
-  blocked: 'badge-attention',
-  done: 'badge-done',
-  deferred: 'badge-deferred',
-  cancelled: 'badge-cancelled',
+// Tailwind badge classes for each status
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  draft: 'bg-surface-container-highest text-on-surface-variant border border-outline-variant/40',
+  pending_start_review: 'bg-yellow-50 text-yellow-800 border border-yellow-300',
+  pending_completion_review: 'bg-yellow-50 text-yellow-800 border border-yellow-300',
+  todo: 'bg-blue-50 text-blue-700 border border-blue-200',
+  doing: 'bg-blue-100 text-blue-800 border border-blue-300',
+  changes_requested: 'bg-red-50 text-red-700 border border-red-200',
+  needs_attention: 'bg-red-50 text-red-700 border border-red-200',
+  blocked: 'bg-red-50 text-red-700 border border-red-200',
+  done: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  deferred: 'bg-slate-100 text-slate-600 border border-slate-300',
+  cancelled: 'bg-surface-container-highest text-on-surface-variant border border-outline-variant/40',
 };
 
 // --- Column definition ---
@@ -44,18 +44,18 @@ function relativeTime(dateStr: string): string {
 
 function renderStatus(task: Task): ReactNode {
   return (
-    <span className={`badge ${STATUS_BADGE_COLORS[task.status] ?? ''}`}>
+    <span className={`inline-flex items-center text-[11px] font-semibold leading-none px-2 py-1 rounded whitespace-nowrap uppercase tracking-wide ${STATUS_BADGE_CLASSES[task.status] ?? 'bg-surface-container-highest text-on-surface-variant border border-outline-variant/40'}`}>
       {task.status.replace(/_/g, ' ')}
     </span>
   );
 }
 
 function renderLabels(task: Task): ReactNode {
-  if (!task.labels || task.labels.length === 0) return <span className="task-list-empty">—</span>;
+  if (!task.labels || task.labels.length === 0) return <span className="text-on-surface-variant/40">—</span>;
   return (
-    <div className="task-list-labels">
+    <div className="flex gap-1 flex-wrap">
       {task.labels.map((label) => (
-        <span key={label} className="task-list-label">{label}</span>
+        <span key={label} className="bg-secondary-container text-on-secondary-container text-[11px] font-semibold px-2 py-0.5 rounded-full">{label}</span>
       ))}
     </div>
   );
@@ -63,14 +63,14 @@ function renderLabels(task: Task): ReactNode {
 
 function renderClaimedBy(task: Task): ReactNode {
   return task.claimed_by
-    ? <span className="task-list-agent">{task.claimed_by}</span>
-    : <span className="task-list-empty">—</span>;
+    ? <span className="font-mono text-xs text-on-surface-variant">{task.claimed_by}</span>
+    : <span className="text-on-surface-variant/40">—</span>;
 }
 
 function renderTime(field: 'created_at' | 'updated_at') {
   return (task: Task) => {
     const value = task[field];
-    return value ? <span className="task-list-time">{relativeTime(value)}</span> : <span className="task-list-empty">—</span>;
+    return value ? <span className="text-xs text-on-surface-variant">{relativeTime(value)}</span> : <span className="text-on-surface-variant/40">—</span>;
   };
 }
 
@@ -87,7 +87,7 @@ function renderCell(task: Task, col: ColumnDef): ReactNode {
   if (BUILT_IN_RENDERERS[col.key]) return BUILT_IN_RENDERERS[col.key](task);
   // Default: render as text
   const value = (task as unknown as Record<string, unknown>)[col.key];
-  if (value == null) return <span className="task-list-empty">—</span>;
+  if (value == null) return <span className="text-on-surface-variant/40">—</span>;
   return String(value);
 }
 
@@ -132,29 +132,33 @@ export function TaskListTable({
   const start = (page - 1) * pageSize;
   const pageTasks = tasks.slice(start, start + pageSize);
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center p-12 text-on-surface-variant">Loading...</div>;
 
   if (total === 0) {
-    return <div className="task-list-empty-state">{emptyMessage}</div>;
+    return <div className="flex items-center justify-center p-12 text-on-surface-variant text-sm">{emptyMessage}</div>;
   }
 
   return (
-    <div className="task-list">
-      <table className="task-list-table">
+    <div className="bg-surface-container-lowest rounded-xl shadow overflow-hidden mt-4">
+      <table className="w-full text-left border-collapse">
         <thead>
-          <tr>
+          <tr className="bg-surface-container-low/20">
             {columns.map((col) => (
-              <th key={col.key} style={col.width ? { width: col.width } : undefined}>
+              <th
+                key={col.key}
+                className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant px-6 py-4"
+                style={col.width ? { width: col.width } : undefined}
+              >
                 {col.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-surface-container">
           {pageTasks.map((task) => (
             <tr
               key={task.id}
-              className="task-list-row"
+              className="hover:bg-surface-container-low/40 transition-colors cursor-pointer"
               onClick={() => onTaskClick?.(task)}
               role={onTaskClick ? 'button' : undefined}
               tabIndex={onTaskClick ? 0 : undefined}
@@ -166,7 +170,12 @@ export function TaskListTable({
               }}
             >
               {columns.map((col) => (
-                <td key={col.key} className={`task-list-cell task-list-cell-${col.key}`}>
+                <td
+                  key={col.key}
+                  className={`px-6 py-3 ${
+                    col.key === 'title' ? 'text-sm font-semibold truncate max-w-[400px] text-on-surface' : ''
+                  }`}
+                >
                   {renderCell(task, col)}
                 </td>
               ))}

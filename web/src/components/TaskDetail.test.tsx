@@ -247,16 +247,15 @@ describe('TaskDetail modal (slim)', () => {
   });
 
   it('context line is above the task title', async () => {
-    const { container } = renderModal();
+    renderModal();
     await waitFor(() => {
       expect(screen.getByText('My Project')).toBeInTheDocument();
     });
-    const header = container.querySelector('.task-detail-header');
-    const context = container.querySelector('.task-detail-context');
-    const titleRow = container.querySelector('.task-detail-title-row');
-    expect(header).toContainElement(context as HTMLElement);
-    // context should appear before title-row in the DOM
-    const nodes = Array.from(header!.children);
-    expect(nodes.indexOf(context as HTMLElement)).toBeLessThan(nodes.indexOf(titleRow as HTMLElement));
+    // The context breadcrumb (project/workplan/milestone) should appear before the title in DOM order
+    const projectEl = screen.getByText('My Project');
+    const titleEl = screen.getByText('Implement login form');
+    const result = projectEl.compareDocumentPosition(titleEl);
+    // DOCUMENT_POSITION_FOLLOWING (4) means titleEl comes after projectEl
+    expect(result & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

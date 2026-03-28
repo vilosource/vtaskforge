@@ -95,7 +95,8 @@ describe('WorkplanList', () => {
     expect(screen.getByText('Beta Project')).toBeInTheDocument();
     expect(screen.getByText('active')).toBeInTheDocument();
     expect(screen.getByText('draft')).toBeInTheDocument();
-    expect(screen.getByText('frontend, urgent')).toBeInTheDocument();
+    expect(screen.getByText('frontend')).toBeInTheDocument();
+    expect(screen.getByText('urgent')).toBeInTheDocument();
     expect(screen.getByText('backend')).toBeInTheDocument();
 
     expect(screen.getByRole('table')).toBeInTheDocument();

@@ -18,18 +18,18 @@ describe('LiveIndicator', () => {
     expect(screen.getByText('Offline')).toBeInTheDocument();
   });
 
-  it('has connected class when status is connected', () => {
+  it('has green background when status is connected', () => {
     const { container } = render(<LiveIndicator status="connected" />);
-    expect(container.firstChild).toHaveClass('live-indicator--connected');
+    expect(container.firstChild).toHaveClass('bg-green-100');
   });
 
-  it('has reconnecting class when status is reconnecting', () => {
+  it('has yellow background when status is reconnecting', () => {
     const { container } = render(<LiveIndicator status="reconnecting" />);
-    expect(container.firstChild).toHaveClass('live-indicator--reconnecting');
+    expect(container.firstChild).toHaveClass('bg-yellow-100');
   });
 
-  it('has disconnected class when status is disconnected', () => {
+  it('has gray background when status is disconnected', () => {
     const { container } = render(<LiveIndicator status="disconnected" />);
-    expect(container.firstChild).toHaveClass('live-indicator--disconnected');
+    expect(container.firstChild).toHaveClass('bg-gray-100');
   });
 });

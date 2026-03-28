@@ -14,12 +14,12 @@ export function BoardView() {
   const { data: milestone } = useMilestone(milestoneId);
 
   if (!projectId || !workplanId || !milestoneId) {
-    return <div className="error">Invalid project, workplan, or milestone ID.</div>;
+    return <div className="flex items-center justify-center h-64 text-error">Invalid project, workplan, or milestone ID.</div>;
   }
 
   return (
     <div>
-      <div style={{ padding: '0 24px' }}>
+      <div className="px-6">
         <Breadcrumb segments={[
           { label: project?.name ?? 'Project', to: `/projects/${projectId}` },
           { label: workplan?.name ?? 'Workplan', to: `/projects/${projectId}/workplans/${workplanId}` },

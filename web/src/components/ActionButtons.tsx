@@ -23,6 +23,13 @@ interface ActionButtonsProps {
   onSuccess?: () => void;
 }
 
+const btnBase = 'inline-flex items-center justify-center px-4 py-2 font-headline text-xs font-bold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+const btnPrimary = `${btnBase} primary-gradient text-on-primary`;
+const btnSecondary = `${btnBase} bg-surface-container-high text-on-surface`;
+const btnDanger = `${btnBase} bg-error text-on-error`;
+const btnSuccess = `${btnBase} bg-tertiary text-on-tertiary`;
+const btnWarning = `${btnBase} bg-yellow-500 text-white`;
+
 export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps) {
   const queryClient = useQueryClient();
   const [agentId, setAgentId] = useState('');
@@ -133,26 +140,26 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
   }
 
   return (
-    <div className="action-buttons">
+    <div className="flex flex-col gap-3">
       {/* Claim input */}
       {showClaimInput && (
-        <div className="action-input-group">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="text"
             placeholder="Agent ID"
             value={agentId}
             onChange={(e) => setAgentId(e.target.value)}
-            className="action-input"
+            className="bg-surface-container-low border-none rounded-lg px-3 py-1.5 text-sm font-body text-on-surface placeholder:text-on-surface-variant"
             aria-label="Agent ID"
           />
           <button
             onClick={() => claimMutation.mutate()}
             disabled={!agentId.trim() || claimMutation.isPending}
-            className="btn btn-primary"
+            className={btnPrimary}
           >
             {claimMutation.isPending ? 'Claiming...' : 'Confirm Claim'}
           </button>
-          <button onClick={() => setShowClaimInput(false)} className="btn btn-secondary">
+          <button onClick={() => setShowClaimInput(false)} className={btnSecondary}>
             Cancel
           </button>
         </div>
@@ -160,14 +167,14 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
 
       {/* Reason input */}
       {showReasonFor && (
-        <div className="action-input-group">
+        <div className="flex flex-wrap items-center gap-2">
           {isReviewStatus && (
             <input
               type="text"
               placeholder="Reviewer ID"
               value={reviewerId}
               onChange={(e) => setReviewerId(e.target.value)}
-              className="action-input"
+              className="bg-surface-container-low border-none rounded-lg px-3 py-1.5 text-sm font-body text-on-surface placeholder:text-on-surface-variant"
               aria-label="Reviewer ID"
             />
           )}
@@ -176,13 +183,13 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
             placeholder="Reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="action-input"
+            className="bg-surface-container-low border-none rounded-lg px-3 py-1.5 text-sm font-body text-on-surface placeholder:text-on-surface-variant"
             aria-label="Reason"
           />
           <button
             onClick={() => handleReasonSubmit(showReasonFor)}
             disabled={!reason.trim()}
-            className="btn btn-danger"
+            className={btnDanger}
           >
             Confirm
           </button>
@@ -191,20 +198,20 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
               setShowReasonFor(null);
               setReason('');
             }}
-            className="btn btn-secondary"
+            className={btnSecondary}
           >
             Cancel
           </button>
         </div>
       )}
 
-      <div className="action-buttons-row">
+      <div className="flex flex-wrap items-center gap-2">
         {/* draft */}
         {status === 'draft' && (
           <button
             onClick={() => submitMutation.mutate()}
             disabled={submitMutation.isPending}
-            className="btn btn-primary"
+            className={btnPrimary}
           >
             {submitMutation.isPending ? 'Submitting...' : 'Submit'}
           </button>
@@ -216,19 +223,19 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
             <button
               onClick={() => approveMutation.mutate()}
               disabled={approveMutation.isPending}
-              className="btn btn-success"
+              className={btnSuccess}
             >
               Approve
             </button>
             <button
               onClick={() => setShowReasonFor('reject')}
-              className="btn btn-danger"
+              className={btnDanger}
             >
               Reject
             </button>
             <button
               onClick={() => setShowReasonFor('request_changes')}
-              className="btn btn-warning"
+              className={btnWarning}
             >
               Request Changes
             </button>
@@ -239,7 +246,7 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
         {status === 'todo' && !showClaimInput && (
           <button
             onClick={() => setShowClaimInput(true)}
-            className="btn btn-primary"
+            className={btnPrimary}
           >
             Claim
           </button>
@@ -251,19 +258,19 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
             <button
               onClick={() => completeMutation.mutate()}
               disabled={completeMutation.isPending}
-              className="btn btn-success"
+              className={btnSuccess}
             >
               {completeMutation.isPending ? 'Completing...' : 'Complete'}
             </button>
             <button
               onClick={() => setShowReasonFor('fail')}
-              className="btn btn-danger"
+              className={btnDanger}
             >
               Fail
             </button>
             <button
               onClick={() => setShowReasonFor('block')}
-              className="btn btn-warning"
+              className={btnWarning}
             >
               Block
             </button>
@@ -275,7 +282,7 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
           <button
             onClick={() => unblockMutation.mutate()}
             disabled={unblockMutation.isPending}
-            className="btn btn-primary"
+            className={btnPrimary}
           >
             {unblockMutation.isPending ? 'Unblocking...' : 'Unblock'}
           </button>
@@ -286,7 +293,7 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
           <button
             onClick={() => resubmitMutation.mutate()}
             disabled={resubmitMutation.isPending}
-            className="btn btn-primary"
+            className={btnPrimary}
           >
             {resubmitMutation.isPending ? 'Resubmitting...' : 'Resubmit'}
           </button>
@@ -298,21 +305,21 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
             <button
               onClick={() => submitMutation.mutate()}
               disabled={submitMutation.isPending}
-              className="btn btn-primary"
+              className={btnPrimary}
             >
               Rewrite
             </button>
             <button
               onClick={() => unblockMutation.mutate()}
               disabled={unblockMutation.isPending}
-              className="btn btn-secondary"
+              className={btnSecondary}
             >
               Back to pool
             </button>
             <button
               onClick={() => cancelMutation.mutate()}
               disabled={cancelMutation.isPending}
-              className="btn btn-danger"
+              className={btnDanger}
             >
               Cancel
             </button>
@@ -326,14 +333,14 @@ export function ActionButtons({ taskId, status, onSuccess }: ActionButtonsProps)
             <button
               onClick={() => deferMutation.mutate()}
               disabled={deferMutation.isPending}
-              className="btn btn-secondary"
+              className={btnSecondary}
             >
               {deferMutation.isPending ? 'Deferring...' : 'Defer'}
             </button>
             <button
               onClick={() => cancelMutation.mutate()}
               disabled={cancelMutation.isPending}
-              className="btn btn-danger"
+              className={btnDanger}
             >
               {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
             </button>

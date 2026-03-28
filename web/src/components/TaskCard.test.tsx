@@ -78,7 +78,7 @@ describe('TaskCard', () => {
     const task = { ...baseTask, status: 'blocked' };
     render(<TaskCard task={task} />);
     const badge = screen.getByText('blocked');
-    expect(badge).toHaveClass('badge-attention');
+    expect(badge).toHaveClass('bg-error-container');
   });
 
   it('renders specific status badge for pending_start_review', () => {

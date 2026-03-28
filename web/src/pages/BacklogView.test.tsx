@@ -73,7 +73,7 @@ describe('BacklogView', () => {
     // Backlog current segment (no link)
     const backlogSpan = screen.getByText('Backlog');
     expect(backlogSpan.tagName).toBe('SPAN');
-    expect(backlogSpan).toHaveClass('breadcrumb-current');
+    expect(backlogSpan).toHaveClass('font-bold');
   });
 
   it('does not render inline breadcrumb styles (no inline flex display breadcrumb)', async () => {

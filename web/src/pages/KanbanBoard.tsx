@@ -133,13 +133,13 @@ export function KanbanBoard({ workplanId, milestoneId, projectId, title, onTaskC
   const error = (!isBacklogMode && workplanError) || tasksError;
 
   if (isLoading) {
-    return <div className="loading">Loading board...</div>;
+    return <div className="flex items-center justify-center h-64 text-on-surface-variant">Loading board...</div>;
   }
 
   if (error) {
     return (
-      <div className="error">
-        Failed to load board. <button onClick={() => refetch()}>Retry</button>
+      <div className="flex items-center justify-center h-64 text-error gap-3">
+        Failed to load board. <button className="underline hover:no-underline" onClick={() => refetch()}>Retry</button>
       </div>
     );
   }
@@ -157,30 +157,31 @@ export function KanbanBoard({ workplanId, milestoneId, projectId, title, onTaskC
   const totalTasks = tasks.filter((t) => !HIDDEN_STATUSES.includes(t.status)).length;
 
   return (
-    <div className="kanban-board">
-      <div className="kanban-board-header">
-        <div className="kanban-board-title">
-          <h1>{title || (isBacklogMode ? 'Backlog' : workplanData?.name || workplanId)}</h1>
+    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+      <div className="flex items-center justify-between px-8 py-4 bg-surface-container-lowest border-b border-outline-variant/20">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-headline font-extrabold tracking-tight text-on-surface">{title || (isBacklogMode ? 'Backlog' : workplanData?.name || workplanId)}</h1>
           <LiveIndicator status={sseStatus} />
         </div>
-        <div className="kanban-board-controls">
-          <span className="task-count">{totalTasks} tasks</span>
-          <label className="show-hidden-toggle">
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-on-surface-variant">{totalTasks} tasks</span>
+          <label className="flex items-center gap-2 text-sm text-on-surface-variant cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showHidden}
               onChange={(e) => setShowHidden(e.target.checked)}
+              className="rounded border-outline-variant text-primary focus:ring-primary"
             />
             Show deferred &amp; cancelled
           </label>
         </div>
       </div>
       {tasks.length === 0 ? (
-        <div className="kanban-empty">
+        <div className="flex items-center justify-center flex-1 text-on-surface-variant">
           {isBacklogMode ? 'No backlog tasks.' : 'No tasks yet.'}
         </div>
       ) : (
-        <div className="kanban-columns">
+        <div className="flex flex-1 overflow-x-auto gap-4 px-8 py-4">
           {COLUMNS.map((col) => (
             <KanbanColumn
               key={col.id}

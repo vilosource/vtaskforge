@@ -97,7 +97,9 @@ describe('ProjectDashboard', () => {
     expect(projectsLink).toBeInTheDocument();
     expect(projectsLink.getAttribute('href')).toBe('/');
 
-    expect(screen.getByText('My Awesome Project', { selector: '.breadcrumb-current' })).toBeInTheDocument();
+    // Current breadcrumb segment is a bold span (not a link)
+    const breadcrumbCurrent = screen.getAllByText('My Awesome Project').find(el => el.tagName === 'SPAN' && el.classList.contains('font-bold'));
+    expect(breadcrumbCurrent).toBeInTheDocument();
   });
 
   it('breadcrumb Projects segment links to /', async () => {

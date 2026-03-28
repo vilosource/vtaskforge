@@ -230,7 +230,8 @@ describe('KanbanBoard', () => {
     });
 
     const draftColumn = document.querySelector('[data-column="draft"]');
-    const draftCount = draftColumn?.querySelector('.kanban-column-count');
+    // Count badge is a span with Tailwind classes in the column header
+    const draftCount = draftColumn?.querySelector('.bg-surface-container-highest');
     expect(draftCount).toHaveTextContent('2');
   });
 

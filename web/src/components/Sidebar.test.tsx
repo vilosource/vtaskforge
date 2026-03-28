@@ -114,11 +114,12 @@ describe('Sidebar', () => {
       expect(screen.getByText('Alpha')).toBeInTheDocument();
     });
 
-    // proj-1 (Alpha) should be active; proj-2 (Beta) should not
+    // proj-1 (Alpha) should be active (bold + blue); proj-2 (Beta) should not
     const alphaLink = screen.getByRole('link', { name: /Alpha/ });
-    expect(alphaLink).toHaveClass('sidebar-wp-item--active');
+    expect(alphaLink).toHaveClass('font-bold');
+    expect(alphaLink).toHaveClass('text-blue-600');
 
     const betaLink = screen.getByRole('link', { name: /Beta/ });
-    expect(betaLink).not.toHaveClass('sidebar-wp-item--active');
+    expect(betaLink).not.toHaveClass('font-bold');
   });
 });

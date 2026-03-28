@@ -49,85 +49,118 @@ export default function Login() {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '100px auto', padding: 20 }}>
-      <h1>VTaskForge</h1>
-      <p style={{ color: '#666', marginBottom: 24 }}>Sign in to continue</p>
-
-      {error && (
-        <div style={{
-          padding: '12px 16px',
-          marginBottom: 16,
-          background: '#ffeaea',
-          border: '1px solid #f44336',
-          borderRadius: 4,
-          color: '#c62828',
-        }}>
-          {error}
+    <div className="min-h-screen bg-surface flex flex-col items-center justify-center px-4">
+      {/* Brand */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
+            <span className="material-symbols-outlined text-on-primary text-2xl">deployed_code</span>
+          </div>
+          <span className="text-3xl font-headline font-extrabold text-on-surface">VTaskForge</span>
         </div>
-      )}
+        <span className="text-[10px] uppercase tracking-widest text-on-surface-variant">
+          Task Orchestration Platform
+        </span>
+      </div>
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="username" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
-            Username
-          </label>
-          <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            autoFocus
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              fontSize: 16,
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
+      {/* Login card */}
+      <div className="w-full max-w-[400px] bg-surface-container-lowest p-8 rounded-xl shadow-lg">
+        <h2 className="text-xl font-headline font-bold text-on-surface mb-1">Welcome back</h2>
+        <p className="text-sm text-on-surface-variant mb-6">
+          Sign in to access your fleet and projects.
+        </p>
 
-        <div style={{ marginBottom: 24 }}>
-          <label htmlFor="password" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              fontSize: 16,
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
+        {error && (
+          <div className="flex items-center gap-2 px-4 py-3 mb-4 bg-error-container rounded-lg text-on-error-container text-sm">
+            <span className="material-symbols-outlined text-lg">error</span>
+            {error}
+          </div>
+        )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '10px 16px',
-            background: '#1976d2',
-            color: 'white',
-            border: 'none',
-            borderRadius: 4,
-            fontSize: 16,
-            cursor: loading ? 'wait' : 'pointer',
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? 'Signing in...' : 'Sign in'}
+        <form onSubmit={handleSubmit}>
+          {/* Username */}
+          <div className="mb-4">
+            <label
+              htmlFor="username"
+              className="block mb-1.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant"
+            >
+              Username
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+                person
+              </span>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                autoFocus
+                className="w-full pl-10 pr-3 py-2.5 bg-surface-container-low border-none rounded-lg text-on-surface text-sm placeholder:text-outline focus:ring-2 focus:ring-primary"
+                placeholder="Enter your username"
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div className="mb-4">
+            <label
+              htmlFor="password"
+              className="block mb-1.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant"
+            >
+              Password
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+                lock
+              </span>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full pl-10 pr-3 py-2.5 bg-surface-container-low border-none rounded-lg text-on-surface text-sm placeholder:text-outline focus:ring-2 focus:ring-primary"
+                placeholder="Enter your password"
+              />
+            </div>
+          </div>
+
+          {/* Remember me + Forgot password */}
+          <div className="flex items-center justify-between mb-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-outline text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-on-surface-variant">Remember me</span>
+            </label>
+            <button type="button" className="text-xs text-primary hover:underline">
+              Forgot password?
+            </button>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full primary-gradient text-on-primary py-3 rounded-full font-headline text-sm font-bold transition-opacity ${
+              loading ? 'opacity-70 cursor-wait' : 'opacity-100 cursor-pointer hover:opacity-90'
+            }`}
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+
+      {/* Footer */}
+      <p className="mt-6 text-xs text-on-surface-variant">
+        Don't have an account?{' '}
+        <button type="button" className="text-primary font-semibold hover:underline">
+          Contact your admin
         </button>
-      </form>
+      </p>
     </div>
   );
 }

@@ -7,8 +7,8 @@ interface LiveIndicatorProps {
 export function LiveIndicator({ status }: LiveIndicatorProps) {
   if (status === 'connected') {
     return (
-      <span className="live-indicator live-indicator--connected" aria-label="Live updates connected">
-        <span className="live-indicator-dot" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold font-headline text-green-800" aria-label="Live updates connected">
+        <span className="h-2 w-2 rounded-full bg-green-500" />
         Live
       </span>
     );
@@ -16,16 +16,16 @@ export function LiveIndicator({ status }: LiveIndicatorProps) {
 
   if (status === 'reconnecting') {
     return (
-      <span className="live-indicator live-indicator--reconnecting" aria-label="Reconnecting to live updates">
-        <span className="live-indicator-dot" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-bold font-headline text-yellow-800" aria-label="Reconnecting to live updates">
+        <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
         Reconnecting...
       </span>
     );
   }
 
   return (
-    <span className="live-indicator live-indicator--disconnected" aria-label="Live updates offline">
-      <span className="live-indicator-dot" />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-bold font-headline text-gray-500" aria-label="Live updates offline">
+      <span className="h-2 w-2 rounded-full bg-gray-400" />
       Offline
     </span>
   );

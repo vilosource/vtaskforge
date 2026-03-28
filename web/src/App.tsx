@@ -57,7 +57,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
+    return <div className="p-10 text-center text-on-surface-variant font-body">Loading...</div>;
   }
 
   if (!authenticated) {
@@ -70,9 +70,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   return (
     <RequireAuth>
-      <div className="app-layout">
+      <div className="flex min-h-screen w-full bg-surface font-body text-on-surface">
         <Sidebar />
-        <main className="app-main">
+        <main className="flex-1 min-w-0 overflow-x-auto ml-64">
           <Outlet />
         </main>
       </div>

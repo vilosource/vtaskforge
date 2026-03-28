@@ -50,12 +50,12 @@ export function BacklogView() {
   };
 
   if (!projectId) {
-    return <div className="error">Invalid project ID.</div>;
+    return <div className="p-6 text-error font-semibold">Invalid project ID.</div>;
   }
 
   return (
     <div>
-      <div style={{ padding: '0 24px' }}>
+      <div className="px-6">
         <Breadcrumb segments={[
           { label: project?.name ?? 'Project', to: `/projects/${projectId}` },
           { label: 'Backlog' }
@@ -64,30 +64,17 @@ export function BacklogView() {
 
       {/* Label filter pills */}
       {availableLabels.length > 0 && (
-        <div style={{
-          padding: '12px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          flexWrap: 'wrap',
-          borderBottom: '1px solid var(--color-border)'
-        }}>
-          <span style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginRight: 8 }}>
+        <div className="px-6 py-3 flex items-center gap-2 flex-wrap border-b border-outline-variant/30">
+          <span className="text-sm text-on-surface-variant mr-2">
             Filter by label:
           </span>
           <button
             onClick={handleClearFilters}
-            className={`filter-pill ${labelFilters.length === 0 ? 'filter-pill-active' : ''}`}
-            style={{
-              padding: '4px 12px',
-              border: '1px solid var(--color-border)',
-              borderRadius: '16px',
-              background: labelFilters.length === 0 ? 'var(--color-primary)' : 'var(--color-bg)',
-              color: labelFilters.length === 0 ? 'white' : 'var(--color-text)',
-              fontSize: 12,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold border-0 cursor-pointer transition-colors ${
+              labelFilters.length === 0
+                ? 'bg-primary text-on-primary'
+                : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+            }`}
           >
             All
           </button>
@@ -95,17 +82,11 @@ export function BacklogView() {
             <button
               key={label}
               onClick={() => handleLabelToggle(label)}
-              className={`filter-pill ${labelFilters.includes(label) ? 'filter-pill-active' : ''}`}
-              style={{
-                padding: '4px 12px',
-                border: '1px solid var(--color-border)',
-                borderRadius: '16px',
-                background: labelFilters.includes(label) ? 'var(--color-primary)' : 'var(--color-bg)',
-                color: labelFilters.includes(label) ? 'white' : 'var(--color-text)',
-                fontSize: 12,
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border-0 cursor-pointer transition-colors ${
+                labelFilters.includes(label)
+                  ? 'bg-primary text-on-primary'
+                  : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+              }`}
             >
               {label}
             </button>
@@ -113,7 +94,7 @@ export function BacklogView() {
         </div>
       )}
 
-      <div style={{ padding: '0 24px 24px' }}>
+      <div className="px-6 pb-6">
         <TaskListTable
           tasks={filteredTasks}
           columns={BACKLOG_COLUMNS}

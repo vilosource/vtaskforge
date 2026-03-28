@@ -13,38 +13,42 @@ function WorkplanCard({ workplan, projectId }: {
   workplan: { id: string; name: string; description: string; status: string; total_tasks: number; completed_percentage: number };
   projectId: string;
 }) {
-  const statusColor = workplan.status === 'completed' ? 'var(--color-done)'
-    : workplan.status === 'active' ? 'var(--color-doing)'
-    : 'var(--color-draft)';
+  const borderColor = workplan.status === 'completed' ? 'border-tertiary'
+    : workplan.status === 'active' ? 'border-primary'
+    : 'border-outline-variant';
+
+  const progressBg = workplan.status === 'completed' ? 'bg-tertiary'
+    : workplan.status === 'active' ? 'bg-primary'
+    : 'bg-outline-variant';
 
   return (
     <Link
       to={`/projects/${projectId}/workplans/${workplan.id}`}
-      className="project-workplan-card"
-      style={{ borderLeftColor: statusColor }}
+      className={`block bg-surface-container-lowest rounded-xl shadow-sm border-l-[3px] ${borderColor} p-4 hover:shadow-md transition-shadow no-underline`}
     >
-      <div className="project-workplan-card-header">
-        <div className="project-workplan-card-title">{workplan.name}</div>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="font-bold text-sm text-on-surface leading-snug">{workplan.name}</div>
         <span
-          className={`badge ${
-            workplan.status === 'completed' ? 'badge-completed' :
-            workplan.status === 'active' ? 'badge-active' :
-            'badge-draft'
+          className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+            workplan.status === 'completed' ? 'bg-tertiary-container text-on-tertiary-container' :
+            workplan.status === 'active' ? 'bg-blue-100 text-blue-700' :
+            'bg-surface-container-highest text-on-surface-variant'
           }`}
         >
+          {workplan.status === 'active' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1 align-middle" />}
           {workplan.status}
         </span>
       </div>
       {workplan.description && (
-        <div className="project-workplan-card-desc">{workplan.description}</div>
+        <div className="text-xs text-on-surface-variant leading-relaxed mb-3 line-clamp-2">{workplan.description}</div>
       )}
-      <div className="project-workplan-card-footer">
-        <span className="project-workplan-card-stats">{workplan.total_tasks} tasks</span>
-        <div className="project-workplan-card-progress">
-          <div className="project-workplan-card-progress-bar">
-            <div className="project-workplan-card-progress-fill" style={{ width: `${workplan.completed_percentage}%`, background: statusColor }} />
+      <div className="flex items-center justify-between text-xs text-on-surface-variant mt-auto">
+        <span>{workplan.total_tasks} tasks</span>
+        <div className="flex items-center gap-2">
+          <div className="w-20 h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
+            <div className={`h-full rounded-full ${progressBg} transition-all`} style={{ width: `${workplan.completed_percentage}%` }} />
           </div>
-          <span className="project-workplan-card-progress-text">{workplan.completed_percentage}%</span>
+          <span className="text-[10px] font-bold text-on-surface-variant tabular-nums">{workplan.completed_percentage}%</span>
         </div>
       </div>
     </Link>
@@ -62,22 +66,22 @@ function WorkplanGroup({ title, workplans, projectId, defaultCollapsed = false }
   if (workplans.length === 0) return null;
 
   return (
-    <div className="project-workplan-group">
+    <div className="mb-4">
       <button
-        className="project-workplan-group-header"
+        className="flex items-center gap-2 w-full text-left py-2 group"
         onClick={() => setCollapsed(!collapsed)}
       >
         <svg
           width="12" height="12" viewBox="0 0 12 12"
-          style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+          className={`text-on-surface-variant transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}
         >
           <path d="M3 4.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        <span className="project-workplan-group-title">{title}</span>
-        <span className="project-workplan-group-count">{workplans.length}</span>
+        <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">{title}</span>
+        <span className="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-[10px] font-bold">{workplans.length}</span>
       </button>
       {!collapsed && (
-        <div className="project-workplan-group-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
           {workplans.map((workplan) => (
             <WorkplanCard key={workplan.id} workplan={workplan} projectId={projectId} />
           ))}
@@ -120,7 +124,7 @@ export function ProjectDashboard() {
     enabled: !!id,
   });
 
-  if (projectLoading || workplansLoading) return <div className="loading">Loading...</div>;
+  if (projectLoading || workplansLoading) return <div className="flex items-center justify-center h-64 text-on-surface-variant">Loading...</div>;
 
   const activeWorkplans = (workplans ?? []).filter((wp) => wp.status === 'active');
   const pendingWorkplans = (workplans ?? []).filter((wp) => wp.status === 'pending');
@@ -136,75 +140,83 @@ export function ProjectDashboard() {
   const backlogTasks = backlogData?.results ?? [];
 
   return (
-    <div className="project-dashboard">
+    <div className="px-8 pb-12">
       <Breadcrumb segments={[
         { label: 'Projects', to: '/' },
         { label: project?.name ?? '' },
       ]} />
+
       {/* Project info header */}
-      <div className="project-dashboard-header">
-        <div className="project-dashboard-header-top">
+      <div className="bg-surface-container-lowest p-6 rounded-xl shadow mb-8">
+        <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="project-dashboard-title">{project?.name || 'Project'}</h1>
+            <h1 className="text-4xl font-headline font-extrabold tracking-tight text-on-surface mb-1">
+              {project?.name || 'Project'}
+            </h1>
             {project?.description && (
-              <p className="project-dashboard-desc">{project.description}</p>
+              <p className="text-sm text-on-surface-variant leading-relaxed mt-1">{project.description}</p>
             )}
           </div>
           <LiveIndicator status={sseStatus} />
         </div>
 
-        <div className="project-dashboard-stats">
-          <div className="project-stat">
-            <span className="project-stat-value">{totalTasks}</span>
-            <span className="project-stat-label">Tasks</span>
+        <div className="flex items-end gap-8 flex-wrap">
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-headline font-extrabold text-on-surface tabular-nums">{totalTasks}</span>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Tasks</span>
           </div>
-          <div className="project-stat">
-            <span className="project-stat-value">{doneTasks}</span>
-            <span className="project-stat-label">Done</span>
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-headline font-extrabold text-on-surface tabular-nums">{doneTasks}</span>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Done</span>
           </div>
-          <div className="project-stat">
-            <span className="project-stat-value">{doingTasks}</span>
-            <span className="project-stat-label">In Progress</span>
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-headline font-extrabold text-on-surface tabular-nums">{doingTasks}</span>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">In Progress</span>
           </div>
-          <div className="project-stat">
-            <span className="project-stat-value">{todoTasks}</span>
-            <span className="project-stat-label">Ready</span>
+          <div className="flex flex-col items-center">
+            <span className="text-2xl font-headline font-extrabold text-on-surface tabular-nums">{todoTasks}</span>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Ready</span>
           </div>
-          <div className="project-stat">
-            <div className="project-stat-progress">
-              <div className="project-stat-progress-bar">
-                <div className="project-stat-progress-fill" style={{ width: `${overallPct}%` }} />
+          <div className="flex flex-col items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
+                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${overallPct}%` }} />
               </div>
-              <span className="project-stat-value">{overallPct}%</span>
+              <span className="text-2xl font-headline font-extrabold text-on-surface tabular-nums">{overallPct}%</span>
             </div>
-            <span className="project-stat-label">Overall</span>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Overall</span>
           </div>
           {project?.repo_url && (
-            <div className="project-repo">
-              <a href={project.repo_url} target="_blank" rel="noopener noreferrer" className="project-repo-link">
+            <div className="ml-auto">
+              <a
+                href={project.repo_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline font-medium"
+              >
                 Repository
               </a>
             </div>
           )}
           {project?.tags && project.tags.length > 0 && (
-            <div className="project-tags">
+            <div className="flex gap-1.5 flex-wrap">
               {project.tags.map((tag) => (
-                <span key={tag} className="project-tag">{tag}</span>
+                <span key={tag} className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold">{tag}</span>
               ))}
             </div>
           )}
         </div>
       </div>
 
-      <div className="project-dashboard-content">
+      <div className="flex flex-col gap-8">
         {/* Workplans section */}
-        <div className="project-dashboard-section">
-          <div className="project-dashboard-section-header">
-            <h2 className="project-dashboard-section-title">Workplans</h2>
-            <span className="project-dashboard-section-count">{workplans?.length ?? 0}</span>
+        <div className="bg-surface-container-lowest rounded-xl shadow p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <h2 className="text-xl font-headline font-bold text-on-surface">Workplans</h2>
+            <span className="px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-[10px] font-bold">{workplans?.length ?? 0}</span>
           </div>
 
-          <div className="project-workplans">
+          <div>
             <WorkplanGroup title="Active" workplans={activeWorkplans} projectId={id!} />
             <WorkplanGroup title="Pending" workplans={pendingWorkplans} projectId={id!} />
             <WorkplanGroup title="Completed" workplans={completedWorkplans} projectId={id!} defaultCollapsed />
@@ -212,14 +224,14 @@ export function ProjectDashboard() {
         </div>
 
         {/* Backlog section */}
-        <div className="project-dashboard-section">
-          <div className="project-dashboard-section-header">
-            <h2 className="project-dashboard-section-title">
-              <Link to={`/projects/${id}/backlog`} className="project-backlog-link">
+        <div className="bg-surface-container-lowest rounded-xl shadow p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <h2 className="text-xl font-headline font-bold text-on-surface">
+              <Link to={`/projects/${id}/backlog`} className="text-on-surface hover:text-primary transition-colors no-underline">
                 Backlog
               </Link>
             </h2>
-            <span className="project-dashboard-section-count">{backlogCount}</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-[10px] font-bold">{backlogCount}</span>
           </div>
 
           {backlogTasks.length > 0 ? (
@@ -232,10 +244,10 @@ export function ProjectDashboard() {
                 emptyMessage="No backlog tasks"
               />
               {backlogCount > backlogTasks.length && (
-                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                <div className="text-center py-2">
                   <Link
                     to={`/projects/${id}/backlog`}
-                    style={{ fontSize: '0.8125rem', color: 'var(--color-primary)' }}
+                    className="text-[13px] text-primary hover:underline"
                   >
                     View all {backlogCount} backlog tasks
                   </Link>
@@ -243,7 +255,7 @@ export function ProjectDashboard() {
               )}
             </>
           ) : (
-            <div className="project-dashboard-empty">
+            <div className="text-sm text-on-surface-variant py-8 text-center">
               No backlog tasks
             </div>
           )}

@@ -9,7 +9,7 @@ interface SpecSectionProps {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h4 style={{ fontSize: 14, fontWeight: 600, color: '#444', margin: '16px 0 8px 0' }}>
+    <h4 className="text-sm font-semibold text-on-surface mt-4 mb-2 first:mt-0">
       {children}
     </h4>
   );
@@ -18,19 +18,12 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 function FileList({ label, files, color }: { label: string; files: string[]; color: string }) {
   if (files.length === 0) return null;
   return (
-    <div style={{ marginBottom: 8 }}>
-      <span style={{
-        display: 'inline-block',
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: color,
-        marginRight: 6,
-      }} />
-      <span style={{ fontSize: 12, color: '#666', fontWeight: 600 }}>{label}</span>
-      <ul style={{ margin: '4px 0 0 20px', padding: 0, listStyle: 'none' }}>
+    <div className="mb-2">
+      <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: color }} />
+      <span className="text-xs text-on-surface-variant font-semibold">{label}</span>
+      <ul className="mt-1 ml-5 space-y-0.5">
         {files.map(f => (
-          <li key={f} style={{ fontFamily: 'monospace', fontSize: 12, color: '#333', padding: '1px 0' }}>
+          <li key={f} className="font-mono text-xs text-on-surface">
             {f}
           </li>
         ))}
@@ -50,7 +43,7 @@ export function SpecSection({ spec }: SpecSectionProps) {
       {spec.approach && (
         <>
           <SectionHeading>Implementation Approach</SectionHeading>
-          <div className="spec-markdown" style={{ fontSize: 13, lineHeight: 1.6 }}>
+          <div className="spec-markdown text-[13px] leading-relaxed">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{spec.approach}</ReactMarkdown>
           </div>
         </>
@@ -70,9 +63,9 @@ export function SpecSection({ spec }: SpecSectionProps) {
       {spec.constraints.length > 0 && (
         <>
           <SectionHeading>Constraints</SectionHeading>
-          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>
+          <ul className="pl-5 space-y-1 text-[13px] text-on-surface">
             {spec.constraints.map((c, i) => (
-              <li key={i} style={{ marginBottom: 4 }}>{c}</li>
+              <li key={i}>{c}</li>
             ))}
           </ul>
         </>
@@ -82,9 +75,9 @@ export function SpecSection({ spec }: SpecSectionProps) {
       {spec.references.length > 0 && (
         <>
           <SectionHeading>References</SectionHeading>
-          <ul style={{ margin: 0, paddingLeft: 20, listStyle: 'none', fontSize: 12 }}>
+          <ul className="pl-5 list-none space-y-0.5">
             {spec.references.map(r => (
-              <li key={r} style={{ fontFamily: 'monospace', padding: '1px 0' }}>{r}</li>
+              <li key={r} className="font-mono text-xs text-on-surface">{r}</li>
             ))}
           </ul>
         </>
@@ -95,7 +88,7 @@ export function SpecSection({ spec }: SpecSectionProps) {
         <>
           <SectionHeading>Contracts</SectionHeading>
           {spec.contracts.map(c => (
-            <div key={c.name} style={{ fontSize: 13, marginBottom: 4 }}>
+            <div key={c.name} className="text-[13px] text-on-surface mb-1">
               <strong>{c.name}</strong>: {c.description}
             </div>
           ))}
@@ -107,8 +100,8 @@ export function SpecSection({ spec }: SpecSectionProps) {
         <>
           <SectionHeading>Test Commands</SectionHeading>
           {Object.entries(spec.testCommand).map(([key, cmd]) => (
-            <div key={key} style={{ fontFamily: 'monospace', fontSize: 12, marginBottom: 2 }}>
-              <span style={{ color: '#666' }}>{key}:</span> {cmd}
+            <div key={key} className="font-mono text-xs mb-0.5">
+              <span className="text-on-surface-variant">{key}:</span> <span className="text-on-surface">{cmd}</span>
             </div>
           ))}
         </>
@@ -116,32 +109,16 @@ export function SpecSection({ spec }: SpecSectionProps) {
 
       {/* Raw Spec (collapsible) */}
       {spec.raw && (
-        <div style={{ marginTop: 16 }}>
+        <div className="mt-4">
           <h4
             onClick={() => setRawExpanded(!rawExpanded)}
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#888',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
+            className="text-[13px] font-semibold text-on-surface-variant cursor-pointer select-none flex items-center gap-1"
           >
-            {rawExpanded ? '\u25BE' : '\u25B8'} Raw Spec
+            <span className="material-symbols-outlined text-[16px]">{rawExpanded ? 'expand_more' : 'chevron_right'}</span>
+            Raw Spec
           </h4>
           {rawExpanded && (
-            <pre style={{
-              background: '#f5f5f5',
-              padding: 12,
-              borderRadius: 6,
-              fontSize: 11,
-              lineHeight: 1.5,
-              overflow: 'auto',
-              maxHeight: 400,
-              marginTop: 8,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}>
+            <pre className="bg-surface-container-high p-3 rounded-lg text-[11px] leading-normal overflow-auto max-h-[400px] mt-2 whitespace-pre-wrap break-words text-on-surface">
               {spec.raw}
             </pre>
           )}
