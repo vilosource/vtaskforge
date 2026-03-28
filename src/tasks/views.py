@@ -117,6 +117,21 @@ class TaskViewSet(ModelViewSet):
     def submit(self, request, pk=None):
         """draft -> pending_start_review (if needs_review_before_start) or todo."""
         task = self.get_object()
+        # Block submit if task belongs to a non-active milestone
+        if task.milestone and task.milestone.status != "active":
+            return Response(
+                {
+                    "error": {
+                        "code": "MILESTONE_NOT_ACTIVE",
+                        "message": f"Cannot submit task: milestone '{task.milestone.name}' is '{task.milestone.status}', not 'active'",
+                        "details": {
+                            "milestone_id": task.milestone.id,
+                            "milestone_status": task.milestone.status,
+                        },
+                    }
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         before_start, _ = get_effective_review_flags(task)
         target = "pending_start_review" if before_start else "todo"
         try:

@@ -663,6 +663,28 @@ class TestClaimableEndpoint:
         assert task_with_dep.id in ids
         assert task_no_dep.id in ids
 
+    def test_claimable_excludes_pending_milestone_tasks(self, api_client, workplan):
+        pending_ms = MilestoneFactory(name="Pending", workplan=workplan, status="pending")
+        active_ms = MilestoneFactory(name="Active", workplan=workplan, status="active")
+        make_task(pending_ms, workplan, "todo", title="Pending MS task")
+        make_task(active_ms, workplan, "todo", title="Active MS task")
+        response = api_client.get("/v1/tasks/claimable/")
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["title"] == "Active MS task"
+
+    def test_claimable_excludes_completed_milestone_tasks(self, api_client, workplan):
+        completed_ms = MilestoneFactory(name="Completed", workplan=workplan, status="completed")
+        make_task(completed_ms, workplan, "todo", title="Completed MS task")
+        response = api_client.get("/v1/tasks/claimable/")
+        assert len(response.data["results"]) == 0
+
+    def test_claimable_includes_tasks_without_milestone(self, api_client, workplan):
+        """Backlog tasks (no milestone) are always claimable."""
+        TaskFactory(title="Backlog", workplan=None, milestone=None, project=workplan.project, status="todo")
+        response = api_client.get("/v1/tasks/claimable/")
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["title"] == "Backlog"
+
 
 # ---------------------------------------------------------------------------
 # DB tag lookup: claim uses agent.tags from DB when not in request body

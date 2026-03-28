@@ -128,6 +128,12 @@ def find_claimable_tasks(
     if project_id:
         tasks = tasks.filter(project_id=project_id)
 
+    # Exclude tasks in non-active milestones
+    from django.db.models import Q
+    tasks = tasks.filter(
+        Q(milestone__isnull=True) | Q(milestone__status="active")
+    )
+
     # Exclude tasks with unmet dependencies
     all_task_ids = list(tasks.values_list("id", flat=True))
     unmet_task_ids = get_tasks_with_unresolved_deps(all_task_ids)

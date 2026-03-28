@@ -91,6 +91,39 @@ class TestSubmit:
         response = api_client.post(f"/v1/tasks/{task.id}/submit/")
         assert_invalid_transition_error(response, "cancelled", "todo")
 
+    def test_submit_blocked_when_milestone_pending(self, api_client, workplan):
+        pending_milestone = MilestoneFactory(name="Pending", workplan=workplan, status="pending")
+        task = make_task(pending_milestone, workplan)
+        response = api_client.post(f"/v1/tasks/{task.id}/submit/")
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "MILESTONE_NOT_ACTIVE"
+
+    def test_submit_blocked_when_milestone_completed(self, api_client, workplan):
+        completed_milestone = MilestoneFactory(name="Done", workplan=workplan, status="completed")
+        task = make_task(completed_milestone, workplan)
+        response = api_client.post(f"/v1/tasks/{task.id}/submit/")
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "MILESTONE_NOT_ACTIVE"
+
+    def test_submit_allowed_when_milestone_active(self, api_client, workplan):
+        active_milestone = MilestoneFactory(name="Active", workplan=workplan, status="active")
+        task = make_task(active_milestone, workplan)
+        response = api_client.post(f"/v1/tasks/{task.id}/submit/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "todo"
+
+    def test_submit_allowed_when_no_milestone(self, api_client, workplan):
+        """Backlog tasks (no milestone) can always be submitted."""
+        task = TaskFactory(
+            title="Backlog Task",
+            workplan=None,
+            milestone=None,
+            project=workplan.project,
+            status="draft",
+        )
+        response = api_client.post(f"/v1/tasks/{task.id}/submit/")
+        assert response.status_code == status.HTTP_200_OK
+
 
 # ---------------------------------------------------------------------------
 # claim: todo -> doing

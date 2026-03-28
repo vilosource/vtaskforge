@@ -12,7 +12,7 @@ def workplan(db):
 @pytest.mark.django_db
 class TestMilestoneModel:
     def test_create_milestone_minimal(self, workplan):
-        milestone = MilestoneFactory(name="Milestone 1", workplan=workplan)
+        milestone = Milestone.objects.create(name="Milestone 1", workplan=workplan)
         assert milestone.id is not None
         assert len(milestone.id) == 21
         assert milestone.name == "Milestone 1"

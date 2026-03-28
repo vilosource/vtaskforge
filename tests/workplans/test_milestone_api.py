@@ -17,7 +17,7 @@ def other_workplan(db):
 
 @pytest.fixture
 def pending_milestone(db, workplan):
-    return MilestoneFactory(name="Pending Milestone", workplan=workplan)
+    return MilestoneFactory(name="Pending Milestone", workplan=workplan, status="pending")
 
 
 @pytest.fixture

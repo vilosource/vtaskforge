@@ -36,7 +36,7 @@ class MilestoneFactory(factory.django.DjangoModelFactory):
 
     workplan = factory.SubFactory(WorkplanFactory)
     name = factory.Sequence(lambda n: f"Milestone {n}")
-    status = "pending"
+    status = "active"
 
 
 class TaskFactory(factory.django.DjangoModelFactory):
