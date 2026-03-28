@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useWorkplan, useOrphanTasks } from '../api/tasks';
 import type { Task } from '../api/tasks';
 import { useWorkplanStats } from '../api/workplans';
@@ -166,9 +167,29 @@ export function WorkplanDetail() {
   const orphanTasks = orphanData?.results ?? [];
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const handleSSEEvent = useCallback(
+    (event: MessageEvent) => {
+      let data: { task_id?: string } = {};
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        // ignore malformed events
+      }
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['workplan-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['milestone-stats'] });
+      if (data.task_id) {
+        queryClient.invalidateQueries({ queryKey: ['task', data.task_id] });
+      }
+    },
+    [queryClient],
+  );
+
   const { status: sseStatus } = useSSE({
     url: `/v1/events/stream/?workplan=${workplanId}`,
-    onEvent: () => {},
+    onEvent: handleSSEEvent,
     enabled: !!workplanId,
   });
 

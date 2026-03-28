@@ -196,7 +196,7 @@ class TestStreamSSEFormat:
         events = parse_sse_chunks(chunks)
         returned = next((e for e in events if e["id"] == event.id), None)
         assert returned is not None
-        assert returned["event"] == "status_changed"
+        assert returned["event"] == "task.status_changed"
 
 
 # ---------------------------------------------------------------------------

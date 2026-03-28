@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProject, useProjectStats, useProjectWorkplans } from '../api/projects';
 import { useBacklogTasks, type Task } from '../api/tasks';
 import { useSSE } from '../hooks/useSSE';
@@ -94,9 +95,28 @@ export function ProjectDashboard() {
   const { data: stats } = useProjectStats(id);
   const { data: workplans, isLoading: workplansLoading } = useProjectWorkplans(id);
   const { data: backlogData } = useBacklogTasks(id!);
+  const queryClient = useQueryClient();
+
+  const handleSSEEvent = useCallback(
+    (event: MessageEvent) => {
+      let data: { task_id?: string } = {};
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        // ignore malformed events
+      }
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['project-stats'] });
+      if (data.task_id) {
+        queryClient.invalidateQueries({ queryKey: ['task', data.task_id] });
+      }
+    },
+    [queryClient],
+  );
+
   const { status: sseStatus } = useSSE({
     url: `/v1/events/stream/?project=${id}`,
-    onEvent: () => {},
+    onEvent: handleSSEEvent,
     enabled: !!id,
   });
 

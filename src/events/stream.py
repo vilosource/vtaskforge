@@ -73,10 +73,14 @@ def event_stream(request, max_iterations=None):
                 continue
             seen_ids.add(event.id)
             last_timestamp = event.timestamp
+            # Enrich payload with task_id so frontend can invalidate
+            # specific queries, and prefix event type with "task." to
+            # match the frontend EventSource listener names.
+            enriched_data = {**event.data, "task_id": event.task_id}
             yield format_sse(
                 event_id=event.id,
-                event_type=event.event_type,
-                data=event.data,
+                event_type=f"task.{event.event_type}",
+                data=enriched_data,
             )
 
         iteration += 1
