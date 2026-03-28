@@ -79,6 +79,48 @@ class TestFetchTraces:
         assert result == []
 
     @patch("tasks.cxdb.httpx.get")
+    def test_filters_out_non_matching_labels(self, mock_get):
+        """CXDB label filter is prefix-based; client-side must filter for exact match."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "contexts": [
+                {
+                    "context_id": 1,
+                    "title": "matching",
+                    "is_live": False,
+                    "head_depth": 10,
+                    "created_at_unix_ms": 1000,
+                    "labels": ["task:target-id"],
+                },
+                {
+                    "context_id": 2,
+                    "title": "different task",
+                    "is_live": False,
+                    "head_depth": 5,
+                    "created_at_unix_ms": 2000,
+                    "labels": ["task:other-id"],
+                },
+                {
+                    "context_id": 3,
+                    "title": "no task label",
+                    "is_live": False,
+                    "head_depth": 3,
+                    "created_at_unix_ms": 3000,
+                    "labels": ["cxtx"],
+                },
+            ],
+            "count": 3,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = fetch_traces("target-id")
+
+        assert len(result) == 1
+        assert result[0]["context_id"] == 1
+        assert result[0]["title"] == "matching"
+
+    @patch("tasks.cxdb.httpx.get")
     def test_timeout_returns_none(self, mock_get):
         mock_get.side_effect = httpx.TimeoutException("connect timeout")
 

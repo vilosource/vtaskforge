@@ -39,6 +39,10 @@ def fetch_traces(task_id: str) -> list[dict] | None:
 
     traces = []
     for ctx in contexts:
+        # CXDB label filter is prefix-based, so filter client-side for exact match
+        ctx_labels = ctx.get("labels") or []
+        if label not in ctx_labels:
+            continue
         traces.append({
             "context_id": ctx.get("context_id"),
             "title": ctx.get("title", ""),
