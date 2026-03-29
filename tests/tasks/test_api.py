@@ -637,3 +637,71 @@ class TestTaskReset:
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# ---------------------------------------------------------------------------
+# Field normalization
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestFieldNormalization:
+    """Verify that acceptance_criteria and labels are normalized to arrays."""
+
+    def test_acceptance_criteria_string_normalized_to_list(self, api_client, workplan):
+        payload = {
+            "title": "AC String Test",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "acceptance_criteria": "- First criterion\n- Second criterion\n- Third criterion",
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["acceptance_criteria"] == [
+            "First criterion",
+            "Second criterion",
+            "Third criterion",
+        ]
+
+    def test_acceptance_criteria_list_passes_through(self, api_client, workplan):
+        payload = {
+            "title": "AC List Test",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "acceptance_criteria": ["AC1", "AC2"],
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["acceptance_criteria"] == ["AC1", "AC2"]
+
+    def test_acceptance_criteria_empty_string_normalized_to_empty_list(self, api_client, workplan):
+        payload = {
+            "title": "AC Empty Test",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "acceptance_criteria": "",
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["acceptance_criteria"] == []
+
+    def test_labels_string_normalized_to_list(self, api_client, workplan):
+        payload = {
+            "title": "Labels String Test",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "labels": "feature, urgent, bug",
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["labels"] == ["feature", "urgent", "bug"]
+
+    def test_labels_list_passes_through(self, api_client, workplan):
+        payload = {
+            "title": "Labels List Test",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "labels": ["a", "b"],
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["labels"] == ["a", "b"]

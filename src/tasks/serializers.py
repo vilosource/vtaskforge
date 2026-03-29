@@ -43,6 +43,26 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at", "status"]
 
+    def validate_acceptance_criteria(self, value):
+        """Normalize acceptance_criteria to a list.
+
+        Accepts a JSON array (pass-through) or a string (split on newlines,
+        stripping leading '- ' markers).
+        """
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [line.strip().lstrip("- ") for line in value.splitlines() if line.strip()]
+        raise serializers.ValidationError("Must be a list or a string.")
+
+    def validate_labels(self, value):
+        """Normalize labels to a list of strings."""
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        raise serializers.ValidationError("Must be a list or a comma-separated string.")
+
     def validate(self, data):
         """
         Validate task relationships:
