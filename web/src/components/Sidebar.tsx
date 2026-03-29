@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 interface NavItem {
@@ -40,8 +39,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const { pathname } = useLocation();
 
   if (collapsed) {
@@ -49,7 +47,7 @@ export function Sidebar() {
       <aside className="h-screen w-10 fixed left-0 top-0 flex flex-col items-center pt-4 bg-slate-100 z-50">
         <button
           className="flex items-center justify-center w-6 h-6 rounded text-on-surface-variant hover:bg-slate-200 hover:text-on-surface transition-colors"
-          onClick={() => setCollapsed(false)}
+          onClick={onToggle}
           title="Expand sidebar"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -76,7 +74,7 @@ export function Sidebar() {
           </Link>
           <button
             className="flex items-center justify-center w-6 h-6 rounded text-on-surface-variant hover:bg-slate-200 hover:text-on-surface transition-colors"
-            onClick={() => setCollapsed(true)}
+            onClick={onToggle}
             title="Collapse sidebar"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

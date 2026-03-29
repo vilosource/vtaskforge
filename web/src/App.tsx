@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { ActiveProjectProvider } from './contexts/ActiveProjectContext';
 import { Home } from './pages/Home';
 import { ProjectList } from './pages/ProjectList';
@@ -69,11 +69,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 function AppLayout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+
   return (
     <RequireAuth>
       <div className="flex min-h-screen w-full bg-surface font-body text-on-surface">
-        <Sidebar />
-        <main className="flex-1 min-w-0 overflow-x-auto ml-64">
+        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <main className={`flex-1 min-w-0 overflow-x-auto transition-[margin] duration-200 ${sidebarCollapsed ? 'ml-10' : 'ml-64'}`}>
           <Outlet />
         </main>
       </div>

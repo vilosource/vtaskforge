@@ -9,12 +9,13 @@ function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderSidebar(initialEntry = '/') {
+function renderSidebar(initialEntry = '/', collapsed = false) {
+  const onToggle = () => {};
   return render(
     <QueryClientProvider client={makeQueryClient()}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <ActiveProjectProvider>
-          <Sidebar />
+          <Sidebar collapsed={collapsed} onToggle={onToggle} />
         </ActiveProjectProvider>
       </MemoryRouter>
     </QueryClientProvider>,
