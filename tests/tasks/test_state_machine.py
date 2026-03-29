@@ -382,3 +382,145 @@ class TestPerformTransition:
         perform_transition(task, "cancelled")
         with pytest.raises(InvalidTransition):
             perform_transition(task, "todo")
+
+
+# ---------------------------------------------------------------------------
+# Guard framework
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestGuardFramework:
+    """Tests for the entry/exit/transition guard system."""
+
+    def test_transition_with_no_guards_still_works(self):
+        """Transitions without any guards should work as before."""
+        task = make_task("doing")
+        perform_transition(task, "needs_attention")
+        assert task.status == "needs_attention"
+
+    def test_guard_violation_prevents_transition(self):
+        """A guard that raises GuardViolation should block the transition."""
+        from tasks.exceptions import GuardViolation
+        # A task without a workplan should not be able to reach todo
+        task = make_task("draft", workplan=None)
+        with pytest.raises(GuardViolation):
+            perform_transition(task, "todo")
+        task.refresh_from_db()
+        assert task.status == "draft"
+
+    def test_guard_violation_has_structured_info(self):
+        """GuardViolation should carry guard name and message."""
+        from tasks.exceptions import GuardViolation
+        task = make_task("draft", workplan=None)
+        with pytest.raises(GuardViolation) as exc_info:
+            perform_transition(task, "todo")
+        assert exc_info.value.guard_name is not None
+        assert len(str(exc_info.value)) > 0
+
+    def test_entry_guard_fires_on_any_transition_into_status(self):
+        """An entry guard for 'todo' fires regardless of source status."""
+        from tasks.exceptions import GuardViolation
+        # needs_attention -> todo should also be blocked without workplan
+        task = make_task("needs_attention", workplan=None)
+        with pytest.raises(GuardViolation):
+            perform_transition(task, "todo")
+
+    def test_exit_guard_fires_on_any_transition_from_status(self):
+        """An exit guard for 'draft' fires regardless of target status."""
+        from tests.factories import MilestoneFactory, WorkplanFactory
+        wp = WorkplanFactory()
+        ms = MilestoneFactory(workplan=wp, status="pending")
+        task = make_task("draft", workplan=wp, milestone=ms)
+        from tasks.exceptions import GuardViolation
+        with pytest.raises(GuardViolation):
+            perform_transition(task, "cancelled")
+
+    def test_multiple_guards_all_checked(self):
+        """When multiple guards exist, all are checked."""
+        from tasks.exceptions import GuardViolation
+        from tests.factories import MilestoneFactory, WorkplanFactory
+        wp = WorkplanFactory()
+        ms = MilestoneFactory(workplan=wp, status="pending")
+        # Task with inactive milestone AND no workplan — should fail on guard
+        task = make_task("draft", workplan=wp, milestone=ms)
+        with pytest.raises(GuardViolation):
+            perform_transition(task, "todo")
+
+
+# ---------------------------------------------------------------------------
+# Specific guards
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestGuardHasWorkplan:
+    """guard_has_workplan: entry guard for 'todo'."""
+
+    def test_submit_without_workplan_blocked(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task("draft", workplan=None)
+        with pytest.raises(GuardViolation, match="workplan"):
+            perform_transition(task, "todo")
+
+    def test_submit_with_workplan_succeeds(self):
+        from tests.factories import WorkplanFactory
+        wp = WorkplanFactory()
+        task = make_task("draft", workplan=wp)
+        perform_transition(task, "todo")
+        assert task.status == "todo"
+
+    def test_recover_to_todo_without_workplan_blocked(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task("needs_attention", workplan=None)
+        with pytest.raises(GuardViolation, match="workplan"):
+            perform_transition(task, "todo")
+
+    def test_unblock_to_todo_without_workplan_blocked(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task("blocked", workplan=None)
+        with pytest.raises(GuardViolation, match="workplan"):
+            perform_transition(task, "todo")
+
+    def test_undefer_to_todo_without_workplan_blocked(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task("deferred", workplan=None)
+        with pytest.raises(GuardViolation, match="workplan"):
+            perform_transition(task, "todo")
+
+
+@pytest.mark.django_db
+class TestGuardMilestoneActive:
+    """guard_milestone_active: exit guard for 'draft'."""
+
+    def test_submit_with_inactive_milestone_blocked(self):
+        from tasks.exceptions import GuardViolation
+        from tests.factories import MilestoneFactory, WorkplanFactory
+        wp = WorkplanFactory()
+        ms = MilestoneFactory(workplan=wp, status="pending")
+        task = make_task("draft", workplan=wp, milestone=ms)
+        with pytest.raises(GuardViolation, match="milestone"):
+            perform_transition(task, "todo")
+
+    def test_submit_with_active_milestone_succeeds(self):
+        from tests.factories import MilestoneFactory, WorkplanFactory
+        wp = WorkplanFactory()
+        ms = MilestoneFactory(workplan=wp, status="active")
+        task = make_task("draft", workplan=wp, milestone=ms)
+        perform_transition(task, "todo")
+        assert task.status == "todo"
+
+    def test_submit_with_no_milestone_succeeds(self):
+        from tests.factories import WorkplanFactory
+        wp = WorkplanFactory()
+        task = make_task("draft", workplan=wp, milestone=None, project=wp.project)
+        perform_transition(task, "todo")
+        assert task.status == "todo"
+
+    def test_cancel_from_draft_with_inactive_milestone_blocked(self):
+        """Exit guard fires on ANY transition from draft, not just submit."""
+        from tasks.exceptions import GuardViolation
+        from tests.factories import MilestoneFactory, WorkplanFactory
+        wp = WorkplanFactory()
+        ms = MilestoneFactory(workplan=wp, status="pending")
+        task = make_task("draft", workplan=wp, milestone=ms)
+        with pytest.raises(GuardViolation, match="milestone"):
+            perform_transition(task, "cancelled")

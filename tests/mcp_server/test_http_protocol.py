@@ -276,6 +276,8 @@ def test_http_full_lifecycle(mcp_http_server_process):
     token_key = token.key
 
     project = Project.objects.create(name="mcp-http-protocol-test", id="mcp-http-proto")
+    from workplans.models import Workplan
+    workplan = Workplan.objects.create(name="mcp-http-proto-wp", project=project)
 
     async def run():
         async with _make_http_client(token_key) as http_client:
@@ -290,6 +292,7 @@ def test_http_full_lifecycle(mcp_http_server_process):
                             "action": "create",
                             "title": "HTTP protocol test",
                             "project_id": project.id,
+                            "workplan_id": workplan.id,
                         },
                     )
                     d = json.loads(r.content[0].text)

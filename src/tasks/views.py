@@ -24,7 +24,27 @@ DEFAULT_CLAIM_TIMEOUT_MINUTES = 30
 
 
 def invalid_transition_response(exc):
-    """Return a 422 response with the standard INVALID_TRANSITION error format."""
+    """Return a 422/409 response for transition errors.
+
+    GuardViolation (business rule blocked): 409 GUARD_VIOLATION
+    InvalidTransition (wrong status): 422 INVALID_TRANSITION
+    """
+    from tasks.exceptions import GuardViolation
+    if isinstance(exc, GuardViolation):
+        return Response(
+            {
+                "error": {
+                    "code": "GUARD_VIOLATION",
+                    "message": str(exc),
+                    "details": {
+                        "current_status": exc.current_status,
+                        "requested_status": exc.requested_status,
+                        "guard": exc.guard_name,
+                    },
+                }
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
     return Response(
         {
             "error": {
@@ -117,21 +137,6 @@ class TaskViewSet(ModelViewSet):
     def submit(self, request, pk=None):
         """draft -> pending_start_review (if needs_review_before_start) or todo."""
         task = self.get_object()
-        # Block submit if task belongs to a non-active milestone
-        if task.milestone and task.milestone.status != "active":
-            return Response(
-                {
-                    "error": {
-                        "code": "MILESTONE_NOT_ACTIVE",
-                        "message": f"Cannot submit task: milestone '{task.milestone.name}' is '{task.milestone.status}', not 'active'",
-                        "details": {
-                            "milestone_id": task.milestone.id,
-                            "milestone_status": task.milestone.status,
-                        },
-                    }
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
         before_start, _ = get_effective_review_flags(task)
         target = "pending_start_review" if before_start else "todo"
         try:

@@ -96,14 +96,15 @@ class TestSubmit:
         task = make_task(pending_milestone, workplan)
         response = api_client.post(f"/v1/tasks/{task.id}/submit/")
         assert response.status_code == status.HTTP_409_CONFLICT
-        assert response.data["error"]["code"] == "MILESTONE_NOT_ACTIVE"
+        assert response.data["error"]["code"] == "GUARD_VIOLATION"
+        assert "milestone" in response.data["error"]["message"].lower()
 
     def test_submit_blocked_when_milestone_completed(self, api_client, workplan):
         completed_milestone = MilestoneFactory(name="Done", workplan=workplan, status="completed")
         task = make_task(completed_milestone, workplan)
         response = api_client.post(f"/v1/tasks/{task.id}/submit/")
         assert response.status_code == status.HTTP_409_CONFLICT
-        assert response.data["error"]["code"] == "MILESTONE_NOT_ACTIVE"
+        assert response.data["error"]["code"] == "GUARD_VIOLATION"
 
     def test_submit_allowed_when_milestone_active(self, api_client, workplan):
         active_milestone = MilestoneFactory(name="Active", workplan=workplan, status="active")
@@ -113,7 +114,19 @@ class TestSubmit:
         assert response.data["status"] == "todo"
 
     def test_submit_allowed_when_no_milestone(self, api_client, workplan):
-        """Backlog tasks (no milestone) can always be submitted."""
+        """Tasks with a workplan but no milestone can be submitted."""
+        task = TaskFactory(
+            title="No Milestone Task",
+            workplan=workplan,
+            milestone=None,
+            project=workplan.project,
+            status="draft",
+        )
+        response = api_client.post(f"/v1/tasks/{task.id}/submit/")
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_submit_without_workplan_blocked(self, api_client, workplan):
+        """Tasks without a workplan cannot be submitted."""
         task = TaskFactory(
             title="Backlog Task",
             workplan=None,
@@ -122,7 +135,9 @@ class TestSubmit:
             status="draft",
         )
         response = api_client.post(f"/v1/tasks/{task.id}/submit/")
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.data["error"]["code"] == "GUARD_VIOLATION"
+        assert "workplan" in response.data["error"]["message"].lower()
 
 
 # ---------------------------------------------------------------------------

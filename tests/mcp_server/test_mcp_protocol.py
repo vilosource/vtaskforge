@@ -115,6 +115,8 @@ def test_mcp_full_lifecycle():
     from projects.models import Project
 
     project = Project.objects.create(name="mcp-protocol-test", id="mcp-proto")
+    from workplans.models import Workplan
+    workplan = Workplan.objects.create(name="mcp-proto-wp", project=project)
 
     async def run():
         async with stdio_client(_server_params()) as (read, write):
@@ -128,6 +130,7 @@ def test_mcp_full_lifecycle():
                         "action": "create",
                         "title": "Protocol test",
                         "project_id": project.id,
+                        "workplan_id": workplan.id,
                     },
                 )
                 d = json.loads(r.content[0].text)

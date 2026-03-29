@@ -1,5 +1,5 @@
 from events.services import record_event
-from tasks.exceptions import InvalidTransition
+from tasks.exceptions import GuardViolation, InvalidTransition
 
 TERMINAL_STATUSES = {"done", "cancelled"}
 
@@ -72,6 +72,57 @@ VALID_TRANSITIONS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Guards — task-level invariant checks for transitions
+# ---------------------------------------------------------------------------
+
+def guard_has_workplan(task):
+    """Task must belong to a workplan before entering todo."""
+    if task.workplan is None:
+        raise GuardViolation(
+            task.status, "todo",
+            guard_name="guard_has_workplan",
+            message="Cannot move task to todo: task must belong to a workplan. "
+                    "Add the task to a workplan first.",
+        )
+
+
+def guard_milestone_active(task):
+    """If task has a milestone, it must be active to leave draft."""
+    if task.milestone and task.milestone.status != "active":
+        raise GuardViolation(
+            task.status, "todo",
+            guard_name="guard_milestone_active",
+            message=f"Cannot transition task: milestone '{task.milestone.name}' "
+                    f"is '{task.milestone.status}', not 'active'.",
+        )
+
+
+# Guards keyed by when they fire:
+# ENTRY_GUARDS[status] — fires on ANY transition INTO that status
+# EXIT_GUARDS[status] — fires on ANY transition FROM that status
+
+ENTRY_GUARDS = {
+    "todo": [guard_has_workplan],
+}
+
+EXIT_GUARDS = {
+    "draft": [guard_milestone_active],
+}
+
+
+def _run_guards(task, old_status, new_status):
+    """Run all applicable guards for a transition."""
+    for guard in EXIT_GUARDS.get(old_status, []):
+        guard(task)
+    for guard in ENTRY_GUARDS.get(new_status, []):
+        guard(task)
+
+
+# ---------------------------------------------------------------------------
+# Core state machine
+# ---------------------------------------------------------------------------
+
 def get_valid_transitions(current_status: str) -> list[str]:
     return VALID_TRANSITIONS.get(current_status, [])
 
@@ -84,6 +135,7 @@ def validate_transition(task, new_status: str) -> None:
 
 def perform_transition(task, new_status: str, triggered_by: str = ""):
     validate_transition(task, new_status)
+    _run_guards(task, task.status, new_status)
     old_status = task.status
     task.status = new_status
     task.save(update_fields=["status", "updated_at"])
