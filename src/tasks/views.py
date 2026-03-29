@@ -269,6 +269,11 @@ class TaskViewSet(ModelViewSet):
             perform_transition(task, "needs_attention", triggered_by="fail")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
+        # Clear stale claim fields (matching unclaim and expire_stale_claims behavior)
+        task.claimed_by = None
+        task.claimed_at = None
+        task.claim_expires_at = None
+        task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at"])
         serializer = self.get_serializer(task)
         return Response(serializer.data)
 

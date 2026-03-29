@@ -100,6 +100,24 @@ class TaskSerializer(serializers.ModelSerializer):
         if workplan and workplan.project != project:
             raise serializers.ValidationError("workplan.project must equal project")
 
+        # judge=True implies needs_review_on_completion=True
+        judge = data.get('judge')
+        review = data.get('needs_review_on_completion')
+
+        # For updates, resolve current values
+        if self.instance:
+            judge = judge if 'judge' in data else self.instance.judge
+            review = review if 'needs_review_on_completion' in data else self.instance.needs_review_on_completion
+
+        if judge is True:
+            if review is False:
+                raise serializers.ValidationError(
+                    "judge=True requires needs_review_on_completion to be True. "
+                    "Cannot skip review when a judge is required."
+                )
+            if review is None:
+                data['needs_review_on_completion'] = True
+
         return data
 
 

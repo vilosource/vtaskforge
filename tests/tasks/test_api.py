@@ -705,3 +705,67 @@ class TestFieldNormalization:
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["labels"] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# Judge / needs_review_on_completion relationship
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestJudgeReviewRelationship:
+    """judge=True must imply needs_review_on_completion=True."""
+
+    def test_judge_true_auto_sets_review_on_completion(self, api_client, workplan):
+        payload = {
+            "title": "Judge auto-review",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "judge": True,
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["judge"] is True
+        assert response.data["needs_review_on_completion"] is True
+
+    def test_judge_true_with_explicit_review_false_returns_400(self, api_client, workplan):
+        payload = {
+            "title": "Judge conflict",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "judge": True,
+            "needs_review_on_completion": False,
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_judge_false_allows_review_false(self, api_client, workplan):
+        payload = {
+            "title": "No judge no review",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "judge": False,
+            "needs_review_on_completion": False,
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["judge"] is False
+        assert response.data["needs_review_on_completion"] is False
+
+    def test_judge_true_update_enforces_review(self, api_client, workplan):
+        # Create without judge
+        payload = {
+            "title": "Update judge",
+            "project": workplan.project.id,
+            "workplan": workplan.id,
+            "judge": False,
+            "needs_review_on_completion": False,
+        }
+        response = api_client.post("/v1/tasks/", payload, format="json")
+        task_id = response.data["id"]
+        # Update to judge=True with review still False
+        response = api_client.patch(
+            f"/v1/tasks/{task_id}/",
+            {"judge": True, "needs_review_on_completion": False},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST

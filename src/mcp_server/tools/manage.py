@@ -63,7 +63,7 @@ def vtf_manage_task(
                                acceptance_criteria, requires, needs_review_before_start,
                                needs_review_on_completion, test_command)
     elif action == "submit":
-        return _action_transition(task_id, "todo", "submitted")
+        return _action_submit(task_id)
     elif action == "block":
         return _action_block(task_id, reason)
     elif action == "unblock":
@@ -390,6 +390,51 @@ def _action_update(task_id, title, description, labels, spec,
             },
             message=f"Task {task.id} updated.",
             available_actions=["vtf_task_detail", "vtf_manage_task"],
+        )
+    )
+
+
+def _action_submit(task_id):
+    """Submit a task from draft, routing to correct target based on review flags."""
+    if not task_id:
+        return json.dumps(
+            error_response(
+                message="Cannot submit task: 'task_id' is required.",
+                data={},
+                available_actions=["vtf_search_tasks"],
+            )
+        )
+
+    task, err = _get_task(task_id)
+    if err:
+        return err
+
+    from tasks.review_policy import get_effective_review_flags
+    needs_start_review, _ = get_effective_review_flags(task)
+    target_status = "pending_start_review" if needs_start_review else "todo"
+
+    previous_status = task.status
+    try:
+        perform_transition(task, target_status)
+    except InvalidTransition:
+        valid = get_valid_transitions(task.status)
+        return json.dumps(
+            error_response(
+                message=(
+                    f"Cannot submit task {task_id}: "
+                    f"current status is '{task.status}'. "
+                    f"Valid transitions: {valid}."
+                ),
+                data={"task_id": task_id, "current_status": task.status, "valid_transitions": valid},
+                available_actions=["vtf_task_detail"],
+            )
+        )
+
+    return json.dumps(
+        success_response(
+            data={"task": {"id": task.id, "status": task.status, "previous_status": previous_status}},
+            message=f"Task {task.id} submitted ({previous_status} → {task.status}).",
+            available_actions=["vtf_task_detail"],
         )
     )
 

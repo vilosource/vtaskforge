@@ -76,6 +76,30 @@ def test_manage_submit_task():
     assert result["data"]["task"]["status"] == "todo"
 
 
+@pytest.mark.django_db
+def test_manage_submit_routes_to_pending_start_review_when_flag_set():
+    """vtf_manage_task(action=submit) routes to pending_start_review when flag is set."""
+    task = TaskFactory(status="draft", needs_review_before_start=True)
+
+    result = json.loads(vtf_manage_task(action="submit", task_id=task.id))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.status == "pending_start_review"
+
+
+@pytest.mark.django_db
+def test_manage_submit_routes_to_todo_when_flag_not_set():
+    """vtf_manage_task(action=submit) routes to todo when no start review flag."""
+    task = TaskFactory(status="draft", needs_review_before_start=False)
+
+    result = json.loads(vtf_manage_task(action="submit", task_id=task.id))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.status == "todo"
+
+
 # ---------------------------------------------------------------------------
 # test_manage_block_task
 # ---------------------------------------------------------------------------

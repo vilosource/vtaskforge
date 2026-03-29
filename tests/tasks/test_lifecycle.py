@@ -323,6 +323,31 @@ class TestFail:
         response = api_client.post(f"/v1/tasks/{task.id}/fail/")
         assert_invalid_transition_error(response, "done", "needs_attention")
 
+    def test_fail_clears_claimed_by(self, api_client, milestone, workplan, agent_abc):
+        task = make_task(milestone, workplan, "doing", claimed_by=agent_abc)
+        api_client.post(f"/v1/tasks/{task.id}/fail/")
+        task.refresh_from_db()
+        assert task.claimed_by is None
+
+    def test_fail_clears_claimed_at(self, api_client, milestone, workplan, agent_abc):
+        from django.utils import timezone
+        task = make_task(milestone, workplan, "doing", claimed_by=agent_abc, claimed_at=timezone.now())
+        api_client.post(f"/v1/tasks/{task.id}/fail/")
+        task.refresh_from_db()
+        assert task.claimed_at is None
+
+    def test_fail_clears_claim_expires_at(self, api_client, milestone, workplan, agent_abc):
+        from django.utils import timezone
+        task = make_task(
+            milestone, workplan, "doing",
+            claimed_by=agent_abc,
+            claimed_at=timezone.now(),
+            claim_expires_at=timezone.now() + timezone.timedelta(minutes=10),
+        )
+        api_client.post(f"/v1/tasks/{task.id}/fail/")
+        task.refresh_from_db()
+        assert task.claim_expires_at is None
+
 
 # ---------------------------------------------------------------------------
 # resubmit: changes_requested -> review_return_to
