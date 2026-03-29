@@ -365,6 +365,108 @@ class TestFail:
 
 
 # ---------------------------------------------------------------------------
+# recover: needs_attention -> todo or draft
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestRecover:
+    def test_recover_to_todo_succeeds(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "todo", "reason": "Fixed the test command"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "todo"
+
+    def test_recover_to_draft_succeeds(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "draft", "reason": "Needs major rework"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "draft"
+
+    def test_recover_requires_reason(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "todo"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_recover_clears_claim_fields(self, api_client, milestone, workplan, agent_abc):
+        from django.utils import timezone
+        task = make_task(
+            milestone, workplan, "needs_attention",
+            claimed_by=agent_abc,
+            claimed_at=timezone.now(),
+            claim_expires_at=timezone.now() + timezone.timedelta(minutes=10),
+        )
+        api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "todo", "reason": "Retry after fix"},
+            format="json",
+        )
+        task.refresh_from_db()
+        assert task.claimed_by is None
+        assert task.claimed_at is None
+        assert task.claim_expires_at is None
+
+    def test_recover_invalid_target_returns_error(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "doing", "reason": "Bad target"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_recover_from_non_needs_attention_returns_error(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "draft")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "todo", "reason": "Wrong status"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_409_CONFLICT
+
+    def test_recover_increments_retry_count(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        assert task.retry_count == 0
+        api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "todo", "reason": "First retry"},
+            format="json",
+        )
+        task.refresh_from_db()
+        assert task.retry_count == 1
+
+    def test_recover_to_draft_does_not_increment_retry_count(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "draft", "reason": "Major rework"},
+            format="json",
+        )
+        task.refresh_from_db()
+        assert task.retry_count == 0
+
+    def test_retry_count_visible_in_api_response(self, api_client, milestone, workplan):
+        task = make_task(milestone, workplan, "needs_attention")
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/recover/",
+            {"target": "todo", "reason": "Retry"},
+            format="json",
+        )
+        assert response.data["retry_count"] == 1
+
+
+# ---------------------------------------------------------------------------
 # resubmit: changes_requested -> review_return_to
 # ---------------------------------------------------------------------------
 

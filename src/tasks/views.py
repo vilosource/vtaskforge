@@ -283,6 +283,46 @@ class TaskViewSet(ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
+    def recover(self, request, pk=None):
+        """needs_attention -> todo (re-queue) or draft (major rework)."""
+        task = self.get_object()
+        target = request.data.get("target")
+        reason = request.data.get("reason", "").strip()
+
+        if target not in ("todo", "draft"):
+            return Response(
+                {"error": {"code": "INVALID_TARGET", "message": "target must be 'todo' or 'draft'"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not reason:
+            return Response(
+                {"error": {"code": "REASON_REQUIRED", "message": "reason is required for recovery"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if task.status != "needs_attention":
+            return Response(
+                {"error": {"code": "NOT_NEEDS_ATTENTION", "message": f"Task is '{task.status}', not 'needs_attention'"}},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            perform_transition(task, target, triggered_by="recover")
+        except InvalidTransition as exc:
+            return invalid_transition_response(exc)
+
+        # Clear stale claim fields
+        task.claimed_by = None
+        task.claimed_at = None
+        task.claim_expires_at = None
+        # Increment retry_count only for re-queue (todo), not major rework (draft)
+        if target == "todo":
+            task.retry_count += 1
+        task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "retry_count"])
+
+        serializer = self.get_serializer(task)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
     def resubmit(self, request, pk=None):
         """changes_requested -> review_return_to value. Return 400 if review_return_to not set."""
         task = self.get_object()

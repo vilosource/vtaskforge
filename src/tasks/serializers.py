@@ -38,10 +38,11 @@ class TaskSerializer(serializers.ModelSerializer):
             "test_command",
             "judge",
             "isolation",
+            "retry_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "status"]
+        read_only_fields = ["id", "created_at", "updated_at", "status", "retry_count"]
 
     def validate_acceptance_criteria(self, value):
         """Normalize acceptance_criteria to a list.
