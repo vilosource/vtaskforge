@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { ActiveProjectProvider } from './contexts/ActiveProjectContext';
-import { ConsoleWidgetProvider } from './contexts/ConsoleWidgetContext';
+import { ConsoleWidgetProvider, useConsoleWidget } from './contexts/ConsoleWidgetContext';
 import { ConsoleWidget } from './components/ConsoleWidget';
 import { Home } from './pages/Home';
 import { ProjectList } from './pages/ProjectList';
@@ -73,12 +73,17 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+  const { isOpen, layout, dockWidth } = useConsoleWidget();
+  const isDocked = isOpen && layout === 'docked';
 
   return (
     <RequireAuth>
       <div className="flex min-h-screen w-full bg-surface font-body text-on-surface">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-        <main className={`flex-1 min-w-0 overflow-x-auto transition-[margin] duration-200 ${sidebarCollapsed ? 'ml-10' : 'ml-64'}`}>
+        <main
+          className={`flex-1 min-w-0 overflow-x-auto transition-[margin] duration-200 ${sidebarCollapsed ? 'ml-10' : 'ml-64'}`}
+          style={isDocked ? { marginRight: dockWidth } : undefined}
+        >
           <Outlet />
         </main>
       </div>

@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
 import { ConsoleIframe, type ConsoleStatus } from './ConsoleIframe';
+import { MinimizedBar } from './MinimizedBar';
+import { ResizeDivider } from './ResizeDivider';
 import { buildAuthenticatedConsoleUrl } from '../api/console';
 
 const MIN_WIDTH = 400;
@@ -19,7 +21,8 @@ export function ConsoleWidget() {
     dock,
     float,
     setPosition,
-    setSize,
+    setDockWidth,
+    restore,
   } = useConsoleWidget();
 
   const [status, setStatus] = useState<ConsoleStatus>('loading');
@@ -42,7 +45,7 @@ export function ConsoleWidget() {
       if (layout !== 'floating') return;
       setIsDragging(true);
       dragOffset.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     },
     [layout, position],
   );
@@ -61,6 +64,13 @@ export function ConsoleWidget() {
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
   }, []);
+
+  const handleDockResize = useCallback(
+    (deltaX: number) => {
+      setDockWidth(Math.max(MIN_WIDTH, dockWidth + deltaX));
+    },
+    [dockWidth, setDockWidth],
+  );
 
   if (!isOpen || !target) return null;
 
@@ -151,6 +161,7 @@ export function ConsoleWidget() {
         className="fixed right-0 top-0 h-screen z-[60] flex flex-col bg-surface-container-lowest border-l border-outline-variant shadow-2xl"
         style={{ width: dockWidth }}
       >
+        <ResizeDivider onResize={handleDockResize} />
         {/* Title bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-outline-variant bg-surface-container select-none">
           <div className="flex items-center gap-2">
@@ -201,10 +212,8 @@ export function ConsoleWidget() {
   // Minimized mode
   if (layout === 'minimized') {
     return (
-      <div
-        data-testid="console-widget"
-        className="fixed bottom-0 right-4 z-[60]"
-      >
+      <div data-testid="console-widget">
+        <MinimizedBar target={target} onRestore={restore} />
         {/* Keep iframe alive but hidden */}
         <div className="w-[1px] h-[1px] overflow-hidden absolute" style={{ left: -9999 }}>
           <ConsoleIframe target={target} onStatusChange={handleStatusChange} />
