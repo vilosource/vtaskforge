@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { ActiveProjectProvider } from './contexts/ActiveProjectContext';
+import { ConsoleWidgetProvider } from './contexts/ConsoleWidgetContext';
+import { ConsoleWidget } from './components/ConsoleWidget';
 import { Home } from './pages/Home';
 import { ProjectList } from './pages/ProjectList';
 import { ProjectDashboard } from './pages/ProjectDashboard';
@@ -90,6 +92,7 @@ export function App() {
       <BrowserRouter>
         <AuthProvider>
           <ActiveProjectProvider>
+          <ConsoleWidgetProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<AppLayout />}>
@@ -104,6 +107,8 @@ export function App() {
               <Route path="/agents/:id" element={<AgentDetail />} />
             </Route>
           </Routes>
+          <ConsoleWidget />
+          </ConsoleWidgetProvider>
           </ActiveProjectProvider>
         </AuthProvider>
       </BrowserRouter>
