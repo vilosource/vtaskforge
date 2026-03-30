@@ -7,7 +7,13 @@ from django.urls import include, path, re_path
 
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import ensure_csrf_cookie
-from core.views import BulkImportView, HealthCheckView
+from core.views import (
+    BulkImportView,
+    ConsoleCodeExchangeView,
+    ConsoleCodeGenerateView,
+    HealthCheckView,
+    console_login_redirect,
+)
 
 
 def custom_404(request, exception=None):
@@ -91,6 +97,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('v1/auth/login', api_login, name='api-login'),
     path('v1/auth/logout', api_logout, name='api-logout'),
+    path('v1/auth/code/', ConsoleCodeGenerateView.as_view(), name='console-code-generate'),
+    path('v1/auth/exchange/', ConsoleCodeExchangeView.as_view(), name='console-code-exchange'),
+    path('auth/console-login/', console_login_redirect, name='console-login'),
     path('v1/health', HealthCheckView.as_view(), name='health-check'),
     path('v1/bulk/import', BulkImportView.as_view(), name='bulk-import'),
     path('v1/', include('projects.urls')),
