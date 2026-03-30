@@ -8,6 +8,7 @@ import { LiveIndicator } from '../components/LiveIndicator';
 import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
+import { openConsoleNewTab } from '../api/console';
 
 function WorkplanCard({ workplan, projectId }: {
   workplan: { id: string; name: string; description: string; status: string; total_tasks: number; completed_percentage: number };
@@ -186,8 +187,17 @@ export function ProjectDashboard() {
             </div>
             <span className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Overall</span>
           </div>
-          {project?.repo_url && (
-            <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {project?.id && (
+              <button
+                onClick={() => openConsoleNewTab({ role: 'architect', project: project.id })}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">terminal</span>
+                Plan with Architect
+              </button>
+            )}
+            {project?.repo_url && (
               <a
                 href={project.repo_url}
                 target="_blank"
@@ -196,8 +206,8 @@ export function ProjectDashboard() {
               >
                 Repository
               </a>
-            </div>
-          )}
+            )}
+          </div>
           {project?.tags && project.tags.length > 0 && (
             <div className="flex gap-1.5 flex-wrap">
               {project.tags.map((tag) => (

@@ -59,6 +59,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         {task.milestone && (
           <span className="bg-tertiary-container text-on-tertiary-container rounded px-2 py-0.5 text-[10px] font-medium">{task.milestone}</span>
         )}
+        {task.status === 'doing' && task.claimed_by && (
+          <span className="material-symbols-outlined text-primary text-sm ml-auto" title="Agent running">terminal</span>
+        )}
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { EventTimeline } from '../components/EventTimeline';
 import { ActionButtons } from '../components/ActionButtons';
 import { AddNoteForm } from '../components/AddNoteForm';
 import { Breadcrumb } from '../components/Breadcrumb';
+import ConsoleModal from '../components/ConsoleModal';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 
 function isAgent(actorId: string) {
@@ -42,6 +43,7 @@ export function TaskPage() {
   const { data: project } = useProject(task?.project);
   useSetActiveProject(task?.project);
   const [eventsExpanded, setEventsExpanded] = useState(false);
+  const [showConsole, setShowConsole] = useState(false);
 
   if (isLoading) {
     return <div className="px-8 pb-12 pt-6 text-center text-on-surface-variant">Loading task...</div>;
@@ -83,9 +85,28 @@ export function TaskPage() {
       </div>
 
       {/* Action buttons row */}
-      <div className="mb-8">
+      <div className="mb-8 flex items-center gap-4">
         <ActionButtons taskId={task.id} status={task.status} />
+        {task.status === 'doing' && task.claimed_by && (
+          <button
+            onClick={() => setShowConsole(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-tertiary-container text-on-tertiary-container text-xs font-bold hover:opacity-90 transition-opacity"
+          >
+            <span className="material-symbols-outlined text-sm">terminal</span>
+            Debug
+          </button>
+        )}
       </div>
+
+      {/* Console terminal modal */}
+      {showConsole && task.claimed_by && (
+        <ConsoleModal
+          onClose={() => setShowConsole(false)}
+          pod={task.claimed_by}
+          command="bash"
+          title={`Debug: ${task.title}`}
+        />
+      )}
 
       {/* Two-column layout */}
       <div className="grid grid-cols-3 gap-8 items-start">
