@@ -11,6 +11,8 @@ class NoteSerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    claimed_by_pod_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Task
         fields = [
@@ -39,10 +41,21 @@ class TaskSerializer(serializers.ModelSerializer):
             "judge",
             "isolation",
             "retry_count",
+            "claimed_by_pod_name",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at", "status", "retry_count"]
+
+    def get_claimed_by_pod_name(self, obj):
+        if not obj.claimed_by:
+            return None
+        from agents.models import Agent
+        try:
+            agent = Agent.objects.get(id=obj.claimed_by)
+            return agent.pod_name
+        except Agent.DoesNotExist:
+            return None
 
     def validate_acceptance_criteria(self, value):
         """Normalize acceptance_criteria to a list.

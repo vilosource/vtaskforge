@@ -22,6 +22,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "status",
             "effective_status",
             "last_heartbeat",
+            "pod_name",
             "registered_at",
             "created_at",
             "updated_at",

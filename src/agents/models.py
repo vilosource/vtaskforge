@@ -18,6 +18,7 @@ class Agent(NanoIDMixin, TimestampMixin):
         default="offline",
     )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
+    pod_name = models.CharField(max_length=255, null=True, blank=True)
     registered_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
