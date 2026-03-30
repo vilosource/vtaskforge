@@ -11,6 +11,7 @@ export interface Task {
   project: string;
   labels: string[];
   claimed_by: string | null;
+  claimed_by_pod_name: string | null;
   claimed_at: string | null;
   assigned_to: string | null;
   requires: string[];

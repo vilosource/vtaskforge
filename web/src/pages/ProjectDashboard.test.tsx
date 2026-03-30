@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectDashboard } from './ProjectDashboard';
 import { ActiveProjectProvider } from '../contexts/ActiveProjectContext';
+import { ConsoleWidgetProvider } from '../contexts/ConsoleWidgetContext';
 
 const mockProject = {
   id: 'proj-1',
@@ -75,11 +76,13 @@ function renderProjectDashboard(projectId = 'proj-1') {
   return render(
     <QueryClientProvider client={queryClient}>
       <ActiveProjectProvider>
-        <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
-          <Routes>
-            <Route path="/projects/:id" element={<ProjectDashboard />} />
-          </Routes>
-        </MemoryRouter>
+        <ConsoleWidgetProvider>
+          <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
+            <Routes>
+              <Route path="/projects/:id" element={<ProjectDashboard />} />
+            </Routes>
+          </MemoryRouter>
+        </ConsoleWidgetProvider>
       </ActiveProjectProvider>
     </QueryClientProvider>,
   );

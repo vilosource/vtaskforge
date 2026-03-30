@@ -6,6 +6,7 @@ import { setupServer } from 'msw/node';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { KanbanBoard } from './KanbanBoard';
+import { ConsoleWidgetProvider } from '../contexts/ConsoleWidgetContext';
 
 const WORKPLAN_URL = '/v1/workplans/test-wp';
 const TASKS_URL = '/v1/tasks/';
@@ -82,9 +83,11 @@ function renderBoard(workplanId = 'test-wp') {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <KanbanBoard workplanId={workplanId} />
-      </MemoryRouter>
+      <ConsoleWidgetProvider>
+        <MemoryRouter>
+          <KanbanBoard workplanId={workplanId} />
+        </MemoryRouter>
+      </ConsoleWidgetProvider>
     </QueryClientProvider>,
   );
 }

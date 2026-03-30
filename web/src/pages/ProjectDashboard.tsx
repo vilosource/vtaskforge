@@ -8,7 +8,7 @@ import { LiveIndicator } from '../components/LiveIndicator';
 import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
-import { openConsoleNewTab } from '../api/console';
+import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
 
 function WorkplanCard({ workplan, projectId }: {
   workplan: { id: string; name: string; description: string; status: string; total_tasks: number; completed_percentage: number };
@@ -100,6 +100,7 @@ export function ProjectDashboard() {
   const { data: stats } = useProjectStats(id);
   const { data: workplans, isLoading: workplansLoading } = useProjectWorkplans(id);
   const { data: backlogData } = useBacklogTasks(id!);
+  const { open: openConsoleWidget } = useConsoleWidget();
   const queryClient = useQueryClient();
 
   const handleSSEEvent = useCallback(
@@ -190,7 +191,7 @@ export function ProjectDashboard() {
           <div className="ml-auto flex items-center gap-3">
             {project?.id && (
               <button
-                onClick={() => openConsoleNewTab({ role: 'architect', project: project.id })}
+                onClick={() => openConsoleWidget({ role: 'architect', project: project.id })}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
               >
                 <span className="material-symbols-outlined text-sm">terminal</span>

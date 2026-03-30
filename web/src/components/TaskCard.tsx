@@ -1,4 +1,5 @@
 import type { Task } from '../api/tasks';
+import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
 
 const BORDER_COLORS: Record<string, string> = {
   draft: 'border-l-outline',
@@ -34,6 +35,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onClick }: TaskCardProps) {
+  const { open: openConsoleWidget } = useConsoleWidget();
   return (
     <div
       className={`bg-surface-container-lowest p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow cursor-pointer border-l-[3px] ${BORDER_COLORS[task.status] ?? 'border-l-outline'}`}
@@ -59,7 +61,19 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         {task.milestone && (
           <span className="bg-tertiary-container text-on-tertiary-container rounded px-2 py-0.5 text-[10px] font-medium">{task.milestone}</span>
         )}
-        {task.status === 'doing' && task.claimed_by && (
+        {task.status === 'doing' && task.claimed_by && task.claimed_by_pod_name && (
+          <button
+            className="material-symbols-outlined text-primary text-sm ml-auto hover:text-primary/80 transition-colors"
+            title="Open terminal"
+            onClick={(e) => {
+              e.stopPropagation();
+              openConsoleWidget({ pod: task.claimed_by_pod_name!, command: 'bash' });
+            }}
+          >
+            terminal
+          </button>
+        )}
+        {task.status === 'doing' && task.claimed_by && !task.claimed_by_pod_name && (
           <span className="material-symbols-outlined text-primary text-sm ml-auto" title="Agent running">terminal</span>
         )}
       </div>

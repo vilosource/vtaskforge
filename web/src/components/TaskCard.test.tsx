@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { TaskCard } from './TaskCard';
 import type { Task } from '../api/tasks';
 
+vi.mock('../contexts/ConsoleWidgetContext', () => ({
+  useConsoleWidget: () => ({ open: vi.fn() }),
+}));
+
 const baseTask: Task = {
   id: 'task-1',
   title: 'Implement login form',
@@ -13,6 +17,7 @@ const baseTask: Task = {
   project: 'project-1',
   labels: [],
   claimed_by: null,
+  claimed_by_pod_name: null,
   claimed_at: null,
   assigned_to: null,
   requires: [],

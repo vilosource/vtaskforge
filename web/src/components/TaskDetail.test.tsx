@@ -19,6 +19,7 @@ const baseTaskDetail: TaskDetailType = {
   project: 'project-1',
   labels: [],
   claimed_by: null,
+  claimed_by_pod_name: null,
   claimed_at: null,
   assigned_to: null,
   requires: [],

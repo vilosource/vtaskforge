@@ -5,7 +5,7 @@ import { useAuth } from '../App';
 import { useProjects, type ProjectStats, type ProjectWorkplan } from '../api/projects';
 import { useAgents, type Agent } from '../api/agents';
 import { apiGet, apiGetPaginated } from '../api/client';
-import { openConsoleNewTab } from '../api/console';
+import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
 
 /* ---------- helpers ---------- */
 
@@ -162,6 +162,7 @@ export function Home() {
     return map;
   }, [projects]);
 
+  const { open: openConsoleWidget } = useConsoleWidget();
   const greeting = getGreeting();
   const displayName = username || 'there';
   const isLoading = projectsLoading || agentsLoading;
@@ -335,11 +336,11 @@ export function Home() {
             <span className="text-xs font-bold text-on-surface">Fleet Status</span>
           </button>
           <button
-            onClick={() => openConsoleNewTab({ role: 'architect' })}
+            onClick={() => openConsoleWidget({ role: 'architect' })}
             className="bg-surface-container-lowest p-5 rounded-xl shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 flex flex-col items-center gap-3 cursor-pointer border border-outline-variant/20"
           >
             <span className="material-symbols-outlined text-primary text-2xl">terminal</span>
-            <span className="text-xs font-bold text-on-surface">Chat with Architect</span>
+            <span className="text-xs font-bold text-on-surface">Consult Architect</span>
           </button>
         </div>
       </div>

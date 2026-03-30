@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskPage } from './TaskPage';
 import { ActiveProjectProvider } from '../contexts/ActiveProjectContext';
+import { ConsoleWidgetProvider } from '../contexts/ConsoleWidgetContext';
 
 const mockTask = {
   id: 'task-abc',
@@ -87,11 +88,13 @@ function renderTaskPage(taskId = 'task-abc') {
   return render(
     <QueryClientProvider client={queryClient}>
       <ActiveProjectProvider>
-        <MemoryRouter initialEntries={[`/tasks/${taskId}`]}>
-          <Routes>
-            <Route path="/tasks/:id" element={<TaskPage />} />
-          </Routes>
-        </MemoryRouter>
+        <ConsoleWidgetProvider>
+          <MemoryRouter initialEntries={[`/tasks/${taskId}`]}>
+            <Routes>
+              <Route path="/tasks/:id" element={<TaskPage />} />
+            </Routes>
+          </MemoryRouter>
+        </ConsoleWidgetProvider>
       </ActiveProjectProvider>
     </QueryClientProvider>
   );
