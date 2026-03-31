@@ -791,3 +791,117 @@ def test_manage_note_missing_note_text():
 
     assert result["success"] is False
     assert "reason" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# recover action tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_mcp_recover_action_to_todo():
+    """vtf_manage_task(action=recover) re-queues a needs_attention task to todo."""
+    task = TaskFactory(status="needs_attention", retry_count=0)
+
+    result = json.loads(vtf_manage_task(
+        action="recover",
+        task_id=task.id,
+        reason="Retrying after environment fix",
+    ))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.status == "todo"
+    assert task.retry_count == 1
+    assert task.claimed_by is None
+    assert task.claimed_at is None
+    assert task.claim_expires_at is None
+    assert result["data"]["task"]["status"] == "todo"
+    assert result["data"]["task"]["retry_count"] == 1
+
+
+@pytest.mark.django_db
+def test_mcp_recover_action_to_draft():
+    """vtf_manage_task(action=recover, target=draft) resets task to draft for major rework."""
+    task = TaskFactory(status="needs_attention", retry_count=1)
+
+    result = json.loads(vtf_manage_task(
+        action="recover",
+        task_id=task.id,
+        target="draft",
+        reason="Major rework needed — spec was wrong",
+    ))
+
+    assert result["success"] is True
+    task.refresh_from_db()
+    assert task.status == "draft"
+    assert task.retry_count == 1  # not incremented for draft
+    assert task.claimed_by is None
+    assert result["data"]["task"]["status"] == "draft"
+
+
+@pytest.mark.django_db
+def test_mcp_recover_requires_reason():
+    """vtf_manage_task(action=recover) returns error when reason is missing."""
+    task = TaskFactory(status="needs_attention")
+
+    result = json.loads(vtf_manage_task(
+        action="recover",
+        task_id=task.id,
+    ))
+
+    assert result["success"] is False
+    assert "reason" in result["message"].lower()
+
+
+@pytest.mark.django_db
+def test_mcp_recover_requires_task_id():
+    """vtf_manage_task(action=recover) returns error when task_id is missing."""
+    result = json.loads(vtf_manage_task(
+        action="recover",
+        reason="Retrying",
+    ))
+
+    assert result["success"] is False
+    assert "task_id" in result["message"].lower()
+
+
+@pytest.mark.django_db
+def test_mcp_recover_invalid_target():
+    """vtf_manage_task(action=recover) returns error for unknown target."""
+    task = TaskFactory(status="needs_attention")
+
+    result = json.loads(vtf_manage_task(
+        action="recover",
+        task_id=task.id,
+        reason="Retrying",
+        target="doing",
+    ))
+
+    assert result["success"] is False
+    assert "target" in result["message"].lower()
+
+
+@pytest.mark.django_db
+def test_mcp_recover_from_wrong_status():
+    """vtf_manage_task(action=recover) returns error when task is not needs_attention."""
+    task = TaskFactory(status="todo")
+
+    result = json.loads(vtf_manage_task(
+        action="recover",
+        task_id=task.id,
+        reason="Retrying",
+    ))
+
+    assert result["success"] is False
+    assert "needs_attention" in result["message"]
+
+
+@pytest.mark.django_db
+def test_mcp_recover_increments_retry_count_multiple_times():
+    """retry_count accumulates across multiple recover-to-todo calls."""
+    task = TaskFactory(status="needs_attention", retry_count=2)
+
+    vtf_manage_task(action="recover", task_id=task.id, reason="attempt 3")
+    task.refresh_from_db()
+    assert task.retry_count == 3

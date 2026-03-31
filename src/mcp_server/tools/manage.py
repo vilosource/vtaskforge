@@ -16,7 +16,7 @@ from tasks.state_machine import get_valid_transitions, perform_transition
 
 VALID_ACTIONS = [
     "create", "update", "submit", "block", "unblock",
-    "defer", "cancel", "delete", "assign", "unassign", "note",
+    "defer", "cancel", "delete", "assign", "unassign", "note", "recover",
 ]
 
 
@@ -36,6 +36,7 @@ def vtf_manage_task(
     workplan_id: str = "",
     assigned_to: str = "",
     reason: str = "",
+    target: str = "",
     acceptance_criteria: str = "",
     requires: str = "",
     needs_review_before_start: str = "",
@@ -50,6 +51,10 @@ def vtf_manage_task(
 
     The 'note' action adds a free-text note to any task regardless of its
     current status. Pass the note text via the 'reason' parameter.
+
+    The 'recover' action moves a needs_attention task back to 'todo' (re-queue)
+    or 'draft' (major rework). Use 'target' to specify which (default: todo).
+    A 'reason' is required.
     """
     # Route by action
     if action == "create":
@@ -80,6 +85,8 @@ def vtf_manage_task(
         return _action_unassign(task_id)
     elif action == "note":
         return _action_note(task_id, reason)
+    elif action == "recover":
+        return _action_recover(task_id, reason, target)
     else:
         suggestion = _suggest_action(action, VALID_ACTIONS)
         hint = f" Did you mean '{suggestion}'?" if suggestion else ""
@@ -722,5 +729,88 @@ def _action_note(task_id, note_text):
             data={"task": {"id": task.id, "title": task.title, "status": task.status}},
             message=f"Note added to task {task.id}.",
             available_actions=["vtf_task_detail"],
+        )
+    )
+
+
+def _action_recover(task_id, reason, target=""):
+    """Recover a needs_attention task: re-queue (todo) or reset to draft."""
+    if not task_id:
+        return json.dumps(
+            error_response(
+                message="Cannot recover task: 'task_id' is required.",
+                data={},
+                available_actions=["vtf_search_tasks"],
+            )
+        )
+    if not reason:
+        return json.dumps(
+            error_response(
+                message="Cannot recover task: 'reason' is required.",
+                data={"task_id": task_id},
+                available_actions=["vtf_manage_task(action=recover)"],
+            )
+        )
+
+    # Validate target — default to todo
+    resolved_target = target.strip() if target else "todo"
+    if resolved_target not in ("todo", "draft"):
+        return json.dumps(
+            error_response(
+                message="Cannot recover task: 'target' must be 'todo' or 'draft'.",
+                data={"task_id": task_id, "target": target},
+                available_actions=["vtf_manage_task(action=recover)"],
+            )
+        )
+
+    task, err = _get_task(task_id)
+    if err:
+        return err
+
+    if task.status != "needs_attention":
+        return json.dumps(
+            error_response(
+                message=(
+                    f"Cannot recover task {task_id}: "
+                    f"task is '{task.status}', not 'needs_attention'."
+                ),
+                data={"task_id": task_id, "current_status": task.status},
+                available_actions=["vtf_task_detail"],
+            )
+        )
+
+    try:
+        perform_transition(task, resolved_target, triggered_by="recover")
+    except InvalidTransition as exc:
+        return json.dumps(
+            error_response(
+                message=f"Cannot recover task {task_id}: {exc}",
+                data={"task_id": task_id, "current_status": task.status},
+                available_actions=["vtf_task_detail"],
+            )
+        )
+
+    # Clear stale claim fields and increment retry_count for re-queue
+    task.claimed_by = None
+    task.claimed_at = None
+    task.claim_expires_at = None
+    if resolved_target == "todo":
+        task.retry_count += 1
+    task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "retry_count"])
+
+    record_event(task, "recover", data={"target": resolved_target, "reason": reason}, triggered_by="recover")
+
+    return json.dumps(
+        success_response(
+            data={
+                "task": {
+                    "id": task.id,
+                    "title": task.title,
+                    "status": task.status,
+                    "retry_count": task.retry_count,
+                }
+            },
+            message=f"Task {task.id} recovered to '{resolved_target}' (retry_count={task.retry_count}).",
+            available_actions=["vtf_task_detail", "vtf_next_work"],
         )
     )
