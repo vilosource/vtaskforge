@@ -21,13 +21,16 @@ export function ConsoleWidget() {
     dock,
     float,
     setPosition,
+    setSize,
     setDockWidth,
     restore,
   } = useConsoleWidget();
 
   const [status, setStatus] = useState<ConsoleStatus>('loading');
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
   const handleStatusChange = useCallback((newStatus: ConsoleStatus) => {
     setStatus(newStatus);
@@ -63,6 +66,33 @@ export function ConsoleWidget() {
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
+  }, []);
+
+  const handleResizeStart = useCallback(
+    (e: React.PointerEvent) => {
+      e.stopPropagation();
+      setIsResizing(true);
+      resizeStart.current = { x: e.clientX, y: e.clientY, w: size.width, h: size.height };
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    },
+    [size],
+  );
+
+  const handleResizeMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isResizing) return;
+      const dx = e.clientX - resizeStart.current.x;
+      const dy = e.clientY - resizeStart.current.y;
+      setSize({
+        width: Math.max(MIN_WIDTH, resizeStart.current.w + dx),
+        height: Math.max(MIN_HEIGHT, resizeStart.current.h + dy),
+      });
+    },
+    [isResizing, setSize],
+  );
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
   }, []);
 
   const handleDockResize = useCallback(
@@ -148,6 +178,18 @@ export function ConsoleWidget() {
         {/* Iframe content */}
         <div className="flex-1 min-h-0">
           <ConsoleIframe target={target} onStatusChange={handleStatusChange} />
+        </div>
+
+        {/* Resize handle (bottom-right corner) */}
+        <div
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" className="text-on-surface-variant opacity-50">
+            <path d="M14 14H10M14 14V10M14 10H6M14 6V2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+          </svg>
         </div>
       </div>
     );

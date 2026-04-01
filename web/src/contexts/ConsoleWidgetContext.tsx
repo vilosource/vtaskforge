@@ -41,7 +41,7 @@ const DEFAULT_STATE: ConsoleWidgetState = {
   layout: 'floating',
   target: null,
   position: { x: 100, y: 100 },
-  size: { width: 700, height: 500 },
+  size: { width: 840, height: 600 },
   dockWidth: 500,
 };
 
