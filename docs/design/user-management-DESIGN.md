@@ -293,18 +293,19 @@ For vtf-kb entries, the provenance tracks source (human/architect/summarizer) an
 
 ## Where Models Live
 
-All models go in the existing `prefs` app (already created for recently-accessed) or a new `identity` app. Recommendation: split them:
+**Decision: All new models go in the `prefs` app.** It already exists with UserProfile and RecentAccess. One app, one migration sequence, less indirection. The app name is fine — "prefs" covers user preferences, identity, and activity. Don't rename it.
 
-| App | Models | Rationale |
-|-----|--------|-----------|
-| `prefs` | UserProfile, RecentAccess | User preferences and activity (exists) |
-| `identity` | ExternalIdentity, ChannelProjectMapping | External identity concerns (new) |
-| `sessions` *(rename from `events`?)* or `core` | SessionRecord, AgentLock | Session lifecycle (new) |
-| `projects` | ProjectMembership | Project-scoped, close to Project model |
+## URL Mounting
 
-Or simpler: put everything in `prefs` since it's already the user-centric app. One app, one migration sequence, less indirection.
+New endpoints mount at two prefixes:
 
-**Recommendation:** All in `prefs`. Rename to `accounts` if the scope feels too broad for "prefs." But for now, `prefs` is fine — it already has UserProfile and RecentAccess.
+| Prefix | Endpoints | Rationale |
+|--------|-----------|-----------|
+| `/v1/auth/` | `validate/`, `external-link/` | Auth concerns, alongside existing `login`, `logout`, `code/`, `exchange/` |
+| `/v1/profile/` | `sessions/` | User-facing, alongside existing `recent/` |
+| `/v1/` | `external-identities/`, `locks/`, `channel-mappings/`, `project-memberships/` | Resource endpoints at the API root |
+
+The auth endpoints (`validate`, `external-link`) go in `vtaskforge/urls.py` directly (like the existing `login`/`logout`). The resource endpoints can use DRF routers.
 
 ## What This Enables
 

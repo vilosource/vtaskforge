@@ -207,21 +207,34 @@ def test_agents_cannot_list_sessions()
 **Step 4: Deploy + E2E**
 
 ```bash
-# Link a Slack identity
-POST /v1/external-identities/ { "provider": "slack", "external_id": "U12345" }
+# Link a Slack identity (human user only)
+curl -sk -X POST https://vtf.dev.viloforge.com/v1/external-identities/ \
+  -H "Authorization: Token <admin-token>" -H "Content-Type: application/json" \
+  -d '{"provider": "slack", "external_id": "U12345"}'
 # → 201
 
 # Look it up
-GET /v1/external-identities/?provider=slack&external_id=U12345
+curl -sk https://vtf.dev.viloforge.com/v1/external-identities/?provider=slack\&external_id=U12345 \
+  -H "Authorization: Token <admin-token>"
 # → returns linked user
 
-# Create session records
-POST /v1/profile/sessions/ { "project_id": "abc", "role": "architect", "channel": "web" }
+# Create a session record (service/controller creates these, not humans)
+# Use a service token or simulate from the Django shell:
+kubectl exec deployment/vtf-api -n vtf-dev -- python src/manage.py shell -c "
+from prefs.models import SessionRecord
+from django.contrib.auth.models import User
+u = User.objects.get(username='admin')
+SessionRecord.objects.create(user=u, project_id='abc', role='architect', channel='web')
+print('Created')
+"
 
-# List sessions
-GET /v1/profile/sessions/
+# List sessions (human API — read only)
+curl -sk https://vtf.dev.viloforge.com/v1/profile/sessions/ \
+  -H "Authorization: Token <admin-token>"
 # → ordered list with cxdb links
 ```
+
+**Note:** `GET /v1/profile/sessions/` is read-only for humans. Session records are created by the controller, bridge, or service accounts — not by human API calls. The API does NOT expose POST for sessions.
 
 ### Definition of Done
 
@@ -248,10 +261,24 @@ Phase is NOT done until ALL of the following are true:
 | Component | Change |
 |-----------|--------|
 | `prefs/models.py` | Add AgentLock, ChannelProjectMapping models |
-| `prefs/views.py` | Add LockViewSet, ChannelMappingViewSet |
+| `prefs/serializers.py` | Add serializers for both models |
+| `prefs/views.py` | Add LockView (POST to acquire, DELETE to release, GET to list), ChannelMappingViewSet |
 | `prefs/urls.py` | Add routes |
 | `vtaskforge/urls.py` | Mount at `/v1/locks/`, `/v1/channel-mappings/` |
 | Migration | Add 2 models |
+
+### Lock Acquire Logic
+
+The acquire endpoint is NOT a simple create. It has special semantics:
+
+```python
+# POST /v1/locks/ { "project_id": "abc", "role": "architect" }
+#
+# 1. Check if lock exists for (project_id, role)
+# 2. If no lock → create it for request.user → 200
+# 3. If locked by request.user → return existing lock (reconnect) → 200
+# 4. If locked by different user → 409 Conflict with holder info
+```
 
 ### TDD Steps
 
@@ -339,6 +366,21 @@ Phase is NOT done until ALL of the following are true:
 
 ## Phase 4: ProjectMembership (advisory)
 
+**Prerequisite for: project-scoped access control (Phase 6), validate endpoint project list.**
+
+### What Changes
+
+| Component | Change |
+|-----------|--------|
+| `prefs/models.py` | Add ProjectMembership model |
+| `prefs/serializers.py` | Add ProjectMembershipSerializer |
+| `prefs/views.py` | Add ProjectMembershipViewSet |
+| `prefs/urls.py` | Add route |
+| `vtaskforge/urls.py` | Mount at `/v1/project-memberships/` |
+| `prefs/views.py` (validate) | Update TokenValidationView to include projects list |
+| `projects/views.py` or signals | Auto-create owner membership on project creation |
+| Migration | Add 1 model |
+
 ### TDD Steps
 
 ```python
@@ -369,6 +411,16 @@ Phase is NOT done until ALL of the following are true:
 
 ## Phase 5: Service Accounts
 
+**Prerequisite for: vtf-kb summarizer auto-writing, auto-discovery job.**
+
+### What Changes
+
+| Component | Change |
+|-----------|--------|
+| `prefs/management/commands/create_service_account.py` | New management command |
+| `prefs/services.py` | Add `create_service_account(name)` function |
+| Migration | None (uses existing UserProfile.user_type="service") |
+
 ### TDD Steps
 
 ```python
@@ -395,6 +447,19 @@ Phase is NOT done until ALL of the following are true:
 ---
 
 ## Phase 6: Access Enforcement
+
+**Prerequisite for: multi-team project isolation.**
+
+### What Changes
+
+| Component | Change |
+|-----------|--------|
+| `prefs/permissions.py` | New DRF permission class: `HasProjectMembership` |
+| `tasks/views.py` | Add `HasProjectMembership` to permission_classes |
+| `workplans/views.py` | Add `HasProjectMembership` to permission_classes |
+| `projects/views.py` | Add `HasProjectMembership` to permission_classes |
+| `agents/views.py` | Auto-create ProjectMembership on agent registration |
+| Migration | None |
 
 ### TDD Steps
 
