@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from mcp_server.tools.review import vtf_review_task
+from mcp_server.tools._review_agent import vtf_review_task
 from tests.factories import MilestoneFactory, ProjectFactory, TaskFactory, WorkplanFactory
 
 

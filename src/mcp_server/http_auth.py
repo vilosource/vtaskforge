@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from mcp_server.auth import validate_token
+from mcp_server.project_context import _current_project
 
 # Paths that bypass authentication entirely.
 HEALTH_PATHS = {"/", "/health"}
@@ -47,6 +48,10 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
                 {"error": "Invalid or expired token."},
                 status_code=401,
             )
+
+        # Store project context from X-VTF-Project header for tool functions
+        project_id = request.headers.get("X-VTF-Project", "")
+        _current_project.set(project_id or None)
 
         return await call_next(request)
 

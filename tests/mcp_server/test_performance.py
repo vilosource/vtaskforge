@@ -12,7 +12,7 @@ import pytest
 from mcp_server.tools.board import vtf_board_overview
 from mcp_server.tools.detail import vtf_task_detail
 from mcp_server.tools.search import vtf_search_tasks
-from mcp_server.tools.workflow import vtf_next_work
+from mcp_server.tools._workflow_agent import vtf_next_work
 from tests.factories import (
     MilestoneFactory,
     ProjectFactory,

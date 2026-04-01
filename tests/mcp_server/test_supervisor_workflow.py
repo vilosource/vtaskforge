@@ -12,7 +12,7 @@ from events.models import TaskEvent
 from mcp_server.tools.board import vtf_board_overview
 from mcp_server.tools.detail import vtf_task_detail
 from mcp_server.tools.manage import vtf_manage_task
-from mcp_server.tools.review import vtf_review_task
+from mcp_server.tools._review_agent import vtf_review_task
 from mcp_server.tools.search import vtf_search_tasks
 from tests.factories import MilestoneFactory, ProjectFactory, TaskFactory, WorkplanFactory
 

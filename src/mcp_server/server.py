@@ -46,6 +46,8 @@ mcp = VtfMCP("vtf", instructions="vtaskforge task management server")
 # Auto-discover and import every module in mcp_server/tools/ (except __init__.py).
 # Each module registers its @mcp.tool() decorators on import.
 for _module_info in pkgutil.iter_modules(_tools_pkg.__path__):
+    if _module_info.name.startswith("_"):
+        continue  # Skip private modules (e.g. _workflow_agent, _review_agent)
     importlib.import_module(f"mcp_server.tools.{_module_info.name}")
 
 def run_server():

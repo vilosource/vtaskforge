@@ -114,40 +114,43 @@ def test_auth_missing_token():
 
 
 def test_all_tools_registered():
-    """All 12 vtf tools are registered after auto-discovery imports all modules."""
+    """Architect-facing tools are registered after auto-discovery.
+
+    Executor/judge tools (_workflow_agent, _review_agent) are excluded from
+    auto-discovery — they're accessed by the controller via VtfClient REST, not MCP.
+    """
     from mcp_server.server import mcp
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
     expected = {
         "vtf_board_overview",
-        "vtf_next_work",
-        "vtf_claim_and_start",
-        "vtf_report_progress",
-        "vtf_submit_work",
         "vtf_search_tasks",
-        "vtf_review_task",
         "vtf_task_detail",
         "vtf_manage_task",
         "vtf_manage_milestone",
         "vtf_manage_workplan",
         "vtf_workplan_tree",
+        "vtf_get_context",
+        "vtf_plan_work",
     }
     assert expected == set(tool_names), f"Tool mismatch. Registered: {tool_names}"
 
 
-def test_auto_discovery_finds_all_tool_modules():
-    """Auto-discovery loads every .py file from mcp_server/tools/ (except __init__.py)."""
-    import importlib
+def test_auto_discovery_skips_private_modules():
+    """Auto-discovery skips _-prefixed modules (executor/judge tools)."""
     import pkgutil
 
     import mcp_server.tools as tools_pkg
 
-    discovered = {
-        name
-        for _, name, _ in pkgutil.iter_modules(tools_pkg.__path__)
-    }
-    expected = {"board", "workflow", "search", "review", "detail", "manage", "workplan", "structure", "milestone"}
-    assert expected == discovered, f"Module mismatch. Discovered: {discovered}"
+    all_modules = {name for _, name, _ in pkgutil.iter_modules(tools_pkg.__path__)}
+    # Private modules exist on disk
+    assert "_workflow_agent" in all_modules
+    assert "_review_agent" in all_modules
+
+    # But public modules are the ones auto-discovered
+    public = {name for name in all_modules if not name.startswith("_")}
+    expected = {"board", "search", "detail", "manage", "workplan", "structure", "milestone", "context", "planning"}
+    assert expected == public, f"Module mismatch. Public: {public}"
 
 
 def test_all_registered_tools_are_async():

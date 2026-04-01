@@ -24,7 +24,7 @@ from tasks.state_machine import perform_transition
 from tasks.views import DEFAULT_CLAIM_TIMEOUT_MINUTES
 
 
-@mcp.tool()
+# @mcp.tool()  # Removed from architect MCP — called by controller via VtfClient
 def vtf_next_work(project_id: str = "", tags: str = "", agent_id: str = "") -> str:
     """Find the best available task to work on next.
 
@@ -98,7 +98,7 @@ def vtf_next_work(project_id: str = "", tags: str = "", agent_id: str = "") -> s
     )
 
 
-@mcp.tool()
+# @mcp.tool()  # Removed from architect MCP — called by controller via VtfClient
 def vtf_claim_and_start(task_id: str, agent_id: str, tags: str = "") -> str:
     """Claim a specific task and receive full execution context.
 
@@ -203,7 +203,7 @@ def vtf_claim_and_start(task_id: str, agent_id: str, tags: str = "") -> str:
     )
 
 
-@mcp.tool()
+# @mcp.tool()  # Removed from architect MCP — called by controller via VtfClient
 def vtf_report_progress(task_id: str, note: str = "", agent_id: str = "") -> str:
     """Report progress on a claimed task. Extends claim timeout and optionally adds a note.
 
@@ -272,7 +272,7 @@ def vtf_report_progress(task_id: str, note: str = "", agent_id: str = "") -> str
     )
 
 
-@mcp.tool()
+# @mcp.tool()  # Removed from architect MCP — called by controller via VtfClient
 def vtf_submit_work(task_id: str, completion_note: str = "", agent_id: str = "") -> str:
     """Submit completed work for a task. Triggers review if configured.
 

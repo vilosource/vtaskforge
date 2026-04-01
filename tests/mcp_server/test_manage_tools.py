@@ -8,6 +8,7 @@ import json
 import pytest
 
 from mcp_server.tools.manage import vtf_manage_task
+from tasks.models import Task
 from tests.factories import ProjectFactory, TaskFactory
 
 
@@ -626,19 +627,20 @@ def test_create_with_test_command():
 
 
 @pytest.mark.django_db
-def test_create_with_test_command_invalid_json():
-    """vtf_manage_task(action=create) returns error for non-JSON test_command."""
+def test_create_with_test_command_plain_string_accepted():
+    """vtf_manage_task(action=create) accepts plain string test_command (auto-wrapped)."""
     project = ProjectFactory()
 
     result = json.loads(vtf_manage_task(
         action="create",
-        title="Bad test command",
+        title="Plain test command",
         project_id=project.id,
-        test_command="not valid json",
+        test_command="pytest tests/ -v",
     ))
 
-    assert result["success"] is False
-    assert "test_command" in result["message"].lower()
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert task.test_command == {"command": "pytest tests/ -v"}
 
 
 # ---------------------------------------------------------------------------

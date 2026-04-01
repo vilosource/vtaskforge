@@ -43,6 +43,25 @@ def _suggest_action(invalid_action: str, valid_actions: list) -> str | None:
     return None
 
 
+def parse_test_command(raw: str) -> dict | None:
+    """Parse test_command: accept plain string or JSON object.
+
+    Plain string is wrapped as {"command": "..."}.
+    JSON string is parsed as-is.
+    Empty string returns None.
+    """
+    import json
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
+        return {"command": raw}
+    except json.JSONDecodeError:
+        return {"command": raw}
+
+
 def async_tool(fn):
     """Wrap a sync tool function for safe async execution in FastMCP.
 

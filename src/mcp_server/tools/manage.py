@@ -9,10 +9,23 @@ import json
 from events.services import record_event
 from mcp_server.responses import error_response, success_response
 from mcp_server.server import mcp
-from mcp_server.utils import _suggest_action
-from tasks.exceptions import InvalidTransition
+from mcp_server.utils import _suggest_action, parse_test_command as _parse_test_command
+from tasks.exceptions import GuardViolation, InvalidTransition
 from tasks.models import Task
 from tasks.state_machine import get_valid_transitions, perform_transition
+
+GUARD_GUIDANCE = {
+    "guard_has_workplan": (
+        "Create a workplan first using vtf_manage_workplan(action='create', "
+        "name='...', project_id='...') or vtf_plan_work(), then set "
+        "workplan_id on the task."
+    ),
+    "guard_milestone_active": (
+        "The task's milestone is not active. Activate it with "
+        "vtf_manage_milestone(action='activate', milestone_id='...')."
+    ),
+}
+
 
 VALID_ACTIONS = [
     "create", "update", "submit", "block", "unblock",
@@ -235,16 +248,11 @@ def _action_create(title, project_id, description, labels, spec,
     if needs_review_on_completion:
         kwargs["needs_review_on_completion"] = needs_review_on_completion.lower() in ("true", "1", "yes")
 
-    # test_command — JSON dict
+    # test_command — accepts plain string or JSON dict
     if test_command:
-        try:
-            kwargs["test_command"] = json.loads(test_command)
-        except json.JSONDecodeError:
-            return json.dumps(error_response(
-                message="test_command must be valid JSON (e.g. '{\"unit\": \"pytest tests/...\"}').",
-                data={},
-                available_actions=["vtf_manage_task"],
-            ))
+        parsed_tc = _parse_test_command(test_command)
+        if parsed_tc is not None:
+            kwargs["test_command"] = parsed_tc
 
     task = Task.objects.create(**kwargs)
 
@@ -423,6 +431,22 @@ def _action_submit(task_id):
     previous_status = task.status
     try:
         perform_transition(task, target_status)
+    except GuardViolation as e:
+        guidance = GUARD_GUIDANCE.get(e.guard_name, "")
+        message = str(e.args[0])
+        if guidance:
+            message = f"{message} {guidance}"
+        return json.dumps(
+            error_response(
+                message=message,
+                data={
+                    "task_id": task_id,
+                    "current_status": task.status,
+                    "guard": e.guard_name,
+                },
+                available_actions=["vtf_manage_workplan", "vtf_plan_work", "vtf_task_detail"],
+            )
+        )
     except InvalidTransition:
         valid = get_valid_transitions(task.status)
         return json.dumps(

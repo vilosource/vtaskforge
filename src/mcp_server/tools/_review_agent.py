@@ -16,7 +16,7 @@ VALID_DECISIONS = {"approved", "changes_requested", "rejected"}
 VALID_DECISIONS_LIST = sorted(VALID_DECISIONS)
 
 
-@mcp.tool()
+# @mcp.tool()  # Removed from architect MCP — called by controller via VtfClient
 def vtf_review_task(
     task_id: str,
     decision: str,

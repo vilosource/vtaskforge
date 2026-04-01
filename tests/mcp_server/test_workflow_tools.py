@@ -10,7 +10,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from mcp_server.tools.workflow import vtf_claim_and_start, vtf_next_work, vtf_report_progress, vtf_submit_work
+from mcp_server.tools._workflow_agent import vtf_claim_and_start, vtf_next_work, vtf_report_progress, vtf_submit_work
 from tests.factories import LinkFactory, MilestoneFactory, ProjectFactory, TaskFactory
 
 

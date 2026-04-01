@@ -11,7 +11,7 @@ import json
 import pytest
 
 from events.models import TaskEvent
-from mcp_server.tools.workflow import (
+from mcp_server.tools._workflow_agent import (
     vtf_claim_and_start,
     vtf_next_work,
     vtf_report_progress,

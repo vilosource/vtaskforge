@@ -44,7 +44,7 @@ def _server_params():
 
 @pytest.mark.django_db
 def test_mcp_initialize_and_list_tools():
-    """Server starts, completes MCP handshake, and lists all 12 tools."""
+    """Server starts, completes MCP handshake, and lists all 9 architect tools."""
 
     async def run():
         async with stdio_client(_server_params()) as (read, write):
@@ -54,17 +54,17 @@ def test_mcp_initialize_and_list_tools():
                 tools_result = await session.list_tools()
                 tool_names = sorted(t.name for t in tools_result.tools)
 
-                assert len(tool_names) == 12
+                assert len(tool_names) == 9
                 assert "vtf_board_overview" in tool_names
-                assert "vtf_claim_and_start" in tool_names
+                assert "vtf_get_context" in tool_names
                 assert "vtf_manage_milestone" in tool_names
                 assert "vtf_manage_task" in tool_names
                 assert "vtf_manage_workplan" in tool_names
-                assert "vtf_next_work" in tool_names
-                assert "vtf_report_progress" in tool_names
-                assert "vtf_review_task" in tool_names
+                assert "vtf_plan_work" in tool_names
+                assert "vtf_workplan_tree" in tool_names
+                assert "vtf_manage_task" in tool_names
                 assert "vtf_search_tasks" in tool_names
-                assert "vtf_submit_work" in tool_names
+                assert "vtf_manage_workplan" in tool_names
                 assert "vtf_task_detail" in tool_names
                 assert "vtf_workplan_tree" in tool_names
 
@@ -146,32 +146,14 @@ def test_mcp_full_lifecycle():
                 d = json.loads(r.content[0].text)
                 assert d["data"]["task"]["status"] == "todo"
 
-                # Claim
+                # Detail
                 r = await session.call_tool(
-                    "vtf_claim_and_start",
-                    {"task_id": task_id, "agent_id": "proto-agent"},
+                    "vtf_task_detail",
+                    {"task_id": task_id},
                 )
                 d = json.loads(r.content[0].text)
                 assert d["success"] is True
-                assert d["data"]["task"]["status"] == "doing"
-
-                # Progress
-                r = await session.call_tool(
-                    "vtf_report_progress",
-                    {"task_id": task_id, "note": "halfway"},
-                )
-                d = json.loads(r.content[0].text)
-                assert d["data"]["note_added"] is True
-
-                # Submit work
-                r = await session.call_tool(
-                    "vtf_submit_work",
-                    {"task_id": task_id, "completion_note": "done"},
-                )
-                d = json.loads(r.content[0].text)
-                assert d["success"] is True
-                final_status = d["data"]["task"]["status"]
-                assert final_status in ("done", "pending_completion_review")
+                assert d["data"]["task"]["status"] == "todo"
 
                 # Cleanup
                 r = await session.call_tool(
