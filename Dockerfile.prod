@@ -1,9 +1,8 @@
 # Stage 1: Build React SPA
 FROM node:20-alpine AS frontend
 WORKDIR /web
-COPY web/package.json web/package-lock.json ./
-# Mount npmrc secret if provided (for private registries), fall back to public npm
-RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci
+COPY web/package.json web/package-lock.json web/.npmrc ./
+RUN npm ci
 COPY web/ .
 RUN npm run build
 
