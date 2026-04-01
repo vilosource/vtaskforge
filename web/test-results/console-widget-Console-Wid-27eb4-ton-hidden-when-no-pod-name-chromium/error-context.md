@@ -1,0 +1,296 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "deployed_code VTaskForge Task Platform" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e9]: deployed_code
+          - generic [ref=e10]:
+            - generic [ref=e11]: VTaskForge
+            - generic [ref=e12]: Task Platform
+        - button "Collapse sidebar" [ref=e13] [cursor=pointer]:
+          - img [ref=e14]
+      - navigation [ref=e16]:
+        - generic [ref=e17]: Navigation
+        - link "dashboard Home" [ref=e18] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e19]: dashboard
+          - generic [ref=e20]: Home
+        - link "folder_open Projects" [ref=e21] [cursor=pointer]:
+          - /url: /projects
+          - generic [ref=e22]: folder_open
+          - generic [ref=e23]: Projects
+        - link "smart_toy Agents" [ref=e24] [cursor=pointer]:
+          - /url: /agents
+          - generic [ref=e25]: smart_toy
+          - generic [ref=e26]: Agents
+      - link "settings Settings" [ref=e28] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e29]: settings
+        - generic [ref=e30]: Settings
+  - main [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e35]: Good evening,
+        - heading "Welcome back, admin" [level=1] [ref=e36]
+        - paragraph [ref=e37]: Here's what's happening across your fleet today.
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - generic [ref=e41]: folder_open
+          - generic [ref=e42]: "5"
+          - generic [ref=e43]: Projects
+        - generic [ref=e44]:
+          - generic [ref=e46]: task_alt
+          - generic [ref=e47]: "63"
+          - generic [ref=e48]: Total Tasks
+        - generic [ref=e49]:
+          - generic [ref=e51]: check_circle
+          - generic [ref=e52]: "40"
+          - generic [ref=e53]: Completed
+        - generic [ref=e54]:
+          - generic [ref=e56]: smart_toy
+          - generic [ref=e57]: "0"
+          - generic [ref=e58]: Agents Online
+        - generic [ref=e59]:
+          - generic [ref=e61]: trending_up
+          - generic [ref=e62]: 63%
+          - generic [ref=e63]: Overall Progress
+      - generic [ref=e64]:
+        - generic [ref=e65]:
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - generic [ref=e68]: warning
+              - heading "Needs Attention" [level=2] [ref=e69]
+            - generic [ref=e70]: 9 items
+          - generic [ref=e71]:
+            - link "block 3 needs attention tasks Needs attention · Viloforge Demo" [ref=e72] [cursor=pointer]:
+              - /url: /projects/ayUvSYJL9obYhH_sXcdC7
+              - generic [ref=e73]:
+                - generic [ref=e75]: block
+                - generic [ref=e76]:
+                  - generic [ref=e77]: 3 needs attention tasks
+                  - generic [ref=e78]: Needs attention · Viloforge Demo
+            - link "block 2 needs attention tasks Needs attention · vafi-smoke-test" [ref=e79] [cursor=pointer]:
+              - /url: /projects/uhFSuWq31wVb-jkuqyZA9
+              - generic [ref=e80]:
+                - generic [ref=e82]: block
+                - generic [ref=e83]:
+                  - generic [ref=e84]: 2 needs attention tasks
+                  - generic [ref=e85]: Needs attention · vafi-smoke-test
+            - 'link "sensors_off judge-default is offline Last heartbeat: 3/30/2026 · No tasks running" [ref=e86] [cursor=pointer]':
+              - /url: /agents/uqVIMrm-9UhJF0d8KTtNl
+              - generic [ref=e87]:
+                - generic [ref=e89]: sensors_off
+                - generic [ref=e90]:
+                  - generic [ref=e91]: judge-default is offline
+                  - generic [ref=e92]:
+                    - generic [ref=e93]: "Last heartbeat: 3/30/2026"
+                    - text: · No tasks running
+            - 'link "sensors_off demo-agent is stale Last heartbeat: Never · Running: Implement OAuth2 login flow" [ref=e94] [cursor=pointer]':
+              - /url: /agents/0qjcrmXVPD0mECZ3bZlWM
+              - generic [ref=e95]:
+                - generic [ref=e97]: sensors_off
+                - generic [ref=e98]:
+                  - generic [ref=e99]: demo-agent is stale
+                  - generic [ref=e100]:
+                    - generic [ref=e101]: "Last heartbeat: Never"
+                    - text: "· Running: Implement OAuth2 login flow"
+            - 'link "sensors_off smoke-test is stale Last heartbeat: Never · No tasks running" [ref=e102] [cursor=pointer]':
+              - /url: /agents/UtFkHM1Jba880IVuUlg5G
+              - generic [ref=e103]:
+                - generic [ref=e105]: sensors_off
+                - generic [ref=e106]:
+                  - generic [ref=e107]: smoke-test is stale
+                  - generic [ref=e108]:
+                    - generic [ref=e109]: "Last heartbeat: Never"
+                    - text: · No tasks running
+            - 'link "sensors_off executor-default is offline Last heartbeat: 3/30/2026 · No tasks running" [ref=e110] [cursor=pointer]':
+              - /url: /agents/6AvLVaTxMvM5Pql-nI1Tx
+              - generic [ref=e111]:
+                - generic [ref=e113]: sensors_off
+                - generic [ref=e114]:
+                  - generic [ref=e115]: executor-default is offline
+                  - generic [ref=e116]:
+                    - generic [ref=e117]: "Last heartbeat: 3/30/2026"
+                    - text: · No tasks running
+        - generic [ref=e118]:
+          - heading "Recent Activity" [level=2] [ref=e120]
+          - generic [ref=e121]:
+            - generic [ref=e122]: history
+            - paragraph [ref=e123]: Coming soon
+            - paragraph [ref=e124]: Activity feed will show task and agent events here.
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - heading "Active Workplans" [level=2] [ref=e127]
+          - link "View all projects" [ref=e128] [cursor=pointer]:
+            - /url: /projects
+        - generic [ref=e129]:
+          - link "spike-openspec Active Column Filtering Progress 0% tasks · 0 done" [ref=e130] [cursor=pointer]:
+            - /url: /projects/TfyIcBVXE0ufmg6ERjEE3/workplans/z5perOBFwXqtpsnc17Hit
+            - generic [ref=e131]:
+              - generic [ref=e132]: spike-openspec
+              - generic [ref=e133]: Active
+            - heading "Column Filtering" [level=3] [ref=e134]
+            - generic [ref=e135]:
+              - generic [ref=e136]: Progress
+              - generic [ref=e137]: 0%
+            - generic [ref=e140]: tasks · 0 done
+          - link "spike-openspec Active OpenSpec Spike Progress 0% tasks · 0 done" [ref=e141] [cursor=pointer]:
+            - /url: /projects/TfyIcBVXE0ufmg6ERjEE3/workplans/CFWDKYEYpJb3NhMHAwM0o
+            - generic [ref=e142]:
+              - generic [ref=e143]: spike-openspec
+              - generic [ref=e144]: Active
+            - heading "OpenSpec Spike" [level=3] [ref=e145]
+            - generic [ref=e146]:
+              - generic [ref=e147]: Progress
+              - generic [ref=e148]: 0%
+            - generic [ref=e151]: tasks · 0 done
+          - 'link "python-calc Active PV Spike 003: Judge push verification Progress 0% tasks · 0 done" [ref=e152] [cursor=pointer]':
+            - /url: /projects/-VTDrP9URo0zuAxCAitOA/workplans/YxlYSTHcgBey0QWmRY7Ch
+            - generic [ref=e153]:
+              - generic [ref=e154]: python-calc
+              - generic [ref=e155]: Active
+            - 'heading "PV Spike 003: Judge push verification" [level=3] [ref=e156]'
+            - generic [ref=e157]:
+              - generic [ref=e158]: Progress
+              - generic [ref=e159]: 0%
+            - generic [ref=e162]: tasks · 0 done
+          - 'link "python-calc Active PV Spike 002: Full pipeline validation Progress 0% tasks · 0 done" [ref=e163] [cursor=pointer]':
+            - /url: /projects/-VTDrP9URo0zuAxCAitOA/workplans/YaeszXdh-LFA-8SAi0wXD
+            - generic [ref=e164]:
+              - generic [ref=e165]: python-calc
+              - generic [ref=e166]: Active
+            - 'heading "PV Spike 002: Full pipeline validation" [level=3] [ref=e167]'
+            - generic [ref=e168]:
+              - generic [ref=e169]: Progress
+              - generic [ref=e170]: 0%
+            - generic [ref=e173]: tasks · 0 done
+          - link "vafi-spike Active Generic Agent Spikes Spike workplan for testing generic executor and judge agents Progress 0% tasks · 0 done" [ref=e174] [cursor=pointer]:
+            - /url: /projects/gyZhCwwiCbjoMMjZ91VeD/workplans/0_3gJvrMmqYtUTxkJnBQe
+            - generic [ref=e175]:
+              - generic [ref=e176]: vafi-spike
+              - generic [ref=e177]: Active
+            - heading "Generic Agent Spikes" [level=3] [ref=e178]
+            - paragraph [ref=e179]: Spike workplan for testing generic executor and judge agents
+            - generic [ref=e180]:
+              - generic [ref=e181]: Progress
+              - generic [ref=e182]: 0%
+            - generic [ref=e185]: tasks · 0 done
+          - link "Viloforge Demo Active Agent Smoke Test Simple tasks to verify agent execution Progress 0% tasks · 0 done" [ref=e186] [cursor=pointer]:
+            - /url: /projects/ayUvSYJL9obYhH_sXcdC7/workplans/PgYQfIRF18olDdzEZa9Jo
+            - generic [ref=e187]:
+              - generic [ref=e188]: Viloforge Demo
+              - generic [ref=e189]: Active
+            - heading "Agent Smoke Test" [level=3] [ref=e190]
+            - paragraph [ref=e191]: Simple tasks to verify agent execution
+            - generic [ref=e192]:
+              - generic [ref=e193]: Progress
+              - generic [ref=e194]: 0%
+            - generic [ref=e197]: tasks · 0 done
+          - link "Viloforge Demo Active Frontend Redesign Modernize the UI with responsive layouts, dark mode, and improved navigation Progress 0% tasks · 0 done" [ref=e198] [cursor=pointer]:
+            - /url: /projects/ayUvSYJL9obYhH_sXcdC7/workplans/oIMFC8mrPyyNF4cohv6Wn
+            - generic [ref=e199]:
+              - generic [ref=e200]: Viloforge Demo
+              - generic [ref=e201]: Active
+            - heading "Frontend Redesign" [level=3] [ref=e202]
+            - paragraph [ref=e203]: Modernize the UI with responsive layouts, dark mode, and improved navigation
+            - generic [ref=e204]:
+              - generic [ref=e205]: Progress
+              - generic [ref=e206]: 0%
+            - generic [ref=e209]: tasks · 0 done
+          - link "Viloforge Demo Active API Performance Sprint Optimize database queries, add caching layer, reduce P95 latency below 200ms Progress 0% tasks · 0 done" [ref=e210] [cursor=pointer]:
+            - /url: /projects/ayUvSYJL9obYhH_sXcdC7/workplans/iF7GQDDpAzlFrlk8UbCU6
+            - generic [ref=e211]:
+              - generic [ref=e212]: Viloforge Demo
+              - generic [ref=e213]: Active
+            - heading "API Performance Sprint" [level=3] [ref=e214]
+            - paragraph [ref=e215]: Optimize database queries, add caching layer, reduce P95 latency below 200ms
+            - generic [ref=e216]:
+              - generic [ref=e217]: Progress
+              - generic [ref=e218]: 0%
+            - generic [ref=e221]: tasks · 0 done
+          - link "Viloforge Demo Active Authentication System Implement OAuth2 login, session management, and role-based access control Progress 0% tasks · 0 done" [ref=e222] [cursor=pointer]:
+            - /url: /projects/ayUvSYJL9obYhH_sXcdC7/workplans/QArALrkYZs4AtCPsQKx-d
+            - generic [ref=e223]:
+              - generic [ref=e224]: Viloforge Demo
+              - generic [ref=e225]: Active
+            - heading "Authentication System" [level=3] [ref=e226]
+            - paragraph [ref=e227]: Implement OAuth2 login, session management, and role-based access control
+            - generic [ref=e228]:
+              - generic [ref=e229]: Progress
+              - generic [ref=e230]: 0%
+            - generic [ref=e233]: tasks · 0 done
+          - link "vafi-smoke-test Active Health Check Endpoint Add HTTP health check endpoint to vafi controller that reports status of application and its dependencies (vtf API, sessions volume, CXDB if enabled) Progress 0% tasks · 0 done" [ref=e234] [cursor=pointer]:
+            - /url: /projects/uhFSuWq31wVb-jkuqyZA9/workplans/2AMOHY-6sZ5MAXrBl6zcc
+            - generic [ref=e235]:
+              - generic [ref=e236]: vafi-smoke-test
+              - generic [ref=e237]: Active
+            - heading "Health Check Endpoint" [level=3] [ref=e238]
+            - paragraph [ref=e239]: Add HTTP health check endpoint to vafi controller that reports status of application and its dependencies (vtf API, sessions volume, CXDB if enabled)
+            - generic [ref=e240]:
+              - generic [ref=e241]: Progress
+              - generic [ref=e242]: 0%
+            - generic [ref=e245]: tasks · 0 done
+          - link "vafi-smoke-test Active Smoke Test 20260323-203755 Progress 0% tasks · 0 done" [ref=e246] [cursor=pointer]:
+            - /url: /projects/uhFSuWq31wVb-jkuqyZA9/workplans/DsIBAV-zJ7PDiZHV73jr5
+            - generic [ref=e247]:
+              - generic [ref=e248]: vafi-smoke-test
+              - generic [ref=e249]: Active
+            - heading "Smoke Test 20260323-203755" [level=3] [ref=e250]
+            - generic [ref=e251]:
+              - generic [ref=e252]: Progress
+              - generic [ref=e253]: 0%
+            - generic [ref=e256]: tasks · 0 done
+          - link "vafi-smoke-test Active Smoke Test 20260323-203206 Progress 0% tasks · 0 done" [ref=e257] [cursor=pointer]:
+            - /url: /projects/uhFSuWq31wVb-jkuqyZA9/workplans/1DIAqXitAsqQe3rSiPzYH
+            - generic [ref=e258]:
+              - generic [ref=e259]: vafi-smoke-test
+              - generic [ref=e260]: Active
+            - heading "Smoke Test 20260323-203206" [level=3] [ref=e261]
+            - generic [ref=e262]:
+              - generic [ref=e263]: Progress
+              - generic [ref=e264]: 0%
+            - generic [ref=e267]: tasks · 0 done
+          - link "vafi-smoke-test Active Smoke Test 20260323-202256 Progress 0% tasks · 0 done" [ref=e268] [cursor=pointer]:
+            - /url: /projects/uhFSuWq31wVb-jkuqyZA9/workplans/jXb5oXP35LfeNQLzErDM_
+            - generic [ref=e269]:
+              - generic [ref=e270]: vafi-smoke-test
+              - generic [ref=e271]: Active
+            - heading "Smoke Test 20260323-202256" [level=3] [ref=e272]
+            - generic [ref=e273]:
+              - generic [ref=e274]: Progress
+              - generic [ref=e275]: 0%
+            - generic [ref=e278]: tasks · 0 done
+          - link "vafi-smoke-test Active Executor Smoke Test Validates vafi executor can clone, execute, and report Progress 0% tasks · 0 done" [ref=e279] [cursor=pointer]:
+            - /url: /projects/uhFSuWq31wVb-jkuqyZA9/workplans/J3zQubI4D1-uF6eFkj7Qi
+            - generic [ref=e280]:
+              - generic [ref=e281]: vafi-smoke-test
+              - generic [ref=e282]: Active
+            - heading "Executor Smoke Test" [level=3] [ref=e283]
+            - paragraph [ref=e284]: Validates vafi executor can clone, execute, and report
+            - generic [ref=e285]:
+              - generic [ref=e286]: Progress
+              - generic [ref=e287]: 0%
+            - generic [ref=e290]: tasks · 0 done
+      - generic [ref=e291]:
+        - heading "Quick Actions" [level=2] [ref=e292]
+        - generic [ref=e293]:
+          - button "add_circle New Project" [ref=e294] [cursor=pointer]:
+            - generic [ref=e295]: add_circle
+            - generic [ref=e296]: New Project
+          - button "rocket_launch Deploy Agent" [ref=e297] [cursor=pointer]:
+            - generic [ref=e298]: rocket_launch
+            - generic [ref=e299]: Deploy Agent
+          - button "upload_file Import Workplan" [ref=e300] [cursor=pointer]:
+            - generic [ref=e301]: upload_file
+            - generic [ref=e302]: Import Workplan
+          - button "monitoring Fleet Status" [ref=e303] [cursor=pointer]:
+            - generic [ref=e304]: monitoring
+            - generic [ref=e305]: Fleet Status
+          - button "terminal Consult Architect" [ref=e306] [cursor=pointer]:
+            - generic [ref=e307]: terminal
+            - generic [ref=e308]: Consult Architect
+```

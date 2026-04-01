@@ -50,6 +50,7 @@ const baseTaskDetail: TaskDetailType = {
   reviews: [],
   events: [],
   traces: null,
+  execution_summary: null,
 };
 
 const PROJECT_URL = '/v1/projects/project-1/';
