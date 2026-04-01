@@ -66,6 +66,7 @@ class Task(NanoIDMixin, TimestampMixin):
     judge = models.BooleanField(default=False)
     isolation = models.CharField(max_length=20, blank=True, default="sequential")
     retry_count = models.IntegerField(default=0)
+    execution_summary = models.JSONField(null=True, blank=True, default=None)
 
     class Meta:
         ordering = ["created_at"]

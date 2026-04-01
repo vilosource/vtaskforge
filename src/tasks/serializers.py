@@ -41,6 +41,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "judge",
             "isolation",
             "retry_count",
+            "execution_summary",
             "claimed_by_pod_name",
             "created_at",
             "updated_at",

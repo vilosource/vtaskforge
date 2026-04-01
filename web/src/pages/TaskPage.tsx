@@ -13,6 +13,7 @@ import { EventTimeline } from '../components/EventTimeline';
 import { ActionButtons } from '../components/ActionButtons';
 import { AddNoteForm } from '../components/AddNoteForm';
 import { Breadcrumb } from '../components/Breadcrumb';
+import ExecutionSummaryCard from '../components/ExecutionSummaryCard';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
 
@@ -289,6 +290,9 @@ export function TaskPage() {
               </div>
             </dl>
           </div>
+
+          {/* Execution Summary */}
+          <ExecutionSummaryCard summary={task.execution_summary} />
 
           {/* Execution Traces */}
           {task.traces && (

@@ -23,6 +23,7 @@ export interface Task {
   test_command: Record<string, string>;
   judge: boolean;
   isolation: string;
+  execution_summary: ExecutionSummary | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +49,30 @@ export interface TaskNote {
   text: string;
   actor_id: string;
   created_at: string;
+}
+
+export interface ExecutionSummaryStructured {
+  duration_seconds: number;
+  turn_count: number;
+  model: string;
+  tools_used: string[];
+  files_modified: string[];
+  files_read: string[];
+  tests: { passed: number; failed: number; command: string } | null;
+  commits: string[];
+}
+
+export interface ExecutionSummary {
+  cxdb_context_id: number;
+  trace_url: string;
+  attempt: number;
+  structured: ExecutionSummaryStructured;
+  nl_summary: {
+    one_liner: string;
+    what_happened: string;
+    key_decisions: string[];
+    if_failed: string | null;
+  } | null;
 }
 
 export interface CxdbTrace {
