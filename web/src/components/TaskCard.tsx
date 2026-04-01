@@ -50,7 +50,10 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         }
       }}
     >
-      <div className="text-sm font-semibold text-on-surface mb-2">{task.title}</div>
+      <div className="text-sm font-semibold text-on-surface mb-1">{task.title}</div>
+      {task.execution_summary?.nl_summary?.one_liner && (
+        <div className="text-xs text-on-surface-variant mb-2 line-clamp-1">{task.execution_summary.nl_summary.one_liner}</div>
+      )}
       <div className="flex flex-wrap gap-2 items-center">
         <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${BADGE_STYLES[task.status] ?? 'bg-surface-container-highest text-on-surface-variant'}`}>
           {task.status}
