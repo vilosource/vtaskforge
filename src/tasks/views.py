@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
+from prefs.mixins import TrackAccessMixin
 from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
 from projects.models import Project
 from workplans.models import Milestone
@@ -61,7 +62,8 @@ def invalid_transition_response(exc):
     )
 
 
-class TaskViewSet(ModelViewSet):
+class TaskViewSet(TrackAccessMixin, ModelViewSet):
+    access_resource_type = "task"
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]

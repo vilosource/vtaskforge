@@ -6,6 +6,7 @@ import { useProjects, type ProjectStats, type ProjectWorkplan } from '../api/pro
 import { useAgents, type Agent } from '../api/agents';
 import { apiGet, apiGetPaginated } from '../api/client';
 import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
+import { useRecentAccess, type RecentAccessItem } from '../api/profile';
 
 /* ---------- helpers ---------- */
 
@@ -92,6 +93,84 @@ function WorkplanCard({
         <span>{workplan.total_tasks} tasks &middot; {done} done</span>
       </div>
     </Link>
+  );
+}
+
+const RESOURCE_ICONS: Record<string, string> = {
+  project: 'folder_open',
+  workplan: 'assignment',
+  task: 'task_alt',
+};
+
+const RESOURCE_ROUTES: Record<string, (id: string) => string> = {
+  project: (id) => `/projects/${id}`,
+  workplan: (id) => `/workplans/${id}`,
+  task: (id) => `/tasks/${id}`,
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function RecentlyAccessedPane() {
+  const { data, isLoading } = useRecentAccess();
+  const items = data?.results ?? [];
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(25,28,30,0.04)] overflow-hidden">
+      <div className="px-6 py-5 flex items-center justify-between border-b border-outline-variant/20">
+        <h2 className="text-lg font-headline font-bold text-on-surface">Recently Accessed</h2>
+      </div>
+      {isLoading ? (
+        <div className="px-6 py-6 space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="w-8 h-8 rounded-full" />
+              <div className="flex-1 space-y-1"><Skeleton className="w-3/4 h-4" /><Skeleton className="w-1/3 h-3" /></div>
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="px-6 py-8 text-center">
+          <span className="material-symbols-outlined text-on-surface-variant text-3xl mb-2">history</span>
+          <p className="text-sm text-on-surface-variant">No recent activity yet.</p>
+          <p className="text-xs text-on-surface-variant mt-1">Browse projects and tasks to see them here.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-surface-container">
+          {items.slice(0, 10).map((item: RecentAccessItem) => (
+            <Link
+              key={`${item.resource_type}-${item.resource_id}`}
+              to={RESOURCE_ROUTES[item.resource_type]?.(item.resource_id) ?? '#'}
+              className="px-6 py-3 flex items-center gap-3 hover:bg-surface-container-low/40 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-primary text-sm">
+                  {RESOURCE_ICONS[item.resource_type] ?? 'description'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-on-surface truncate">{item.resource_title}</div>
+                <div className="text-[10px] text-on-surface-variant">
+                  <span className="capitalize">{item.resource_type}</span>
+                  {item.resource_status && (
+                    <> &middot; <span className="font-medium">{item.resource_status}</span></>
+                  )}
+                  <> &middot; {timeAgo(item.accessed_at)}</>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -275,16 +354,7 @@ export function Home() {
           </div>
         </div>
 
-        <div className="bg-surface-container-lowest rounded-xl shadow-[0_12px_40px_rgba(25,28,30,0.04)] overflow-hidden">
-          <div className="px-6 py-5 flex items-center justify-between border-b border-outline-variant/20">
-            <h2 className="text-lg font-headline font-bold text-on-surface">Recent Activity</h2>
-          </div>
-          <div className="px-6 py-8 text-center">
-            <span className="material-symbols-outlined text-on-surface-variant text-3xl mb-2">history</span>
-            <p className="text-sm text-on-surface-variant">Coming soon</p>
-            <p className="text-xs text-on-surface-variant mt-1">Activity feed will show task and agent events here.</p>
-          </div>
-        </div>
+        <RecentlyAccessedPane />
       </div>
 
       {/* Active Workplans */}

@@ -9,11 +9,13 @@ from rest_framework.viewsets import ModelViewSet
 from core.pagination import VTFCursorPagination
 from workplans.models import Workplan
 from workplans.serializers import WorkplanSerializer
+from prefs.mixins import TrackAccessMixin
 from .models import Project
 from .serializers import ProjectSerializer
 
 
-class ProjectViewSet(ModelViewSet):
+class ProjectViewSet(TrackAccessMixin, ModelViewSet):
+    access_resource_type = "project"
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]

@@ -109,6 +109,7 @@ urlpatterns = [
     path('v1/', include('events.urls')),
     path('v1/', include('links.urls')),
     path('v1/', include('reviews.urls')),
+    path('v1/profile/', include('prefs.urls')),
 ]
 
 handler404 = custom_404
