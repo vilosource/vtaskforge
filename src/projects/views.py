@@ -1,7 +1,10 @@
+from django.contrib.auth.models import User
+from django.db import IntegrityError
 from django.db.models import Count, ProtectedError
 
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
@@ -12,6 +15,7 @@ from workplans.serializers import WorkplanSerializer
 from prefs.mixins import TrackAccessMixin
 from prefs.models import ProjectMembership
 from prefs.permissions import HasProjectMembership
+from prefs.views import ProjectMembershipSerializer
 from .models import Project
 from .serializers import ProjectSerializer
 
@@ -161,3 +165,80 @@ class ProjectBacklogView(APIView):
             return paginator.get_paginated_response(serializer.data)
         serializer = TaskSerializer(backlog_tasks, many=True)
         return Response(serializer.data)
+
+
+class ProjectMemberView(APIView):
+    """GET/POST /v1/projects/<project_id>/members/ — list and add members."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated(), HasProjectMembership()]
+
+    def get(self, request, project_id):
+        members = ProjectMembership.objects.select_related("user").filter(
+            project_id=project_id
+        )
+        serializer = ProjectMembershipSerializer(members, many=True)
+        return Response({"results": serializer.data})
+
+    def post(self, request, project_id):
+        username = request.data.get("username")
+        role = request.data.get("role", "member")
+
+        if not username:
+            return Response(
+                {"detail": "username is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": f"User '{username}' not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            membership = ProjectMembership.objects.create(
+                user=user, project_id=project_id, role=role
+            )
+        except IntegrityError:
+            return Response(
+                {"detail": f"User '{username}' is already a member of this project."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = ProjectMembershipSerializer(membership)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ProjectMemberDetailView(APIView):
+    """PATCH/DELETE /v1/projects/<project_id>/members/<pk>/ — update role or remove."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, project_id, pk):
+        role = request.data.get("role")
+        if not role:
+            return Response(
+                {"detail": "role is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            membership = ProjectMembership.objects.get(pk=pk, project_id=project_id)
+        except ProjectMembership.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        membership.role = role
+        membership.save(update_fields=["role"])
+        serializer = ProjectMembershipSerializer(membership)
+        return Response(serializer.data)
+
+    def delete(self, request, project_id, pk):
+        try:
+            membership = ProjectMembership.objects.get(pk=pk, project_id=project_id)
+        except ProjectMembership.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        membership.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

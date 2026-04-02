@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../App';
 
 interface NavItem {
   to: string;
@@ -36,6 +37,25 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       </span>
       <span>{item.label}</span>
     </Link>
+  );
+}
+
+const ADMIN_ITEMS: NavItem[] = [
+  { to: '/admin/users', icon: 'person', label: 'Users' },
+  { to: '/admin/locks', icon: 'lock', label: 'Locks' },
+  { to: '/admin/channel-mappings', icon: 'cable', label: 'Channels' },
+];
+
+function AdminSection({ pathname }: { pathname: string }) {
+  const { isStaff } = useAuth();
+  if (!isStaff) return null;
+  return (
+    <div className="mt-4">
+      <div className="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-2 px-4">Admin</div>
+      {ADMIN_ITEMS.map((item) => (
+        <NavLink key={item.to} item={item} pathname={pathname} />
+      ))}
+    </div>
   );
 }
 
@@ -91,15 +111,10 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           ))}
         </nav>
 
-        {/* Settings */}
+        {/* Settings + Admin */}
         <div className="pt-6 border-t border-slate-200 space-y-1">
-          <Link
-            to="#"
-            className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors rounded-lg text-sm font-medium"
-          >
-            <span className="material-symbols-outlined">settings</span>
-            <span>Settings</span>
-          </Link>
+          <NavLink item={{ to: '/settings', icon: 'settings', label: 'Settings' }} pathname={pathname} />
+          <AdminSection pathname={pathname} />
         </div>
       </div>
     </aside>

@@ -6,6 +6,7 @@ from vtf.commands.task import task
 from vtf.commands.agent import agent
 from vtf.commands.import_cmd import import_cmd
 from vtf.commands.project import project
+from vtf.commands.user import user, member, lock, channel_mapping, service_account
 
 
 def get_client():
@@ -68,3 +69,8 @@ cli.add_command(agent)
 cli.add_command(import_cmd, "import")
 cli.add_command(milestone)
 cli.add_command(project)
+cli.add_command(user)
+cli.add_command(member)
+cli.add_command(lock)
+cli.add_command(channel_mapping)
+cli.add_command(service_account)

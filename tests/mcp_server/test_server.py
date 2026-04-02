@@ -124,14 +124,19 @@ def test_all_tools_registered():
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
     expected = {
         "vtf_board_overview",
+        "vtf_get_context",
+        "vtf_list_members",
+        "vtf_manage_channel_mapping",
+        "vtf_manage_lock",
+        "vtf_manage_milestone",
+        "vtf_manage_task",
+        "vtf_manage_workplan",
+        "vtf_plan_work",
+        "vtf_resolve_channel",
         "vtf_search_tasks",
         "vtf_task_detail",
-        "vtf_manage_task",
-        "vtf_manage_milestone",
-        "vtf_manage_workplan",
+        "vtf_whoami",
         "vtf_workplan_tree",
-        "vtf_get_context",
-        "vtf_plan_work",
     }
     assert expected == set(tool_names), f"Tool mismatch. Registered: {tool_names}"
 
@@ -149,7 +154,7 @@ def test_auto_discovery_skips_private_modules():
 
     # But public modules are the ones auto-discovered
     public = {name for name in all_modules if not name.startswith("_")}
-    expected = {"board", "search", "detail", "manage", "workplan", "structure", "milestone", "context", "planning"}
+    expected = {"board", "search", "detail", "manage", "workplan", "structure", "milestone", "context", "planning", "identity"}
     assert expected == public, f"Module mismatch. Public: {public}"
 
 

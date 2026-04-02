@@ -13,6 +13,11 @@ import { BacklogView } from './pages/BacklogView';
 import { TaskPage } from './pages/TaskPage';
 import { AgentList } from './pages/AgentList';
 import { AgentDetail } from './pages/AgentDetail';
+import { ProfilePage } from './pages/ProfilePage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
+import { AdminUserDetailPage } from './pages/AdminUserDetailPage';
+import { AdminLocksPage } from './pages/AdminLocksPage';
+import { AdminChannelMappingsPage } from './pages/AdminChannelMappingsPage';
 import { Sidebar } from './components/Sidebar';
 import Login from './pages/Login';
 
@@ -22,33 +27,68 @@ interface AuthState {
   authenticated: boolean;
   loading: boolean;
   username: string;
+  isStaff: boolean;
+  userType: string;
+  projects: { project_id: string; role: string }[];
 }
 
-const AuthContext = createContext<AuthState>({ authenticated: false, loading: true, username: '' });
+const AUTH_DEFAULT: AuthState = {
+  authenticated: false, loading: true, username: '',
+  isStaff: false, userType: '', projects: [],
+};
+
+const AuthContext = createContext<AuthState>(AUTH_DEFAULT);
 
 export function useAuth() {
   return useContext(AuthContext);
 }
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>({ authenticated: false, loading: true, username: '' });
+  const [auth, setAuth] = useState<AuthState>(AUTH_DEFAULT);
 
   useEffect(() => {
     // Check if we have a token in localStorage (agent/CLI auth)
     const token = localStorage.getItem('vtf_token');
     if (token) {
-      setAuth({ authenticated: true, loading: false, username: 'token-user' });
+      setAuth({ ...AUTH_DEFAULT, authenticated: true, loading: false, username: 'token-user' });
       return;
     }
 
-    // Check session auth
+    // Check session auth via login endpoint first
     fetch('/v1/auth/login', { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => {
-        setAuth({ authenticated: data.authenticated, loading: false, username: data.username || '' });
+        if (!data.authenticated) {
+          setAuth({ ...AUTH_DEFAULT, loading: false });
+          return;
+        }
+        // Enrich with validate endpoint for staff/type/projects
+        fetch('/v1/auth/validate/', {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+          .then((r) => r.json())
+          .then((profile) => {
+            setAuth({
+              authenticated: true,
+              loading: false,
+              username: profile.username || data.username || '',
+              isStaff: profile.is_staff || false,
+              userType: profile.user_type || 'human',
+              projects: profile.projects || [],
+            });
+          })
+          .catch(() => {
+            // Validate failed but login succeeded — use basic info
+            setAuth({
+              ...AUTH_DEFAULT,
+              authenticated: true, loading: false,
+              username: data.username || '',
+            });
+          });
       })
       .catch(() => {
-        setAuth({ authenticated: false, loading: false, username: '' });
+        setAuth({ ...AUTH_DEFAULT, loading: false });
       });
   }, []);
 
@@ -110,6 +150,12 @@ export function App() {
               <Route path="/tasks/:id" element={<TaskPage />} />
               <Route path="/agents" element={<AgentList />} />
               <Route path="/agents/:id" element={<AgentDetail />} />
+              <Route path="/settings" element={<ProfilePage />} />
+              <Route path="/settings/profile" element={<ProfilePage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
+              <Route path="/admin/locks" element={<AdminLocksPage />} />
+              <Route path="/admin/channel-mappings" element={<AdminChannelMappingsPage />} />
             </Route>
           </Routes>
           <ConsoleWidget />

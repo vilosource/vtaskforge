@@ -1,12 +1,22 @@
 """API views for user preferences."""
 
+from django.contrib.auth.models import User
+from django.db import IntegrityError
 from rest_framework import serializers, status
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import AgentLock, ChannelProjectMapping, ExternalIdentity, ProjectMembership, RecentAccess, SessionRecord
-from .services import get_or_create_profile
+from .services import (
+    LockConflict,
+    acquire_lock,
+    create_service_account,
+    get_or_create_profile,
+    list_locks,
+    release_lock,
+    update_user_type,
+)
 
 
 class IsHumanUser(BasePermission):
@@ -14,6 +24,15 @@ class IsHumanUser(BasePermission):
 
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.has_usable_password()
+
+
+class IsAgentOrStaff(BasePermission):
+    """Allow agent users (no usable password) and staff."""
+
+    def has_permission(self, request, view):
+        if request.user.is_staff:
+            return True
+        return not request.user.has_usable_password()  # agent user
 
 
 class ExternalIdentitySerializer(serializers.ModelSerializer):
@@ -147,14 +166,15 @@ class SessionHistoryView(APIView):
 class LockView(APIView):
     """GET/POST /v1/locks/ — list and acquire agent locks."""
 
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsAgentOrStaff()]
+        return [IsAuthenticated()]
 
     def get(self, request):
-        qs = AgentLock.objects.all()
         project_id = request.query_params.get("project_id")
-        if project_id:
-            qs = qs.filter(project_id=project_id)
-        serializer = AgentLockSerializer(qs, many=True)
+        locks = list_locks(project_id=project_id)
+        serializer = AgentLockSerializer(locks, many=True)
         return Response({"results": serializer.data})
 
     def post(self, request):
@@ -167,27 +187,23 @@ class LockView(APIView):
             )
 
         try:
-            existing = AgentLock.objects.get(project_id=project_id, role=role)
-            if existing.user == request.user:
-                # Reconnect — return existing lock
-                serializer = AgentLockSerializer(existing)
-                return Response(serializer.data)
-            else:
-                # Locked by another user
-                return Response(
-                    {
-                        "detail": f"Locked by {existing.user.username}",
-                        "locked_by": existing.user.username,
-                        "since": existing.created_at.isoformat(),
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-        except AgentLock.DoesNotExist:
-            lock = AgentLock.objects.create(
-                project_id=project_id, role=role, user=request.user
+            lock = acquire_lock(
+                request.user,
+                project_id,
+                role,
+                session_id=request.data.get("session_id", ""),
             )
             serializer = AgentLockSerializer(lock)
             return Response(serializer.data)
+        except LockConflict as e:
+            return Response(
+                {
+                    "detail": f"Locked by {e.lock.user.username}",
+                    "locked_by": e.lock.user.username,
+                    "since": e.lock.created_at.isoformat(),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
 
 class LockDetailView(APIView):
@@ -197,17 +213,21 @@ class LockDetailView(APIView):
 
     def delete(self, request, pk):
         try:
-            lock = AgentLock.objects.get(pk=pk, user=request.user)
+            release_lock(pk, request.user, force=request.user.is_staff)
         except AgentLock.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        lock.delete()
+        except PermissionError:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_200_OK)
 
 
 class ChannelMappingView(APIView):
     """GET/POST /v1/channel-mappings/ — manage channel-to-project mappings."""
 
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated()]
 
     def get(self, request):
         qs = ChannelProjectMapping.objects.all()
@@ -230,7 +250,7 @@ class ChannelMappingView(APIView):
 class ChannelMappingDetailView(APIView):
     """DELETE /v1/channel-mappings/<pk>/ — remove a mapping."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     def delete(self, request, pk):
         try:
@@ -239,3 +259,120 @@ class ChannelMappingDetailView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         mapping.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# User list / detail (staff only)
+# ---------------------------------------------------------------------------
+
+
+class ProjectMembershipSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
+    class Meta:
+        model = ProjectMembership
+        fields = ["id", "user_id", "username", "project_id", "role", "created_at"]
+        read_only_fields = ["id", "user_id", "username", "created_at"]
+
+
+class UserListSerializer(serializers.ModelSerializer):
+    user_type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "is_staff", "is_active", "user_type", "date_joined", "last_login"]
+
+    def get_user_type(self, obj):
+        profile = getattr(obj, "profile", None)
+        return profile.user_type if profile else "human"
+
+
+class UserDetailSerializer(UserListSerializer):
+    memberships = ProjectMembershipSerializer(source="project_memberships", many=True, read_only=True)
+
+    class Meta(UserListSerializer.Meta):
+        fields = UserListSerializer.Meta.fields + ["memberships"]
+
+
+class UserListView(APIView):
+    """GET /v1/users/ — list users with profile info (staff only)."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from .services import list_users
+        search = request.query_params.get("search")
+        user_type = request.query_params.get("user_type")
+        users = list_users(search=search, user_type=user_type)
+        serializer = UserListSerializer(users, many=True)
+        return Response({"results": serializer.data})
+
+
+class UserDetailView(APIView):
+    """GET/PATCH /v1/users/<pk>/ — user detail and update (staff only)."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, pk):
+        from .services import get_user_detail
+        try:
+            user = get_user_detail(pk)
+        except User.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = UserDetailSerializer(user)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        user_type = request.data.get("user_type")
+        if not user_type:
+            return Response(
+                {"detail": "user_type is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            profile = update_user_type(pk, user_type)
+        except User.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        # Re-fetch full user for serialization
+        from .services import get_user_detail
+        user = get_user_detail(pk)
+        serializer = UserDetailSerializer(user)
+        return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# Service account creation (staff only)
+# ---------------------------------------------------------------------------
+
+
+class ServiceAccountView(APIView):
+    """POST /v1/service-accounts/ — create service account, return user + token."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        name = request.data.get("name")
+        if not name:
+            return Response(
+                {"detail": "name is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            user, token = create_service_account(name)
+        except IntegrityError:
+            return Response(
+                {"detail": f"User '{name}' already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "id": user.pk,
+                "username": user.username,
+                "token": token.key,
+                "user_type": "service",
+            },
+            status=status.HTTP_201_CREATED,
+        )

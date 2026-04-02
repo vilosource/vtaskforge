@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 
 from mcp_server.auth import validate_token
 from mcp_server.project_context import _current_project
+from mcp_server.user_context import _current_user
 
 # Paths that bypass authentication entirely.
 HEALTH_PATHS = {"/", "/health"}
@@ -54,7 +55,8 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
             )
 
-        # Store project context from X-VTF-Project header for tool functions
+        # Store user and project context for tool functions
+        _current_user.set(user)
         project_id = request.headers.get("X-VTF-Project", "")
         _current_project.set(project_id or None)
 

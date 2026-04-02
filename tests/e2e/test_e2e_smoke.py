@@ -18,15 +18,20 @@ from tests.e2e.mcp_client import McpTestClient
 EXPECTED_TOOLS = [
     "vtf_board_overview",
     "vtf_claim_and_start",
+    "vtf_list_members",
+    "vtf_manage_channel_mapping",
+    "vtf_manage_lock",
     "vtf_manage_milestone",
     "vtf_manage_task",
     "vtf_manage_workplan",
     "vtf_next_work",
     "vtf_report_progress",
+    "vtf_resolve_channel",
     "vtf_review_task",
     "vtf_search_tasks",
     "vtf_submit_work",
     "vtf_task_detail",
+    "vtf_whoami",
     "vtf_workplan_tree",
 ]
 

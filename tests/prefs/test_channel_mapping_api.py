@@ -14,7 +14,7 @@ from prefs.models import ChannelProjectMapping
 @pytest.mark.django_db
 class TestChannelMappingAPI:
     def test_create_mapping(self):
-        user = User.objects.create_user("admin", password="pass")
+        user = User.objects.create_user("admin", password="pass", is_staff=True)
         token = Token.objects.create(user=user)
 
         client = APIClient()
@@ -29,7 +29,7 @@ class TestChannelMappingAPI:
         assert ChannelProjectMapping.objects.filter(channel_id="C123").exists()
 
     def test_list_mappings(self):
-        user = User.objects.create_user("admin", password="pass")
+        user = User.objects.create_user("admin", password="pass", is_staff=True)
         token = Token.objects.create(user=user)
         ChannelProjectMapping.objects.create(
             provider="slack", channel_id="C123", project_id="proj1"
@@ -43,7 +43,7 @@ class TestChannelMappingAPI:
         assert len(response.json()["results"]) == 1
 
     def test_lookup_by_channel(self):
-        user = User.objects.create_user("admin", password="pass")
+        user = User.objects.create_user("admin", password="pass", is_staff=True)
         token = Token.objects.create(user=user)
         ChannelProjectMapping.objects.create(
             provider="slack", channel_id="C999", project_id="my-project"
@@ -60,7 +60,7 @@ class TestChannelMappingAPI:
         assert results[0]["project_id"] == "my-project"
 
     def test_delete_mapping(self):
-        user = User.objects.create_user("admin", password="pass")
+        user = User.objects.create_user("admin", password="pass", is_staff=True)
         token = Token.objects.create(user=user)
         mapping = ChannelProjectMapping.objects.create(
             provider="slack", channel_id="C123", project_id="proj1"
