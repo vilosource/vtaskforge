@@ -29,7 +29,7 @@ def _celery_eager(settings):
 @pytest.fixture
 def api_client(db):
     client = APIClient()
-    user = User.objects.create_user(username='testuser', password='testpass')
+    user = User.objects.create_user(username='testuser', password='testpass', is_staff=True)
     token = Token.objects.create(user=user)
     client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
     return client

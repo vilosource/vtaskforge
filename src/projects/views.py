@@ -10,6 +10,8 @@ from core.pagination import VTFCursorPagination
 from workplans.models import Workplan
 from workplans.serializers import WorkplanSerializer
 from prefs.mixins import TrackAccessMixin
+from prefs.models import ProjectMembership
+from prefs.permissions import HasProjectMembership
 from .models import Project
 from .serializers import ProjectSerializer
 
@@ -19,6 +21,15 @@ class ProjectViewSet(TrackAccessMixin, ModelViewSet):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def perform_create(self, serializer):
+        project = serializer.save()
+        if self.request.user.is_authenticated:
+            ProjectMembership.objects.get_or_create(
+                user=self.request.user,
+                project_id=project.id,
+                defaults={"role": "owner"},
+            )
 
     def update(self, request, *args, **kwargs):
         # Disable full PUT — PATCH only
@@ -97,6 +108,8 @@ class ProjectViewSet(TrackAccessMixin, ModelViewSet):
 class ProjectWorkplansView(APIView):
     """Nested endpoint: list workplans under a project."""
 
+    permission_classes = [HasProjectMembership]
+
     def get_project(self, project_id):
         try:
             return Project.objects.get(pk=project_id)
@@ -122,6 +135,8 @@ class ProjectWorkplansView(APIView):
 
 class ProjectBacklogView(APIView):
     """Nested endpoint: list tasks without workplan (backlog) under a project."""
+
+    permission_classes = [HasProjectMembership]
 
     def get_project(self, project_id):
         try:

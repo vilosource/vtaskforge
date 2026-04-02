@@ -14,6 +14,15 @@ from core.views import (
     HealthCheckView,
     console_login_redirect,
 )
+from prefs.views import (
+    ChannelMappingDetailView,
+    ChannelMappingView,
+    ExternalIdentityDetailView,
+    ExternalIdentityView,
+    LockDetailView,
+    LockView,
+    TokenValidationView,
+)
 
 
 def custom_404(request, exception=None):
@@ -97,6 +106,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('v1/auth/login', api_login, name='api-login'),
     path('v1/auth/logout', api_logout, name='api-logout'),
+    path('v1/auth/validate/', TokenValidationView.as_view(), name='token-validate'),
     path('v1/auth/code/', ConsoleCodeGenerateView.as_view(), name='console-code-generate'),
     path('v1/auth/exchange/', ConsoleCodeExchangeView.as_view(), name='console-code-exchange'),
     path('auth/console-login/', console_login_redirect, name='console-login'),
@@ -109,6 +119,12 @@ urlpatterns = [
     path('v1/', include('events.urls')),
     path('v1/', include('links.urls')),
     path('v1/', include('reviews.urls')),
+    path('v1/external-identities/', ExternalIdentityView.as_view(), name='external-identities'),
+    path('v1/external-identities/<int:pk>/', ExternalIdentityDetailView.as_view(), name='external-identity-detail'),
+    path('v1/locks/', LockView.as_view(), name='locks'),
+    path('v1/locks/<int:pk>/', LockDetailView.as_view(), name='lock-detail'),
+    path('v1/channel-mappings/', ChannelMappingView.as_view(), name='channel-mappings'),
+    path('v1/channel-mappings/<int:pk>/', ChannelMappingDetailView.as_view(), name='channel-mapping-detail'),
     path('v1/profile/', include('prefs.urls')),
 ]
 
