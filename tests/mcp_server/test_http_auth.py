@@ -39,6 +39,11 @@ def _build_app():
             Route("/", _ok_endpoint, methods=["GET"]),
             Route("/health", _ok_endpoint, methods=["GET"]),
             Route("/mcp", _ok_endpoint, methods=["POST"]),
+            Route("/.well-known/oauth-authorization-server", _ok_endpoint, methods=["GET"]),
+            Route("/.well-known/oauth-protected-resource", _ok_endpoint, methods=["GET"]),
+            Route("/register", _ok_endpoint, methods=["POST"]),
+            Route("/mcp/.well-known/oauth-authorization-server", _ok_endpoint, methods=["GET"]),
+            Route("/mcp/register", _ok_endpoint, methods=["POST"]),
         ]
     )
     app.add_middleware(TokenAuthMiddleware)
@@ -127,3 +132,29 @@ def test_auth_wrong_format(client):
     assert resp.status_code == 401
     body = resp.json()
     assert "error" in body
+
+
+# ---------------------------------------------------------------------------
+# test_auth_oauth_discovery_no_auth
+# ---------------------------------------------------------------------------
+
+
+def test_auth_oauth_discovery_no_auth(client):
+    """OAuth discovery and registration endpoints bypass authentication."""
+    resp = client.get("/.well-known/oauth-authorization-server")
+    assert resp.status_code == 200
+
+    resp = client.get("/.well-known/oauth-protected-resource")
+    assert resp.status_code == 200
+
+    resp = client.post("/register")
+    assert resp.status_code == 200
+
+
+def test_auth_oauth_discovery_with_mcp_prefix(client):
+    """OAuth discovery under /mcp/ prefix also bypasses authentication."""
+    resp = client.get("/mcp/.well-known/oauth-authorization-server")
+    assert resp.status_code == 200
+
+    resp = client.post("/mcp/register")
+    assert resp.status_code == 200

@@ -17,6 +17,9 @@ from mcp_server.project_context import _current_project
 # Paths that bypass authentication entirely.
 HEALTH_PATHS = {"/", "/health"}
 
+# Substrings that mark a path as public (OAuth discovery, client registration).
+PUBLIC_PATH_SEGMENTS = ("/.well-known/", "/register")
+
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -28,8 +31,10 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        # Health checks bypass auth.
+        # Health checks and OAuth discovery bypass auth.
         if request.method == "GET" and request.url.path in HEALTH_PATHS:
+            return await call_next(request)
+        if any(seg in request.url.path for seg in PUBLIC_PATH_SEGMENTS):
             return await call_next(request)
 
         # Extract and validate the token.
