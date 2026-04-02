@@ -317,12 +317,12 @@ pytest tests/e2e/
 
 | # | Criterion | How to verify |
 |---|-----------|---------------|
-| 1 | Routes accessible | Navigate to `/settings/profile`, `/settings/identities`, `/settings/sessions`, `/admin/users`, `/admin/locks`, `/admin/channel-mappings` — each renders without error |
+| 1 | Routes accessible | Navigate to `/settings/profile`, `/settings/identities`, `/settings/sessions`, `/manage/users`, `/manage/locks`, `/manage/channel-mappings` — each renders without error |
 | 2 | AuthContext enriched | `useAuth()` returns `isStaff`, `userType`, `projects` in addition to existing fields |
 | 3 | Sidebar updated | Settings link works; admin links visible for staff, hidden for non-staff |
 | 4 | Self-service pages functional | Profile shows identity + memberships; identities page can link/unlink; sessions page shows history with project filter |
 | 5 | Admin pages functional | User list with search + type filter; user detail with editable user_type; locks with force-release; channel mappings with create/delete; service account creation shows token once |
-| 6 | Staff-only guard | Non-staff navigating to `/admin/*` redirected to `/` |
+| 6 | Staff-only guard | Non-staff navigating to `/manage/*` redirected to `/` |
 | 7 | Component tests | `cd web && npx vitest run` — new tests for profile, admin users, admin locks, sidebar admin visibility |
 | 8 | Visual verification on dogfood | Pages render correctly against real data on `http://localhost:8001`, no console errors |
 | 9 | Zero regression | `cd web && npx vitest run` — all existing frontend tests pass |
@@ -796,14 +796,14 @@ Add to `web/src/App.tsx`:
 <Route path="/settings/profile" element={<ProfilePage />} />
 <Route path="/settings/identities" element={<IdentitiesPage />} />
 <Route path="/settings/sessions" element={<SessionsPage />} />
-<Route path="/admin/users" element={<AdminUsersPage />} />
-<Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
-<Route path="/admin/locks" element={<AdminLocksPage />} />
-<Route path="/admin/channel-mappings" element={<AdminChannelMappingsPage />} />
-<Route path="/admin/service-accounts" element={<AdminServiceAccountsPage />} />
+<Route path="/manage/users" element={<AdminUsersPage />} />
+<Route path="/manage/users/:id" element={<AdminUserDetailPage />} />
+<Route path="/manage/locks" element={<AdminLocksPage />} />
+<Route path="/manage/channel-mappings" element={<AdminChannelMappingsPage />} />
+<Route path="/manage/service-accounts" element={<AdminServiceAccountsPage />} />
 ```
 
-The `/settings/*` routes are self-service (any authenticated human). The `/admin/*` routes check `is_staff` and redirect non-staff to `/`.
+The `/settings/*` routes are self-service (any authenticated human). The `/manage/*` routes check `is_staff` and redirect non-staff to `/`.
 
 ### 4.2 Sidebar Update
 
@@ -815,9 +815,9 @@ Sidebar (bottom section):
   │ ⚙ Settings          │  → /settings
   │                     │
   │ [staff only:]       │
-  │ 👤 Users            │  → /admin/users
-  │ 🔒 Locks            │  → /admin/locks
-  │ 📡 Channels         │  → /admin/channel-mappings
+  │ 👤 Users            │  → /manage/users
+  │ 🔒 Locks            │  → /manage/locks
+  │ 📡 Channels         │  → /manage/channel-mappings
   └─────────────────────┘
 ```
 
@@ -927,7 +927,7 @@ Data source: `useCurrentUser()` (validate endpoint).
 
 #### Admin: Users Page
 
-`/admin/users` — staff-only user management.
+`/manage/users` — staff-only user management.
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -947,11 +947,11 @@ Data source: `useCurrentUser()` (validate endpoint).
 └──────────────────────────────────────────────────────┘
 ```
 
-Clicking a row navigates to `/admin/users/<id>` (user detail with memberships, editable user_type).
+Clicking a row navigates to `/manage/users/<id>` (user detail with memberships, editable user_type).
 
 #### Admin: Locks Page
 
-`/admin/locks` — view and force-release stale agent locks.
+`/manage/locks` — view and force-release stale agent locks.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -970,7 +970,7 @@ Clicking a row navigates to `/admin/users/<id>` (user detail with memberships, e
 
 #### Admin: Channel Mappings Page
 
-`/admin/channel-mappings` — manage channel-to-project mappings.
+`/manage/channel-mappings` — manage channel-to-project mappings.
 
 ```
 ┌───────────────────────────────────────────────────────┐

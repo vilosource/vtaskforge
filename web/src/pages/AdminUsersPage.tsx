@@ -94,7 +94,7 @@ export function AdminUsersPage() {
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-surface-container-low/40 transition-colors cursor-pointer">
                   <td className="px-6 py-3">
-                    <Link to={`/admin/users/${u.id}`} className="font-semibold text-on-surface hover:text-primary">
+                    <Link to={`/manage/users/${u.id}`} className="font-semibold text-on-surface hover:text-primary">
                       {u.username}
                     </Link>
                   </td>

@@ -41,9 +41,9 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 }
 
 const ADMIN_ITEMS: NavItem[] = [
-  { to: '/admin/users', icon: 'person', label: 'Users' },
-  { to: '/admin/locks', icon: 'lock', label: 'Locks' },
-  { to: '/admin/channel-mappings', icon: 'cable', label: 'Channels' },
+  { to: '/manage/users', icon: 'person', label: 'Users' },
+  { to: '/manage/locks', icon: 'lock', label: 'Locks' },
+  { to: '/manage/channel-mappings', icon: 'cable', label: 'Channels' },
 ];
 
 function AdminSection({ pathname }: { pathname: string }) {

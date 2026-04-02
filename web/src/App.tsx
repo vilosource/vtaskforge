@@ -152,10 +152,10 @@ export function App() {
               <Route path="/agents/:id" element={<AgentDetail />} />
               <Route path="/settings" element={<ProfilePage />} />
               <Route path="/settings/profile" element={<ProfilePage />} />
-              <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
-              <Route path="/admin/locks" element={<AdminLocksPage />} />
-              <Route path="/admin/channel-mappings" element={<AdminChannelMappingsPage />} />
+              <Route path="/manage/users" element={<AdminUsersPage />} />
+              <Route path="/manage/users/:id" element={<AdminUserDetailPage />} />
+              <Route path="/manage/locks" element={<AdminLocksPage />} />
+              <Route path="/manage/channel-mappings" element={<AdminChannelMappingsPage />} />
             </Route>
           </Routes>
           <ConsoleWidget />

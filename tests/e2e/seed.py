@@ -145,8 +145,59 @@ agent, _ = Agent.objects.get_or_create(
 )
 
 # ---------------------------------------------------------------------------
+# User management test data (for Playwright E2E)
+# ---------------------------------------------------------------------------
+from prefs.models import (  # noqa: E402
+    ChannelProjectMapping,
+    AgentLock,
+    ProjectMembership,
+    UserProfile,
+)
+
+# Non-staff user for admin guard tests
+regular_user, _ = User.objects.get_or_create(
+    username="testuser",
+    defaults={"is_staff": False},
+)
+regular_user.set_password("testpass")
+regular_user.save()
+UserProfile.objects.get_or_create(user=regular_user, defaults={"user_type": "human"})
+
+# Ensure admin has a profile
+UserProfile.objects.get_or_create(user=user, defaults={"user_type": "human"})
+
+# Project membership for e2e-admin
+ProjectMembership.objects.get_or_create(
+    user=user, project_id="e2e-project",
+    defaults={"role": "owner"},
+)
+
+# Also ensure the dogfood admin user (if it exists) gets a membership
+dogfood_admin = User.objects.filter(username="admin", is_staff=True).first()
+if dogfood_admin:
+    ProjectMembership.objects.get_or_create(
+        user=dogfood_admin, project_id="e2e-project",
+        defaults={"role": "owner"},
+    )
+    UserProfile.objects.get_or_create(user=dogfood_admin, defaults={"user_type": "human"})
+
+# Channel mapping for admin page
+ChannelProjectMapping.objects.get_or_create(
+    provider="slack", channel_id="C-E2E-TEST",
+    defaults={"channel_name": "#e2e-test", "project_id": "e2e-project"},
+)
+
+# Agent lock for admin page
+agent_user, _ = User.objects.get_or_create(username="e2e-executor")
+AgentLock.objects.get_or_create(
+    project_id="e2e-project", role="executor",
+    defaults={"user": agent_user},
+)
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 task_count = Task.objects.count()
 print(f"Seeded: project={project.id}, workplan={wp.id}, milestone={ms.id}")
 print(f"  tasks={task_count}, agent={agent.id}, token={token.key}")
+print(f"  regular_user={regular_user.username}, channel_mapping=slack:C-E2E-TEST, lock=executor@e2e-project")

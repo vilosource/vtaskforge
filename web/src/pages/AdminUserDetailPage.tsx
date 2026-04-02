@@ -43,7 +43,7 @@ export function AdminUserDetailPage() {
 
   return (
     <div className="pt-8 px-8 pb-12 max-w-3xl">
-      <Link to="/admin/users" className="text-sm text-primary hover:underline mb-4 inline-block">
+      <Link to="/manage/users" className="text-sm text-primary hover:underline mb-4 inline-block">
         &larr; Back to Users
       </Link>
 
