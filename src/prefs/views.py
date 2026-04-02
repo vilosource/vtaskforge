@@ -163,6 +163,47 @@ class SessionHistoryView(APIView):
         return Response({"results": serializer.data})
 
 
+class SessionRecordWriteSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(required=False)
+
+    class Meta:
+        model = SessionRecord
+        fields = [
+            "id", "user_id", "project_id", "role", "cxdb_context_id",
+            "channel", "started_at", "ended_at", "summary",
+        ]
+        read_only_fields = ["id", "started_at"]
+
+
+class SessionCreateView(APIView):
+    """POST /v1/sessions/ — create session records (agents, service accounts, staff).
+
+    Supports proxy mode: pass user_id to record on behalf of another user.
+    If user_id is omitted, the record is created for the authenticated user.
+    """
+
+    permission_classes = [IsAuthenticated, IsAgentOrStaff]
+
+    def post(self, request):
+        serializer = SessionRecordWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_id = serializer.validated_data.pop("user_id", None)
+        if user_id:
+            try:
+                target_user = User.objects.get(pk=user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": f"User {user_id} not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            target_user = request.user
+
+        serializer.save(user=target_user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
 class LockView(APIView):
     """GET/POST /v1/locks/ — list and acquire agent locks."""
 

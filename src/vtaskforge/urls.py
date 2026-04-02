@@ -22,6 +22,7 @@ from prefs.views import (
     LockDetailView,
     LockView,
     ServiceAccountView,
+    SessionCreateView,
     TokenValidationView,
     UserDetailView,
     UserListView,
@@ -130,6 +131,7 @@ urlpatterns = [
     path('v1/channel-mappings/<int:pk>/', ChannelMappingDetailView.as_view(), name='channel-mapping-detail'),
     path('v1/users/', UserListView.as_view(), name='user-list'),
     path('v1/users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
+    path('v1/sessions/', SessionCreateView.as_view(), name='session-create'),
     path('v1/service-accounts/', ServiceAccountView.as_view(), name='service-accounts'),
     path('v1/profile/', include('prefs.urls')),
 ]
