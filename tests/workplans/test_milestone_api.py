@@ -94,7 +94,6 @@ class TestNestedMilestoneCreate:
             "name": "Full Milestone",
             "description": "A full milestone",
             "order": 3,
-            "created_by": "alice",
         }
         response = api_client.post(
             f"/v1/workplans/{workplan.id}/milestones/",
@@ -105,7 +104,8 @@ class TestNestedMilestoneCreate:
         assert response.data["name"] == "Full Milestone"
         assert response.data["description"] == "A full milestone"
         assert response.data["order"] == 3
-        assert response.data["created_by"] == "alice"
+        # created_by is server-set from request.user
+        assert response.data["created_by"] == "testuser"
 
     def test_create_with_null_review_flags(self, api_client, workplan):
         response = api_client.post(

@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin, TimestampMixin
@@ -31,7 +32,14 @@ class Link(NanoIDMixin, TimestampMixin):
     target_id = models.CharField(max_length=255)
     link_type = models.CharField(max_length=20, choices=LINK_TYPE_CHOICES)
     metadata = models.JSONField(null=True, blank=True, default=None)
-    created_by = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_links",
+    )
+    project = models.ForeignKey(
+        "projects.Project", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="links",
+    )
 
     class Meta:
         indexes = [

@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.models import User
 from rest_framework import status
 
 from links.models import Link
@@ -7,13 +8,14 @@ from tests.factories import LinkFactory
 
 @pytest.fixture
 def link(db):
+    alice = User.objects.create_user("link-alice")
     return LinkFactory(
         source_type="task",
         source_id="taskid123456789012345",
         target_type="commit",
         target_id="sha123abc",
         link_type="commit",
-        created_by="alice",
+        created_by=alice,
     )
 
 
@@ -133,11 +135,11 @@ class TestLinkCreate:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["metadata"] == {"branch": "main", "sha": "abc123"}
 
-    def test_create_with_created_by(self, api_client, link_payload):
-        link_payload["created_by"] = "bob"
+    def test_create_sets_created_by_from_request_user(self, api_client, link_payload):
         response = api_client.post("/v1/links/", link_payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["created_by"] == "bob"
+        # created_by is server-set from the authenticated user
+        assert response.data["created_by"] == "testuser"
 
     def test_create_persists_to_db(self, api_client, link_payload):
         response = api_client.post("/v1/links/", link_payload, format="json")

@@ -92,17 +92,16 @@ class TestWorkplanCreate:
             "name": "Full Workplan",
             "description": "A full workplan",
             "status": "active",
-            "owner": "alice",
             "tags": ["backend", "api"],
-            "created_by": "bob",
         }
         response = api_client.post("/v1/workplans/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "Full Workplan"
         assert response.data["description"] == "A full workplan"
-        assert response.data["owner"] == "alice"
+        # owner and created_by are server-set from request.user
+        assert response.data["owner"] == "testuser"
         assert response.data["tags"] == ["backend", "api"]
-        assert response.data["created_by"] == "bob"
+        assert response.data["created_by"] == "testuser"
 
     def test_create_without_name_returns_400(self, api_client, project):
         response = api_client.post("/v1/workplans/", {"project": project.id}, format="json")

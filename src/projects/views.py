@@ -22,12 +22,16 @@ from .serializers import ProjectSerializer
 
 class ProjectViewSet(TrackAccessMixin, ModelViewSet):
     access_resource_type = "project"
-    queryset = Project.objects.all()
+    queryset = Project.objects.select_related("owner", "created_by").all()
     serializer_class = ProjectSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def perform_create(self, serializer):
-        project = serializer.save()
+        kwargs = {}
+        if self.request.user.is_authenticated:
+            kwargs["owner"] = self.request.user
+            kwargs["created_by"] = self.request.user
+        project = serializer.save(**kwargs)
         if self.request.user.is_authenticated:
             ProjectMembership.objects.get_or_create(
                 user=self.request.user,

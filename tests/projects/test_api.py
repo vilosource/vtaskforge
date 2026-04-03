@@ -71,8 +71,6 @@ class TestProjectCreate:
             "repo_url": "https://github.com/example/repo.git",
             "default_branch": "develop",
             "tags": ["backend", "api"],
-            "owner": "alice",
-            "created_by": "bob",
         }
         response = api_client.post("/v1/projects/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
@@ -81,8 +79,9 @@ class TestProjectCreate:
         assert response.data["repo_url"] == "https://github.com/example/repo.git"
         assert response.data["default_branch"] == "develop"
         assert response.data["tags"] == ["backend", "api"]
-        assert response.data["owner"] == "alice"
-        assert response.data["created_by"] == "bob"
+        # owner and created_by are server-set from request.user
+        assert response.data["owner"] == "testuser"
+        assert response.data["created_by"] == "testuser"
 
     def test_create_without_name_returns_400(self, api_client):
         response = api_client.post("/v1/projects/", {}, format="json")

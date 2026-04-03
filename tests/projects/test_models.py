@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.models import User
 
 from projects.models import Project
 from tests.factories import ProjectFactory
@@ -20,14 +21,16 @@ class TestProject:
         assert project.repo_url == ""
         assert project.default_branch == "main"
         assert project.tags == []
-        assert project.owner == ""
-        assert project.created_by == ""
+        assert project.owner is None
+        assert project.created_by is None
 
     def test_project_str_representation(self):
         project = ProjectFactory(name="My Project")
         assert str(project) == "My Project"
 
     def test_project_with_all_fields(self):
+        alice = User.objects.create_user("alice")
+        bob = User.objects.create_user("bob")
         project = Project.objects.create(
             name="Full Project",
             description="A complete project",
@@ -35,8 +38,8 @@ class TestProject:
             repo_url="https://github.com/example/repo.git",
             default_branch="develop",
             tags=["backend", "api"],
-            owner="alice",
-            created_by="bob",
+            owner=alice,
+            created_by=bob,
         )
         assert project.name == "Full Project"
         assert project.description == "A complete project"
@@ -44,8 +47,8 @@ class TestProject:
         assert project.repo_url == "https://github.com/example/repo.git"
         assert project.default_branch == "develop"
         assert project.tags == ["backend", "api"]
-        assert project.owner == "alice"
-        assert project.created_by == "bob"
+        assert project.owner == alice
+        assert project.created_by == bob
 
     def test_project_ordering(self):
         # Projects should be ordered by -created_at (newest first)

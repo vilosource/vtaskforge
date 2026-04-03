@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin, TimestampMixin
@@ -22,12 +23,18 @@ class Workplan(NanoIDMixin, TimestampMixin):
         choices=STATUS_CHOICES,
         default="active",
     )
-    owner = models.CharField(max_length=255, blank=True, default="")
+    owner = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="owned_workplans",
+    )
     tags = models.JSONField(default=list, blank=True)
     target_date = models.DateTimeField(null=True, blank=True)
     default_needs_review_before_start = models.BooleanField(default=False)
     default_needs_review_on_completion = models.BooleanField(default=False)
-    created_by = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_workplans",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -61,7 +68,10 @@ class Milestone(NanoIDMixin, TimestampMixin):
     order = models.IntegerField(default=0)
     default_needs_review_before_start = models.BooleanField(null=True, blank=True, default=None)
     default_needs_review_on_completion = models.BooleanField(null=True, blank=True, default=None)
-    created_by = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_milestones",
+    )
 
     class Meta:
         ordering = ["order", "created_at"]

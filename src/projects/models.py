@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin, TimestampMixin
@@ -19,8 +20,14 @@ class Project(NanoIDMixin, TimestampMixin):
     repo_url = models.CharField(max_length=500, blank=True, default="")
     default_branch = models.CharField(max_length=100, blank=True, default="main")
     tags = models.JSONField(default=list, blank=True)
-    owner = models.CharField(max_length=255, blank=True, default="")
-    created_by = models.CharField(max_length=255, blank=True, default="")
+    owner = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="owned_projects",
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_projects",
+    )
 
     class Meta:
         ordering = ["-created_at"]

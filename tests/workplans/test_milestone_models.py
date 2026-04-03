@@ -22,9 +22,11 @@ class TestMilestoneModel:
         assert milestone.order == 0
         assert milestone.default_needs_review_before_start is None
         assert milestone.default_needs_review_on_completion is None
-        assert milestone.created_by == ""
+        assert milestone.created_by is None
 
     def test_create_milestone_all_fields(self, workplan):
+        from django.contrib.auth.models import User
+        alice = User.objects.create_user("alice")
         milestone = MilestoneFactory(
             name="Full Milestone",
             description="A description",
@@ -33,7 +35,7 @@ class TestMilestoneModel:
             order=5,
             default_needs_review_before_start=True,
             default_needs_review_on_completion=False,
-            created_by="alice",
+            created_by=alice,
         )
         assert milestone.name == "Full Milestone"
         assert milestone.description == "A description"
@@ -41,7 +43,7 @@ class TestMilestoneModel:
         assert milestone.order == 5
         assert milestone.default_needs_review_before_start is True
         assert milestone.default_needs_review_on_completion is False
-        assert milestone.created_by == "alice"
+        assert milestone.created_by == alice
 
     def test_review_flags_default_to_null(self, workplan):
         milestone = MilestoneFactory(name="Milestone", workplan=workplan)

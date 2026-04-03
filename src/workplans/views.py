@@ -13,7 +13,7 @@ from .serializers import MilestoneSerializer, WorkplanSerializer
 
 
 class WorkplanViewSet(ModelViewSet):
-    queryset = Workplan.objects.all()
+    queryset = Workplan.objects.select_related("owner", "created_by").all()
     serializer_class = WorkplanSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
@@ -23,6 +23,13 @@ class WorkplanViewSet(ModelViewSet):
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         return queryset
+
+    def perform_create(self, serializer):
+        kwargs = {}
+        if self.request.user.is_authenticated:
+            kwargs["owner"] = self.request.user
+            kwargs["created_by"] = self.request.user
+        serializer.save(**kwargs)
 
     def update(self, request, *args, **kwargs):
         # Disable full PUT — PATCH only
@@ -117,15 +124,24 @@ class WorkplanMilestonesView(APIView):
         data["workplan"] = workplan.id
         serializer = MilestoneSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
+            kwargs = {}
+            if request.user.is_authenticated:
+                kwargs["created_by"] = request.user
+            serializer.save(**kwargs)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class MilestoneViewSet(ModelViewSet):
-    queryset = Milestone.objects.all()
+    queryset = Milestone.objects.select_related("created_by").all()
     serializer_class = MilestoneSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def perform_create(self, serializer):
+        kwargs = {}
+        if self.request.user.is_authenticated:
+            kwargs["created_by"] = self.request.user
+        serializer.save(**kwargs)
 
     def update(self, request, *args, **kwargs):
         # Disable full PUT — PATCH only

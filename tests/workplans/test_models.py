@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.models import User
 from django.utils import timezone
 
 from tests.factories import WorkplanFactory
@@ -14,35 +15,37 @@ class TestWorkplanModel:
         assert wp.name == "Test Workplan"
         assert wp.status == "active"
         assert wp.description == ""
-        assert wp.owner == ""
+        assert wp.owner is None
         assert wp.tags == []
         assert wp.target_date is None
         assert wp.default_needs_review_before_start is False
         assert wp.default_needs_review_on_completion is False
-        assert wp.created_by == ""
+        assert wp.created_by is None
 
     def test_create_workplan_all_fields(self):
+        alice = User.objects.create_user("alice")
+        bob = User.objects.create_user("bob")
         target = timezone.now()
         wp = WorkplanFactory(
             name="Full Workplan",
             description="A description",
             status="completed",
-            owner="alice",
+            owner=alice,
             tags=["backend", "api"],
             target_date=target,
             default_needs_review_before_start=True,
             default_needs_review_on_completion=True,
-            created_by="bob",
+            created_by=bob,
         )
         assert wp.name == "Full Workplan"
         assert wp.description == "A description"
         assert wp.status == "completed"
-        assert wp.owner == "alice"
+        assert wp.owner == alice
         assert wp.tags == ["backend", "api"]
         assert wp.target_date == target
         assert wp.default_needs_review_before_start is True
         assert wp.default_needs_review_on_completion is True
-        assert wp.created_by == "bob"
+        assert wp.created_by == bob
 
     def test_timestamps_auto_populated(self):
         wp = WorkplanFactory(name="Timestamps Test")

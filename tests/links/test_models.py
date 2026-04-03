@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.models import User
 
 from links.models import Link, LINK_TYPE_CHOICES, SOURCE_TYPE_CHOICES
 from tests.factories import LinkFactory
@@ -22,9 +23,10 @@ class TestLinkModel:
         assert link.target_id == "abc123"
         assert link.link_type == "commit"
         assert link.metadata is None
-        assert link.created_by == ""
+        assert link.created_by is None
 
     def test_create_link_all_fields(self):
+        alice = User.objects.create_user("alice")
         link = LinkFactory(
             source_type="workplan",
             source_id="abc123def456ghi7890ab",
@@ -32,14 +34,14 @@ class TestLinkModel:
             target_id="PROJ-123",
             link_type="relates_to",
             metadata={"key": "value"},
-            created_by="alice",
+            created_by=alice,
         )
         assert link.source_type == "workplan"
         assert link.target_type == "jira"
         assert link.target_id == "PROJ-123"
         assert link.link_type == "relates_to"
         assert link.metadata == {"key": "value"}
-        assert link.created_by == "alice"
+        assert link.created_by == alice
 
     def test_timestamps_auto_populated(self):
         link = LinkFactory(

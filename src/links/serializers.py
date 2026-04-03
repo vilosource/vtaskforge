@@ -6,6 +6,9 @@ from .models import Link
 class LinkSerializer(serializers.ModelSerializer):
     target_title = serializers.SerializerMethodField()
     source_title = serializers.SerializerMethodField()
+    created_by = serializers.SlugRelatedField(
+        slug_field="username", read_only=True, allow_null=True,
+    )
 
     class Meta:
         model = Link
@@ -23,7 +26,7 @@ class LinkSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "created_by"]
 
     def get_target_title(self, obj):
         if obj.target_type == "task":
