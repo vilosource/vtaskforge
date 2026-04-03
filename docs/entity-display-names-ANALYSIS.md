@@ -2542,3 +2542,182 @@ const reviews = await task.reviews.list();  // returns cached data, no call
 | **SDK versioning** | Semver, lenient input builder, no crash on unknown fields | — | Forward compatibility |
 | **`?expand=` + lazy** | Expand pre-populates cache, fallback to lazy fetch | Cache-aside | Optimization hint |
 | **Staleness** | Accepted for display names, eventual consistency via refetch/SSE | — | Eventual consistency |
+
+---
+
+## REST API Best Practices Audit (v1 Baseline)
+
+Before designing `/v2/`, the existing `/v1/` API was audited against REST best practices across three dimensions: URL structure and endpoints, response patterns and conventions, and Richardson Maturity Model compliance.
+
+### Richardson Maturity Assessment
+
+**Level: 2 (with Level 3 aspirations)**
+
+- **Level 1 (Resources):** Achieved. Distinct URIs for each resource type.
+- **Level 2 (HTTP Verbs + Status Codes):** Achieved. Correct verb usage, appropriate status codes.
+- **Level 3 (HATEOAS):** Not implemented. No hypermedia links in responses.
+
+### What v1 Gets Right (carry forward to v2)
+
+These are the strengths that should be preserved and formalized in v2:
+
+| Practice | Implementation | Assessment |
+|----------|---------------|------------|
+| **Resource naming** | Plural nouns (`/tasks/`, `/projects/`), no verbs in collection URLs | Excellent |
+| **HTTP methods** | PATCH enforced, PUT explicitly disabled (405), POST for actions, GET for reads | Excellent |
+| **Status codes** | 201 Created, 204 No Content, 400/404/409/422 all used correctly | Good |
+| **State machine actions** | POST to sub-paths (`/tasks/{id}/claim/`, `/tasks/{id}/complete/`) | Excellent |
+| **Cursor pagination** | Default across all list endpoints, configurable page size | Good |
+| **Consistent CRUD** | Same pattern across projects, workplans, milestones, tasks, agents | Good |
+| **Statelessness** | Token auth, no session dependence for API operations | Excellent |
+| **PATCH-only updates** | Full resource replacement (PUT) is disabled globally | Excellent |
+| **Pluralization** | 100% consistent — all collection endpoints use plural nouns | Excellent |
+| **Action naming** | All lowercase verbs, POST for mutations, GET for reads (stats, claimable) | Excellent |
+
+### Issues Found (fix in v2)
+
+#### Critical
+
+**1. Idempotency-Key: Documented but never implemented**
+
+The API design doc (`api-surface-DESIGN.md`) states: *"All POST operations support Idempotency-Key header... Critical for agent operations."* However, no implementation exists. The header is not checked, stored, or honored in any view.
+
+This is critical for agent reliability — a network timeout during `POST /tasks/{id}/claim/` could result in a double-claim on retry. The `ALREADY_CLAIMED` check mitigates this partially, but other POST operations (note creation, review submission) have no retry protection.
+
+**v2 must implement Idempotency-Key support** with key storage and deduplication for all non-idempotent POST operations.
+
+#### Medium
+
+**2. Missing Location header on 201 Created responses**
+
+RFC 7231 recommends a `Location` header on 201 responses pointing to the newly created resource. vtf returns 201 with the entity body but no Location header — found across all creation endpoints (projects, tasks, workplans, milestones, agents, reviews, notes, locks, sessions, service accounts).
+
+```python
+# Current
+return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+# Should be
+return Response(
+    serializer.data,
+    status=status.HTTP_201_CREATED,
+    headers={'Location': f'/v2/tasks/{task.id}/'}
+)
+```
+
+**3. Three different error response formats**
+
+The API uses three different error shapes depending on which view handles the error:
+
+```json
+// Format A: Structured (task state machine errors)
+{"error": {"code": "INVALID_TRANSITION", "message": "...", "details": {...}}}
+
+// Format B: Simple string (DRF default, most views)
+{"detail": "Project is already archived."}
+
+// Format C: Field-level validation (DRF serializer errors)
+{"title": ["This field may not be blank."], "project": ["This field is required."]}
+```
+
+**v2 must standardize on a single error format.** Recommended:
+
+```json
+{
+  "error": {
+    "code": "INVALID_TRANSITION",
+    "message": "Cannot complete task in draft status",
+    "details": {
+      "current_status": "draft",
+      "attempted_action": "complete"
+    },
+    "field_errors": {
+      "title": ["This field may not be blank."]
+    }
+  }
+}
+```
+
+One shape, always. `field_errors` present only for validation errors. SDK maps `code` to typed exceptions.
+
+**4. Inconsistent list response wrapping**
+
+Three different patterns for list responses:
+
+```json
+// Pattern A: Paginated (most list endpoints)
+{"results": [...], "next": "cursor-string", "previous": null}
+
+// Pattern B: Manual wrapping (ProjectMemberView, some nested endpoints)
+{"results": [...]}
+
+// Pattern C: Direct array (DRF fallback in some edge cases)
+[...]
+```
+
+**v2 must use one list format consistently.** The paginated format should be the default for all list endpoints, even if the collection is small.
+
+**5. Filter parameter naming inconsistency**
+
+| Parameter | Used By | Issue |
+|-----------|---------|-------|
+| `project` | Tasks, workplans, session-history | Short name |
+| `project_id` | Locks | Suffixed name |
+| `task` | Events | Short name |
+| `source_id` | Links | Suffixed name |
+
+**v2 must standardize** — recommend `project_id`, `workplan_id`, `task_id` consistently (matches the JSON field names in responses).
+
+**6. No OpenAPI spec generated**
+
+The design doc exists but no machine-readable OpenAPI spec is generated from DRF. This is needed for SDK validation (Gap 10) and API documentation.
+
+**v2 must ship with a generated OpenAPI spec** (via `drf-spectacular`).
+
+#### Low
+
+**7. Dual-access redundancy**
+
+Some resources are accessible both nested and top-level:
+- `/v1/projects/{id}/tasks/` AND `/v1/tasks/?project={id}`
+- `/v1/workplans/{id}/milestones/` AND `/v1/milestones/?workplan={id}`
+- `/v1/tasks/{id}/events/` AND `/v1/events/?task={id}`
+
+This is not wrong, but it doubles the API surface, creates multiple cache keys for the same data, and adds testing burden.
+
+**v2 should choose one access pattern per resource** and document the rationale. Recommendation: prefer top-level with query filters for resources that can be independently addressed (tasks, milestones), keep nested-only for resources that are meaningless without a parent (notes, reviews, members).
+
+**8. No rate limiting**
+
+No rate limiting headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`). Critical for multi-agent scenarios where executors, judges, and supervisors may all poll concurrently.
+
+**9. No ETag / conditional request support**
+
+No `ETag`, `If-None-Match`, or `If-Modified-Since` support. For the SDK's cache management, conditional requests would reduce bandwidth for unchanged resources.
+
+**10. `?expand=` parameter changes response schema**
+
+`GET /v1/tasks/{id}` returns `TaskSerializer` shape. `GET /v1/tasks/{id}?expand=links,reviews` returns `TaskDetailSerializer` shape — a different schema for the same URL. This makes caching unpredictable.
+
+**v2 should either:** always include expandable fields (as `null` when not expanded), or document that `expand` is a schema-changing parameter.
+
+**11. GET/POST overloading on `/auth/login`**
+
+`GET /v1/auth/login` checks auth status, `POST /v1/auth/login` performs login. Same URL, different verbs, different semantics. Should be separate resources.
+
+**12. Cursor pagination lacks total count**
+
+Cursor pagination is efficient but doesn't include `count`. Some consumers (UI pagination controls, progress indicators) need to know the total. Consider adding an optional `?include_count=true` parameter or a separate `count` endpoint.
+
+### API Surface Summary
+
+| Metric | Value |
+|--------|-------|
+| Total endpoints | ~75 |
+| Resource types | 12 (projects, workplans, milestones, tasks, agents, links, events, reviews, notes, locks, members, sessions) |
+| Task state machine actions | 17 |
+| Pagination style | Cursor-based, page_size=50, max=100 |
+| Authentication | Token (Bearer), Session (cookie) |
+| Content type | JSON only |
+| Versioning | URL prefix (`/v1/`) |
+| HATEOAS level | None |
+| Overall REST compliance | ~87% — strong Level 2 |
