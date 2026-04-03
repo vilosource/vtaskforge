@@ -34,6 +34,8 @@ These types are the single source of truth. They appear identically (modulo lang
 
 Every FK or string-ID reference in a v2 response is one of these shapes. Never a bare ID.
 
+Python models use **Pydantic v2** (`BaseModel` with `frozen=True`). Pydantic provides validated construction from API response dicts via `model_validate()`, discriminated union support, and immutability — eliminating manual `from_dict()` boilerplate.
+
 #### ProjectRef
 
 ```json
@@ -41,10 +43,14 @@ Every FK or string-ID reference in a v2 response is one of these shapes. Never a
 ```
 
 ```python
-@dataclass(frozen=True)
-class ProjectRef:
+from pydantic import BaseModel
+
+class ProjectRef(BaseModel, frozen=True):
     id: str
     name: str
+
+    def __str__(self) -> str:
+        return self.name
 ```
 
 ```typescript
@@ -65,10 +71,12 @@ interface ProjectRef {
 ```
 
 ```python
-@dataclass(frozen=True)
-class WorkplanRef:
+class WorkplanRef(BaseModel, frozen=True):
     id: str
     name: str
+
+    def __str__(self) -> str:
+        return self.name
 ```
 
 ```typescript
@@ -89,11 +97,15 @@ interface WorkplanRef {
 ```
 
 ```python
-@dataclass(frozen=True)
-class MilestoneRef:
+from typing import Literal
+
+class MilestoneRef(BaseModel, frozen=True):
     id: str
     name: str
-    status: str  # "pending" | "active" | "completed"
+    status: Literal["pending", "active", "completed"]
+
+    def __str__(self) -> str:
+        return self.name
 ```
 
 ```typescript
@@ -117,11 +129,13 @@ interface MilestoneRef {
 ```
 
 ```python
-@dataclass(frozen=True)
-class TaskRef:
+class TaskRef(BaseModel, frozen=True):
     id: str
     title: str
     status: str
+
+    def __str__(self) -> str:
+        return self.title
 ```
 
 ```typescript
@@ -134,7 +148,7 @@ interface TaskRef {
 
 **Appears in:** Task.requires, Link.source (when type=task), Link.target (when type=task), Agent.current_task
 
-**Note:** Tasks use `title` not `name`. The SDK's `EntityRef` base provides a `.display_name` property that returns `title` for TaskRef and `name` for all others.
+**Note:** Tasks use `title` not `name`. All ref types implement `__str__()` returning the display name.
 
 ---
 
@@ -145,10 +159,12 @@ interface TaskRef {
 ```
 
 ```python
-@dataclass(frozen=True)
-class AgentRef:
+class AgentRef(BaseModel, frozen=True):
     id: str
     name: str
+
+    def __str__(self) -> str:
+        return self.name
 ```
 
 ```typescript
@@ -171,10 +187,12 @@ interface AgentRef {
 ```
 
 ```python
-@dataclass(frozen=True)
-class UserRef:
+class UserRef(BaseModel, frozen=True):
     id: str
     username: str
+
+    def __str__(self) -> str:
+        return self.username
 ```
 
 ```typescript
@@ -190,7 +208,7 @@ interface UserRef {
 
 ---
 
-#### ActorRef (union of AgentRef | UserRef)
+#### ActorRef (discriminated union — agent or user)
 
 Some fields can reference either an agent or a user. The v2 response includes a `type` discriminator:
 
@@ -203,19 +221,30 @@ Some fields can reference either an agent or a user. The v2 response includes a 
 ```
 
 ```python
-@dataclass(frozen=True)
-class ActorRef:
-    type: str  # "agent" | "user"
-    id: str
-    display_name: str  # name for agents, username for users
+from typing import Annotated, Literal
+from pydantic import Discriminator, Tag
 
-    @classmethod
-    def from_dict(cls, data: dict) -> 'ActorRef':
-        return cls(
-            type=data["type"],
-            id=data["id"],
-            display_name=data.get("name") or data.get("username") or data["id"],
-        )
+class AgentActor(BaseModel, frozen=True):
+    type: Literal["agent"]
+    id: str
+    name: str
+
+    def __str__(self) -> str:
+        return self.name
+
+class UserActor(BaseModel, frozen=True):
+    type: Literal["user"]
+    id: str
+    username: str
+
+    def __str__(self) -> str:
+        return self.username
+
+ActorRef = Annotated[AgentActor | UserActor, Discriminator("type")]
+
+# Usage — Pydantic auto-selects the correct type:
+# ActorRef.model_validate({"type": "agent", "id": "agt-001", "name": "executor-1"})
+# → AgentActor(type='agent', id='agt-001', name='executor-1')
 ```
 
 ```typescript
@@ -226,7 +255,7 @@ type ActorRef =
 
 **Appears in:** Task.claimed_by, Task.assigned_to, Task.created_by, Review.reviewer, Note.actor, TaskEvent.triggered_by
 
-**Rationale for ActorRef over separate AgentRef/UserRef:** These fields can hold either type. Without a discriminator, the SDK would need to guess based on ID format (fragile). The `type` field makes it explicit.
+**Rationale for ActorRef over separate AgentRef/UserRef:** These fields can hold either type. Without a discriminator, the SDK would need to guess based on ID format (fragile). The `type` field makes it explicit. Pydantic's `Discriminator` handles the dispatch automatically.
 
 ---
 
@@ -244,20 +273,49 @@ type ActorRef =
 ```
 
 ```python
-@dataclass(frozen=True)
-class InternalLinkRef:
-    type: str             # "task" | "milestone" | "workplan"
+class TaskLinkRef(BaseModel, frozen=True):
+    type: Literal["task"]
     id: str
-    display_name: str     # title for tasks, name for others
-    status: str | None    # present for tasks and milestones
+    title: str
+    status: str
 
-@dataclass(frozen=True)
-class ExternalLinkRef:
-    type: str             # "commit" | "jira" | "doc" | "file" | "area"
+    def __str__(self) -> str:
+        return self.title
+
+class MilestoneLinkRef(BaseModel, frozen=True):
+    type: Literal["milestone"]
     id: str
-    label: str            # human-readable display text
+    name: str
+    status: str
 
-LinkRef = InternalLinkRef | ExternalLinkRef
+    def __str__(self) -> str:
+        return self.name
+
+class WorkplanLinkRef(BaseModel, frozen=True):
+    type: Literal["workplan"]
+    id: str
+    name: str
+
+    def __str__(self) -> str:
+        return self.name
+
+class ExternalLinkRef(BaseModel, frozen=True):
+    type: Literal["commit", "jira", "doc", "file", "area"]
+    id: str
+    label: str
+
+    def __str__(self) -> str:
+        return self.label
+
+InternalLinkRef = Annotated[
+    TaskLinkRef | MilestoneLinkRef | WorkplanLinkRef,
+    Discriminator("type"),
+]
+
+LinkRef = Annotated[
+    TaskLinkRef | MilestoneLinkRef | WorkplanLinkRef | ExternalLinkRef,
+    Discriminator("type"),
+]
 ```
 
 ```typescript
@@ -790,21 +848,24 @@ Events enriched with display data:
 
 ```
 vtf-sdk-python/
+  pyproject.toml            # pydantic>=2.0, httpx
   vtf_sdk/
-    __init__.py           # VtfClient, AsyncVtfClient
-    client.py             # Client implementations
-    entities.py           # Task, Project, Workplan, Milestone, Agent, etc.
-    refs.py               # ProjectRef, WorkplanRef, MilestoneRef, TaskRef, ActorRef, LinkRef
-    managers.py           # TaskManager, ProjectManager, etc.
-    exceptions.py         # Domain exception hierarchy
-    auth.py               # TokenAuth, OAuthAuth, auth strategies
-    pagination.py         # PagedResult, lazy iterator
-    protocols.py          # VtfClientProtocol, manager protocols
+    __init__.py             # VtfClient, AsyncVtfClient
+    client.py               # Client implementations (sync + async)
+    entities.py             # Task, Project, Workplan, Milestone, Agent, etc. (Pydantic models)
+    refs.py                 # ProjectRef, WorkplanRef, ActorRef, LinkRef, etc. (Pydantic models)
+    managers.py             # TaskManager, ProjectManager, etc.
+    exceptions.py           # Domain exception hierarchy (plain Python)
+    auth.py                 # TokenAuth, OAuthAuth, auth strategies
+    pagination.py           # PagedResult (Pydantic), lazy iterator
+    protocols.py            # VtfClientProtocol, manager protocols (typing.Protocol)
     testing/
-      __init__.py         # MockVtfClient, factories
-      mock_client.py      # In-memory client implementation
-      factories.py        # build_task, build_project, etc.
+      __init__.py           # MockVtfClient, factories
+      mock_client.py        # In-memory client implementation
+      factories.py          # build_task, build_project, etc.
 ```
+
+**Dependencies:** `pydantic>=2.0`, `httpx>=0.27` (sync and async HTTP client)
 
 ### 3.2 Client
 
@@ -830,11 +891,18 @@ vtf.bulk        # BulkManager
 
 ### 3.3 Entity Types
 
-All entities are frozen dataclasses (immutable). Mutations return new instances.
+All entities are **Pydantic v2 models** with `frozen=True` (immutable). Mutations return new instances. Construction from API response dicts uses `model_validate()` — Pydantic handles recursive parsing, null fields, and discriminated unions automatically.
 
 ```python
-@dataclass(frozen=True)
-class Task:
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+
+class TaskPermissions(BaseModel, frozen=True):
+    can_edit: bool
+    can_delete: bool
+    available_actions: list[str]
+
+class Task(BaseModel, frozen=True):
     id: str
     title: str
     description: str
@@ -865,9 +933,25 @@ class Task:
     created_at: datetime
     updated_at: datetime
 
+    model_config = {"extra": "ignore"}  # forward-compatible: ignore unknown fields
+
     def __str__(self) -> str:
         return self.title
+
+# Construction from API response — one line, fully validated:
+# task = Task.model_validate(response_dict)
+# task.project.name → "Auth System" (ProjectRef, parsed automatically)
+# task.claimed_by → AgentActor or UserActor (discriminated, parsed automatically)
+# task.requires[0].title → "Create user model" (list of TaskRef, parsed automatically)
 ```
+
+**Why Pydantic over dataclasses:**
+- `model_validate(dict)` replaces manual `from_dict()` with recursive nested parsing
+- Discriminated unions (ActorRef, LinkRef) handled natively via `Discriminator`
+- Validation on construction catches API contract violations immediately
+- `model_config = {"extra": "ignore"}` enables forward compatibility — unknown fields from newer API versions don't crash older SDK versions
+- `model_dump()` serializes back to dict for debugging and testing
+- `frozen=True` enforces immutability (same as frozen dataclasses)
 
 ### 3.4 Manager API
 
@@ -918,22 +1002,30 @@ class TaskManager:
 ### 3.5 Pagination
 
 ```python
-@dataclass(frozen=True)
-class PagedResult(Generic[T]):
+from typing import Generic, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar("T")
+
+class PagedResult(BaseModel, Generic[T], frozen=True):
     items: list[T]
     has_more: bool
-    next_cursor: str | None
-    previous_cursor: str | None
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
 ```
 
 ### 3.6 Exception Hierarchy
 
+Exceptions are plain Python classes (not Pydantic models) — they extend `Exception` and carry structured context from the API error response.
+
 ```python
 class VtfError(Exception):
     """Base for all SDK exceptions."""
-    code: str
-    message: str
-    details: dict | None
+    def __init__(self, code: str, message: str, details: dict | None = None):
+        self.code = code
+        self.message = message
+        self.details = details
+        super().__init__(message)
 
 class AuthenticationRequired(VtfError): ...
 class PermissionDenied(VtfError): ...
