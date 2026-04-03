@@ -186,21 +186,22 @@ type ActorRef = z.infer<typeof ActorRefSchema>;
 - Task: `claimed_by`, `assigned_to`, `created_by`
 - Review: `reviewer`
 - Note: `actor`
-- TaskEvent: `triggered_by`
 - Project: `owner`, `created_by`
 - Workplan: `owner`, `created_by`
 - Milestone: `created_by`
 - Membership: `user`
 - Lock: `user`
 
+**Not an ActorRef:** `TaskEvent.trigger_source` (renamed from `triggered_by`) is NOT an identity field — it stores action labels ("submit", "system", "admin") alongside agent IDs. It remains a plain string in v2.
+
 **Why one type for all identities (no separate AgentRef/UserRef):**
-- `claimed_by` is always an agent today, but the field is a CharField, not a FK — it could hold a user ID in the future
-- `owner` is always a user today, but the discriminator makes it explicit rather than assumed
+- Every identity in vtf (human, agent, service account) is a Django User — the discriminator reflects `UserProfile.user_type`
 - One type means one SDK contract — consumers handle identity display the same way everywhere: `str(actor)` returns the name/username
 - The `type` discriminator enables type narrowing when needed: `if actor.type == "agent": ...`
+- For agent actors, `pod_name` provides execution context (console terminal connection)
 - Follows Liskov Substitution: any ActorRef is displayable without knowing its concrete type
 
-**Resolution of string ID fields:** `claimed_by`, `assigned_to`, `created_by`, `reviewer_id`, `actor_id`, `triggered_by` are all CharField on the Django model (not FK). The v2 serializer resolves them via batch lookup — first against the Agent table, then the User table, falling back to a degraded ref `{"type": "agent", "id": "original-value", "name": "original-value"}` if the entity no longer exists.
+**Resolution (post Phase 0):** All identity fields are FK to Django User. The v2 serializer resolves them via `select_related()` + `UserProfile` type check. No batch lookup or string matching needed — proper FK traversal. See analysis doc "Critical Finding: Identity Fields Are Unstructured" for the Phase 0 migration.
 
 ---
 
@@ -761,12 +762,14 @@ task.project.name
   "task": {"id": "tsk-abc", "title": "Add auth endpoint", "status": "doing"},
   "event_type": "claimed",
   "data": {"agent_id": "agt-001"},
-  "triggered_by": {"type": "agent", "id": "agt-001", "name": "executor-1"},
+  "trigger_source": "agt-001",
   "timestamp": "2026-04-03T10:00:00Z"
 }
 ```
 
-**Change from v1:** `task` (bare ID) → TaskRef. `triggered_by` (bare string) → ActorRef.
+**Changes from v1:**
+- `task` (bare ID) → TaskRef
+- `triggered_by` → renamed to `trigger_source` (plain string, NOT ActorRef — stores action labels like "submit", "system", "admin" alongside agent IDs; not a resolvable identity reference)
 
 ---
 
@@ -925,10 +928,13 @@ Events enriched with display data:
     "task_title": "Add auth endpoint",
     "from_status": "todo",
     "to_status": "doing",
+    "trigger_source": "claim",
     "actor": {"type": "agent", "id": "agt-001", "name": "executor-1"}
   }
 }
 ```
+
+**Note:** `actor` is resolved from the TaskEvent's `actor` FK (added in Phase 0). `trigger_source` is the action label. For system-triggered events (claim expiry, celery tasks), `actor` is `null`.
 
 ---
 
@@ -1150,7 +1156,8 @@ class TaskEvent(VtfModel):
     task: TaskRef
     event_type: str
     data: dict
-    triggered_by: ActorRef
+    trigger_source: str           # action label: "claim", "submit", "system", etc.
+    actor: ActorRef | None        # who triggered this (null for system events)
     timestamp: datetime
 ```
 
@@ -1678,8 +1685,9 @@ Each phase must pass all tests before the next begins.
   - Review: `reviewer_id` → rename to `reviewer`, FK User
   - Note: `actor_id` → rename to `actor`, FK User
   - Link: `created_by`
-- `TaskEvent.triggered_by` — remains CharField (NOT an identity field — stores action labels)
-- Rename `TaskEvent.triggered_by` → `trigger_source` to clarify it's not an entity reference
+- `TaskEvent.triggered_by` split into two fields:
+  - `trigger_source` (CharField) — action label: "claim", "submit", "system", etc.
+  - `actor` (FK User, nullable) — who triggered this event (null for system/celery events)
 - Data migrations:
   - Link existing Agents to Users via `User.objects.get(username=agent.id)`
   - Resolve CharField username values to User PKs
