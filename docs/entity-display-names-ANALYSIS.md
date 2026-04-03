@@ -1489,3 +1489,619 @@ For completeness: gRPC with Protocol Buffers was also considered. gRPC excels at
 - gRPC's code generation from `.proto` files provides typed clients automatically, which is appealing, but the same can be achieved with OpenAPI code generation for REST if needed later
 
 gRPC would be appropriate for the vafi controller ↔ vtf API path if latency became critical (high-frequency heartbeats, streaming task events). It could be introduced later as a transport optimization for that specific path without replacing the REST API for other consumers.
+
+---
+
+## Architectural Gap Analysis
+
+The following gaps were identified through systematic analysis of the full lifecycle: not just reads, but writes, real-time, authentication, testing, concurrency, and edge cases. Each gap is reasoned through from first principles with SOLID and design pattern considerations.
+
+### Gap 1: Pagination — How Do Collections Work?
+
+**The tension:** `.list()` needs to return data from a paginated API. But the consumer shouldn't need to think about pagination for simple use cases, while retaining control for large datasets.
+
+**Patterns considered:**
+
+| Pattern | Example | Trade-off |
+|---------|---------|-----------|
+| Return all items | `tasks = vtf.tasks.list()` | Simple but dangerous — unbounded memory |
+| Return a page object | `page = vtf.tasks.list(page=1, per_page=20)` | Explicit but forces pagination awareness |
+| Lazy auto-paginating iterator | `for task in vtf.tasks.list(): ...` | Convenient but hides network calls |
+
+**Decision: Two explicit methods — `.list()` and `.list_all()`**
+
+```python
+# .list() returns a single page — safe, explicit, predictable
+result = vtf.tasks.list(status="doing", page=1, per_page=20)
+result.items      # list[Task] — this page only
+result.total      # int — total matching count
+result.has_more   # bool — are there more pages?
+result.page       # int — current page number
+
+# .list_all() returns a lazy iterator that auto-paginates — convenient for "give me everything"
+for task in vtf.tasks.list_all(status="doing"):
+    print(task.title)
+    # transparently fetches next page when current page is exhausted
+```
+
+**Design principle:** **Principle of Least Surprise.** `.list()` is safe by default (bounded). `.list_all()` is explicitly named to signal "this may fetch many pages." The consumer chooses the behavior they want. No hidden network calls in the default path.
+
+This is the **Iterator pattern** (GoF) applied to paginated APIs. The lazy iterator encapsulates the pagination state and transparently fetches the next page when the current one is exhausted.
+
+**TypeScript equivalent — integrates with React Query's pagination:**
+
+```typescript
+// Single page (useQuery)
+const { data } = useTasksPage({ status: 'doing', page: 1, perPage: 20 });
+data.items;   // Task[]
+data.total;   // number
+
+// Infinite scroll (useInfiniteQuery)
+const { data, fetchNextPage, hasNextPage } = useInfiniteTasks({ status: 'doing' });
+```
+
+---
+
+### Gap 2: Sync vs Async — The Python SDK Serves Two Worlds
+
+**The tension:** The Python SDK serves:
+- CLI (sync — Click is synchronous)
+- MCP tools (sync — Django ORM, though in an async event loop)
+- vafi controller (async — `httpx.AsyncClient`, asyncio event loop)
+
+A single client API cannot be both sync and async without compromise.
+
+**Patterns considered:**
+
+| Pattern | Example | Trade-off |
+|---------|---------|-----------|
+| Async-first, sync wrapper via `asyncio.run()` | `vtf.tasks.get(id)` internally calls `asyncio.run(self._aget(id))` | Breaks if called from an existing event loop (vafi) |
+| Sync-first, async wrapper via `run_in_executor` | `await vtf.tasks.get(id)` internally runs sync HTTP in threadpool | Wastes threads, doesn't benefit from async I/O |
+| Two separate clients | `VtfClient` (sync) and `AsyncVtfClient` (async) | Code duplication risk |
+| Single client parametric over transport | Shared entity logic, swappable HTTP backend | Complex but clean |
+
+**Decision: Two clients, shared entity layer — following httpx's own pattern**
+
+```python
+# Sync (CLI, tests)
+from vtf_sdk import VtfClient
+vtf = VtfClient(url="...", token="...")
+task = vtf.tasks.get(task_id)
+
+# Async (vafi controller)
+from vtf_sdk import AsyncVtfClient
+vtf = AsyncVtfClient(url="...", token="...")
+task = await vtf.tasks.get(task_id)
+```
+
+Both return identical `Task` entity objects. The difference is only in the transport layer. Internally:
+
+```python
+class BaseTaskManager:
+    """Shared entity construction logic — no I/O here."""
+
+    def _build_task(self, data: dict) -> Task:
+        return Task(
+            id=data["id"],
+            title=data["title"],
+            project=ProjectRef(id=data["project"]["id"], name=data["project"]["name"]),
+            ...
+        )
+
+class TaskManager(BaseTaskManager):
+    """Sync transport."""
+    def get(self, id: str) -> Task:
+        data = self._client.get(f"/v2/tasks/{id}/")  # httpx.Client
+        return self._build_task(data)
+
+class AsyncTaskManager(BaseTaskManager):
+    """Async transport."""
+    async def get(self, id: str) -> Task:
+        data = await self._client.get(f"/v2/tasks/{id}/")  # httpx.AsyncClient
+        return self._build_task(data)
+```
+
+**Design principle:** **Strategy pattern** — the HTTP transport strategy (sync vs async) is swappable while the entity model remains constant. **Interface Segregation** — sync consumers import `VtfClient`, async consumers import `AsyncVtfClient`. Neither is burdened with the other's concerns.
+
+**Risk mitigation:** The entity construction logic in `BaseTaskManager._build_task()` is the shared kernel. Unit tests verify that both `TaskManager` and `AsyncTaskManager` produce identical entity objects from the same input dict. If one drifts, tests catch it.
+
+---
+
+### Gap 3: Real-Time (SSE) in the TypeScript SDK
+
+**The tension:** The web UI receives Server-Sent Events for real-time updates. Currently, every event triggers `queryClient.invalidateQueries()` — a full refetch. The SDK should do better, but coupling the SDK to React Query's cache is a framework dependency.
+
+**Design: Layered — core event emitter + framework adapter**
+
+```
+@vtf/sdk           — core: entities, managers, typed event emitter (framework-agnostic)
+@vtf/sdk-react     — React integration: hooks, React Query cache sync, SSE → cache bridge
+```
+
+**Core SDK emits typed domain events:**
+
+```typescript
+// @vtf/sdk — framework-agnostic
+const events = vtf.events.subscribe({ projectId: project.id });
+
+events.on('task.statusChanged', (event: TaskStatusChangedEvent) => {
+  event.taskId;     // string
+  event.taskTitle;  // string — from enriched SSE payload
+  event.fromStatus; // TaskStatus
+  event.toStatus;   // TaskStatus
+});
+
+events.close();
+```
+
+**React adapter bridges events to cache:**
+
+```typescript
+// @vtf/sdk-react — React-specific
+import { useVtfEvents } from '@vtf/sdk-react';
+
+function WorkplanBoard({ workplanId }) {
+  // This hook:
+  // 1. Subscribes to SSE events filtered by workplan
+  // 2. On task.statusChanged: updates the cached Task entity in React Query
+  // 3. On task.created: adds to the cached task list
+  // 4. On cleanup: closes the EventSource connection
+  useVtfEvents({ workplanId });
+
+  // These hooks now get real-time updates via cache, no manual event handling
+  const { data: tasks } = useTasks({ workplanId });
+  // ...
+}
+```
+
+**Design principle:** **Adapter pattern** — `@vtf/sdk-react` adapts the core SDK's event emitter to React Query's cache API. **Dependency Inversion** — the core SDK doesn't depend on React or React Query. The framework-specific layer depends on the core, not vice versa.
+
+**This also means:** If someone builds a Vue or Svelte frontend for vtf, they write a `@vtf/sdk-vue` adapter without touching the core SDK.
+
+---
+
+### Gap 4: The Link Model — Polymorphic References
+
+**The tension:** A Link connects any entity type to any other. The source can be a task, milestone, or workplan. The target can be any of those OR an external reference (Jira ticket, commit SHA, KB area). The summary shape depends on the type.
+
+**Current v1 shape:**
+```json
+{
+  "source_type": "task",
+  "source_id": "tsk-abc",
+  "source_title": "Add auth",
+  "target_type": "jira",
+  "target_id": "PROJ-1234",
+  "target_title": null,
+  "link_type": "relates_to"
+}
+```
+
+**v2 target shape — discriminated union:**
+
+```json
+{
+  "source": {
+    "type": "task",
+    "id": "tsk-abc",
+    "title": "Add auth",
+    "status": "doing"
+  },
+  "target": {
+    "type": "jira",
+    "id": "PROJ-1234",
+    "label": "PROJ-1234"
+  },
+  "link_type": "relates_to"
+}
+```
+
+For internal entities (task, milestone, workplan), the embedded summary uses that entity's standard `Ref` type (TaskRef, MilestoneRef, WorkplanRef). For external references, a minimal `ExternalRef` with `{type, id, label}`.
+
+**TypeScript models this naturally as a discriminated union:**
+
+```typescript
+type InternalRef =
+  | { type: 'task'; id: string; title: string; status: TaskStatus }
+  | { type: 'milestone'; id: string; name: string; status: MilestoneStatus }
+  | { type: 'workplan'; id: string; name: string };
+
+type ExternalRef = {
+  type: 'commit' | 'jira' | 'doc' | 'file' | 'area';
+  id: string;
+  label: string;  // human-readable display text
+};
+
+type LinkRef = InternalRef | ExternalRef;
+
+interface Link {
+  id: string;
+  source: InternalRef;         // source is always an internal entity
+  target: LinkRef;             // target can be internal or external
+  linkType: LinkType;
+}
+```
+
+**Python uses a base class with typed subclasses:**
+
+```python
+class InternalRef:
+    type: str   # "task" | "milestone" | "workplan"
+    id: str
+    name: str   # title for tasks, name for others
+    status: str | None
+
+class ExternalRef:
+    type: str   # "commit" | "jira" | "doc" | "file" | "area"
+    id: str
+    label: str
+
+LinkRef = InternalRef | ExternalRef  # Python 3.10+ union
+
+class Link:
+    id: str
+    source: InternalRef
+    target: LinkRef
+    link_type: str
+```
+
+**Design principle:** **Liskov Substitution** — any `LinkRef` can be displayed by calling `.label` (for external) or `.name` (for internal). The consumer doesn't need to know the concrete type to show a human-readable label. We can achieve this with a shared property:
+
+```python
+class InternalRef:
+    @property
+    def display_name(self) -> str:
+        return self.name
+
+class ExternalRef:
+    @property
+    def display_name(self) -> str:
+        return self.label
+```
+
+Now any `LinkRef` has `.display_name` — the consumer can always show something meaningful regardless of type.
+
+**Performance note:** The current N+1 in `LinkSerializer.get_target_title()` is eliminated in v2. The serializer batch-loads all referenced entities in `to_representation()` using a single query per entity type, then inlines the summaries. This is the same approach Django's `prefetch_related()` uses.
+
+---
+
+### Gap 5: MCP Tools — SDK, ORM, or Shared Serializers?
+
+**The tension:** MCP tools run inside the Django process. Three options:
+
+| Option | How MCP tools get data | How MCP tools format responses |
+|--------|----------------------|-------------------------------|
+| **A: Use Python SDK** | HTTP calls to self | SDK entity objects → JSON |
+| **B: Use ORM directly** | Django ORM queries | Hand-built dicts (current) |
+| **C: Use ORM + v2 serializers** | Django ORM queries | v2 serializers → JSON |
+
+**Analysis of each option:**
+
+**Option A (SDK)** violates common sense. The MCP server runs inside the Django process. Making HTTP calls to yourself introduces network latency, requires auth tokens for your own process, and creates a circular dependency. This is a code smell — using a remote interface for a local call.
+
+**Option B (ORM directly)** is what exists today. The problem: each MCP tool formats its own response dict, and these shapes drift from the REST API's v2 contract. An LLM agent using MCP tools sees different field names and structures than a consumer using the REST API. This violates the **Uniform Interface** principle — the same entity should look the same regardless of access method.
+
+**Option C (ORM + v2 serializers)** is the right answer. MCP tools query the ORM (efficient, in-process, no HTTP overhead) but delegate response formatting to the v2 serializers (shared contract, consistent shapes):
+
+```python
+@mcp.tool()
+def vtf_task_detail(task_id: str) -> str:
+    task = (Task.objects
+        .select_related('project', 'workplan', 'milestone')
+        .get(id=task_id))
+    data = TaskSerializerV2(task).data
+    return json.dumps(success_response(data=data))
+```
+
+**Design principle:** **Shared Kernel** (Domain-Driven Design) — the v2 serializer is the shared contract between the REST API and MCP tools. Both use the same serializer, so responses are guaranteed to have the same shape. The serializer is the single source of truth for "what does a Task look like in v2."
+
+**This also means:** When we add a field to the v2 Task response, it automatically appears in both the REST API and MCP tools. No separate update needed. DRY by construction.
+
+**What about the SDK entity types?** The Python SDK's `Task` class is built from the v2 serializer's output shape. The MCP tools return that same shape as JSON. An LLM agent that uses MCP tools and a Python SDK consumer see the same data. The SDK is not needed inside the MCP tools — the serializer provides the contract.
+
+---
+
+### Gap 6: Bulk Operations
+
+**The tension:** vtf has bulk import (`POST /v1/bulk/import`). The vafi supervisor may dispatch multiple claims. Does the SDK need a generic batch framework?
+
+**Analysis:** vtf's bulk needs are specific and limited:
+- Bulk import of tasks from YAML specs
+- Potentially batch claim (supervisor dispatching to multiple agents)
+- Potentially batch status updates (cancel all tasks in a milestone)
+
+These are **domain-specific batch operations**, not generic "execute N arbitrary mutations in one call."
+
+**Decision: Domain-specific bulk methods, not a generic batch framework**
+
+```python
+# Specific bulk operations as SDK methods
+results = vtf.bulk.import_tasks(
+    workplan_id=wp.id,
+    tasks=[TaskSpec(title="...", ...), ...]
+)
+# returns: list[Task] (created entities)
+
+# Individual operations for everything else — looping is fine at vtf's scale
+for task_id in task_ids:
+    vtf.tasks.claim(task_id, agent_id=agent.id)
+```
+
+**Design principle:** **YAGNI** — don't build a generic batch framework for a system that has 2-3 specific bulk operations. Add bulk endpoints when a concrete need arises. A generic `vtf.batch([op1, op2, op3])` API adds complexity without solving a real problem at vtf's scale.
+
+**The import endpoint already exists.** Give it an SDK method. Don't over-abstract.
+
+---
+
+### Gap 7: SDK Testing Contract
+
+**The tension:** If testing with the SDK is harder than testing with raw JSON dicts, consumers won't adopt it. The SDK must provide first-class testing support.
+
+**Three levels of testing support, each serving a different need:**
+
+**Level 1: Protocol (interface) for dependency injection**
+
+```python
+# The SDK defines a Protocol (abstract interface)
+from vtf_sdk.protocols import VtfClientProtocol, TaskManagerProtocol
+
+class VtfClientProtocol(Protocol):
+    @property
+    def tasks(self) -> TaskManagerProtocol: ...
+    @property
+    def projects(self) -> ProjectManagerProtocol: ...
+    @property
+    def workplans(self) -> WorkplanManagerProtocol: ...
+```
+
+Consumer code depends on the Protocol, not the concrete `VtfClient`. Any test double that satisfies the Protocol works:
+
+```python
+# Consumer code
+def process_tasks(vtf: VtfClientProtocol):
+    for task in vtf.tasks.list_all(status="doing"):
+        ...
+
+# Test
+mock_vtf = MockVtfClient()
+process_tasks(mock_vtf)  # works — MockVtfClient satisfies VtfClientProtocol
+```
+
+**Design principle:** **Dependency Inversion** — consumer depends on abstraction (Protocol), not implementation (VtfClient).
+
+**Level 2: MockVtfClient — in-memory implementation**
+
+```python
+from vtf_sdk.testing import MockVtfClient
+
+vtf = MockVtfClient()
+vtf.seed_project(id="p1", name="Auth System")
+vtf.seed_task(id="t1", title="Add auth", project_id="p1")
+
+# Now vtf.projects.get("p1") returns a real Project entity
+# vtf.tasks.list(project="p1") returns the seeded task
+# vtf.tasks.claim("t1", agent_id="a1") updates the in-memory state
+```
+
+The mock implements the full Protocol with in-memory storage. It simulates the API behavior without HTTP. State mutations work — claiming a task changes its status in the mock.
+
+**Level 3: Entity factories for unit tests**
+
+```python
+from vtf_sdk.testing import build_task, build_project
+
+# Create entity objects directly, no client needed
+task = build_task(
+    title="Add auth",
+    project=build_project(name="Auth System"),
+    status="doing",
+)
+
+# Use in tests that don't need API behavior, just entity objects
+assert task.project.name == "Auth System"
+```
+
+**TypeScript equivalent:**
+
+```typescript
+import { createMockClient, buildTask, buildProject } from '@vtf/sdk/testing';
+
+// Full mock client
+const vtf = createMockClient({
+  projects: [buildProject({ name: 'Auth System' })],
+  tasks: [buildTask({ title: 'Add auth' })],
+});
+
+// Or just entity factories
+const task = buildTask({ title: 'Add auth', project: buildProject({ name: 'Auth System' }) });
+expect(task.project.name).toBe('Auth System');
+```
+
+**Design principle:** **Test Pyramid** — factories for unit tests (fast, no I/O), MockVtfClient for integration tests (in-memory behavior), real VtfClient for E2E tests (actual API).
+
+---
+
+### Gap 8: Write-Side Design
+
+**The tension:** We focused on reads. But the SDK also wraps mutations — create, update, state transitions. These have their own design concerns.
+
+**State machine transitions as explicit methods:**
+
+```python
+# Each transition is a named method — not a generic "update status"
+task = vtf.tasks.submit(task_id)      # draft → todo
+task = vtf.tasks.claim(task_id, agent_id=agent.id)  # todo → doing
+task = vtf.tasks.complete(task_id)    # doing → pending_completion_review
+task = vtf.tasks.fail(task_id)        # doing → needs_attention
+task = vtf.tasks.recover(task_id, target="todo")  # needs_attention → todo
+task = vtf.tasks.block(task_id, reason="Waiting on dependency")
+task = vtf.tasks.unblock(task_id)
+```
+
+**Why named methods, not `vtf.tasks.update(id, status="doing")`:**
+- The state machine has guards and side effects. `claim` requires an `agent_id`. `recover` requires a `target`. A generic update doesn't express these constraints.
+- Named methods make valid transitions discoverable via IDE autocomplete.
+- Invalid transitions (e.g., `complete` on a `draft` task) raise `InvalidTransition`, not a generic 400 error.
+
+**Every mutation returns the updated entity:**
+
+```python
+task = vtf.tasks.claim(task_id, agent_id=agent.id)
+# task is a full Task entity with:
+#   task.status == "doing"
+#   task.claimed_by.name == "executor-1"
+#   task.project.name == "Auth System"
+# The consumer always has current state after a mutation.
+```
+
+**Design principle:** **Command pattern** — each state transition is a distinct command with its own parameters and preconditions. The SDK surface area reflects the domain's valid operations, not the HTTP verbs.
+
+**Domain-specific exceptions:**
+
+```python
+from vtf_sdk.exceptions import (
+    InvalidTransition,    # wrong status for this action
+    GuardViolation,       # precondition not met (e.g., no workplan)
+    ClaimConflict,        # task already claimed by another agent
+    TaskNotFound,         # 404
+    ValidationError,      # invalid field values
+    PermissionDenied,     # not authorized
+)
+
+try:
+    vtf.tasks.claim(task_id, agent_id=agent.id)
+except ClaimConflict as e:
+    print(f"Already claimed by {e.held_by}")
+except GuardViolation as e:
+    print(f"Cannot claim: {e.guard_name} — {e.message}")
+except InvalidTransition as e:
+    print(f"Task is {e.current_status}, cannot transition via claim")
+```
+
+**Design principle:** **Replace error codes with exceptions** (Refactoring, Fowler). The consumer catches domain concepts (`ClaimConflict`), not transport artifacts (`HTTPError(409)`). Each exception carries contextual data (who holds the claim, which guard failed).
+
+**No client-side validation:** The SDK does not validate locally before sending. Server-side validation is authoritative. Client-side validation drifts from the server and creates false confidence. The SDK sends the request and maps the server's error response to typed exceptions.
+
+**TypeScript — optimistic updates in React:**
+
+```typescript
+// @vtf/sdk-react provides mutation hooks
+const { mutate: claimTask } = useClaimTask({
+  // Optimistic update: immediately update UI
+  onMutate: (taskId) => {
+    queryClient.setQueryData(['task', taskId], old => ({
+      ...old,
+      status: 'doing',
+      claimedBy: currentAgent,
+    }));
+  },
+  // Revert on failure
+  onError: (err, taskId) => {
+    queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+  },
+});
+```
+
+The React adapter provides pre-built mutation hooks with optimistic update logic. The consumer gets real-time UI updates with automatic rollback on failure.
+
+---
+
+### Gap 9: Authentication Lifecycle
+
+**The tension:** Different consumers authenticate differently. The SDK must handle this transparently.
+
+**Auth strategies:**
+
+| Consumer | Auth Method | SDK Configuration |
+|----------|-----------|-------------------|
+| CLI | Token (from `vtf config`) | `VtfClient(token="...")` |
+| vafi controller | Service account token (env var) | `AsyncVtfClient(token=os.environ["VTF_API_TOKEN"])` |
+| React SPA | Session cookie (browser) | `VtfClient({ credentials: 'include' })` |
+| MCP tools | N/A (in-process, uses Django ORM) | No SDK auth needed |
+
+**Decision: Auth is a constructor concern, not a per-request concern**
+
+```python
+# Token auth (most consumers)
+vtf = VtfClient(url="...", token="my-token")
+
+# The SDK sends Authorization: Token my-token on every request
+# The consumer never thinks about auth after construction
+```
+
+```typescript
+// Session auth (browser)
+const vtf = new VtfClient({ baseUrl: '/api', credentials: 'include' });
+
+// Cookie sent automatically by browser
+```
+
+**Future-proofing for OAuth:** vtf currently uses static tokens (DRF TokenAuthentication). If OAuth is added later, the SDK supports a pluggable auth strategy:
+
+```python
+# Static token (current)
+vtf = VtfClient(url="...", auth=TokenAuth("my-token"))
+
+# OAuth with refresh (future)
+vtf = VtfClient(url="...", auth=OAuthAuth(
+    client_id="...",
+    client_secret="...",
+    token_url="...",
+))
+
+# Custom auth (extensible)
+vtf = VtfClient(url="...", auth=CustomAuth(lambda request: add_my_headers(request)))
+```
+
+**Design principle:** **Strategy pattern** — the auth mechanism is a pluggable strategy injected at construction time. **Open/Closed** — the SDK is open for new auth methods without modifying the client code.
+
+**Token is the sensible default:** For convenience, `VtfClient(url="...", token="...")` is syntactic sugar for `VtfClient(url="...", auth=TokenAuth("..."))`. The simple case stays simple.
+
+---
+
+### Gap 10: OpenAPI and Schema Generation
+
+**The tension:** Should the SDK be auto-generated from an OpenAPI spec, or hand-written?
+
+**Analysis:**
+
+| Approach | Sync Guarantee | Ergonomics | Effort |
+|----------|---------------|------------|--------|
+| **Generated from OpenAPI** | Automatic — spec changes regenerate SDK | Poor — generated code is flat, no lazy loading, no domain methods | Low initial, high customization |
+| **Hand-written SDK** | Manual — must update SDK when API changes | Excellent — full control over entity objects, managers, patterns | Higher initial, lower maintenance |
+| **Hand-written SDK + OpenAPI for validation** | CI-enforced — tests verify SDK types match spec | Excellent | Moderate |
+
+**Decision: Hand-written SDK, validated against OpenAPI spec in CI**
+
+1. **DRF generates the OpenAPI spec** (via `drf-spectacular`) — this is documentation and a machine-readable contract.
+2. **The SDK is hand-written** — full control over ergonomics (entity objects, lazy collections, managers, domain exceptions).
+3. **CI tests validate alignment** — a test suite fetches the OpenAPI spec and verifies that every SDK entity type matches the corresponding schema. If the API adds a field and the SDK doesn't, CI fails.
+
+```python
+# In SDK test suite
+def test_task_entity_matches_openapi_schema():
+    spec = load_openapi_spec("https://vtf.example.com/v2/schema/")
+    task_schema = spec["components"]["schemas"]["Task"]
+    task_fields = set(task_schema["properties"].keys())
+    sdk_fields = set(Task.__dataclass_fields__.keys())
+    assert task_fields == sdk_fields, f"Drift detected: {task_fields ^ sdk_fields}"
+```
+
+**Design principle:** This follows Stripe's approach — they have an OpenAPI spec but hand-craft their SDKs for ergonomics. The spec is the source of truth for the API contract; the SDK is the source of truth for the developer experience. CI ensures they don't drift.
+
+---
+
+### Gap Summary
+
+| Gap | Decision | Design Pattern | Principle |
+|-----|----------|---------------|-----------|
+| **Pagination** | `.list()` returns page, `.list_all()` returns lazy iterator | Iterator | Least Surprise |
+| **Sync/Async** | Two clients (`VtfClient`, `AsyncVtfClient`), shared entity layer | Strategy | Interface Segregation |
+| **Real-time (SSE)** | Core event emitter + `@vtf/sdk-react` adapter for cache sync | Adapter, Observer | Dependency Inversion |
+| **Link model** | Discriminated union with `InternalRef` / `ExternalRef`, shared `.display_name` | Polymorphism | Liskov Substitution |
+| **MCP tools** | ORM queries + v2 serializers (no SDK, no HTTP-to-self) | Shared Kernel (DDD) | DRY, Uniform Interface |
+| **Bulk operations** | Domain-specific bulk methods, not generic batch framework | — | YAGNI |
+| **Testing** | Protocol + MockVtfClient + entity factories (three levels) | Dependency Injection | Dependency Inversion |
+| **Write side** | Named transition methods, return updated entity, domain exceptions | Command | Replace error codes with exceptions |
+| **Authentication** | Pluggable auth strategy, token as default | Strategy | Open/Closed |
+| **Schema** | Hand-written SDK, OpenAPI spec for CI validation | — | Stripe pattern |
