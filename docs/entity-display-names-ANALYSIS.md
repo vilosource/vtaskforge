@@ -2545,6 +2545,181 @@ const reviews = await task.reviews.list();  // returns cached data, no call
 
 ---
 
+## Critical Finding: Identity Fields Are Unstructured
+
+**Discovered during design doc review (2026-04-03).** This finding supersedes the ActorRef design in the design doc and must be resolved before v2 implementation.
+
+### The Problem
+
+All identity fields in vtf are plain `CharField` storing arbitrary strings. There are no ForeignKey constraints, no consistent ID format, and no guaranteed resolvability. The v2 design's ActorRef (discriminated union resolving to `{type, id, name}`) was designed without verifying what these fields actually store.
+
+### What the Code Actually Stores (verified)
+
+| Field | Model | What's Stored | Example Values | FK Validated? |
+|-------|-------|--------------|----------------|---------------|
+| `claimed_by` | Task | Agent.id (nanoid) | `"V1StGXR8_Z5jdHi6B-myT"` | Yes — `Agent.objects.get(pk=agent_id)` in claim view |
+| `assigned_to` | Task | Any string, no validation | `"agt-001"` | No |
+| `created_by` | Task, Project, Workplan, Milestone, Link | **Username strings** | `"alice"`, `"bob"` | No — not a User PK, not an Agent ID |
+| `owner` | Project, Workplan | **Username strings** | `"bob"` | No — not a User PK |
+| `reviewer_id` | Review | Any string + `reviewer_type` discriminator | `"user-1"`, `"human-1"` | No |
+| `actor_id` | Note | Any string | `"agent-1"` | No |
+| `triggered_by` | TaskEvent | **Mixed: agent IDs AND action labels** | `"submit"`, `"system"`, `"admin"`, `agent_id` | No — **not even an identity field** |
+
+### Why This Matters
+
+1. **ActorRef cannot work** — The v2 serializer was designed to resolve these fields to `{type, id, name}` objects. But `created_by="alice"` cannot be resolved — "alice" is a username string, not a User PK (integer) or Agent ID (nanoid). `User.objects.get(pk="alice")` fails.
+
+2. **triggered_by is not an identity** — It stores action labels ("submit", "complete", "system") alongside agent IDs. It's a free-text tag describing what caused an event, not a reference to an entity.
+
+3. **No referential integrity** — CharField identity fields can reference entities that don't exist, or store values in inconsistent formats. There's no guarantee the value is resolvable.
+
+4. **User management was built but not connected** — The user management system (Phase 6, commit 9300560) added UserProfile, ProjectMembership, and service accounts. But the existing identity fields were never migrated to use this infrastructure.
+
+### How Agent Registration Works (verified)
+
+The Agent registration flow in `src/agents/views.py:31-62`:
+
+```python
+# New agent registration
+agent = Agent(name="executor-1", ...)           # Agent entity (nanoid PK)
+user = User.objects.create_user(username=agent.id)  # Django User (integer PK, username=agent.id)
+token = Token.objects.create(user=user)          # Auth token for API access
+```
+
+Key observations:
+- Every Agent has a corresponding Django User, but **there is no FK between them**
+- The link is by convention: `User.username == Agent.id` (the agent's nanoid is used as the username)
+- This convention is not enforced by the database — it's implicit
+- `claimed_by` stores `Agent.id`, which equals the corresponding `User.username`
+
+Service account creation (`src/prefs/services.py:70-75`):
+```python
+user = User.objects.create_user(username=name)   # Django User
+token = Token.objects.create(user=user)           # Auth token
+UserProfile.objects.create(user=user, user_type="service")  # Explicit type
+```
+
+Human users authenticate via session/token and have `UserProfile.user_type="human"`.
+
+### The Three Identity Concepts in vtf
+
+| Concept | Model | PK Type | Example | Purpose |
+|---------|-------|---------|---------|---------|
+| **Human user** | Django User + UserProfile(type="human") | Integer | PK=42, username="jdoe" | Authentication, ownership, membership |
+| **Agent entity** | Agent | Nanoid string | `"V1StGXR8_Z5jdHi6B-myT"` | Execution: tags, pod_name, heartbeat |
+| **Agent user** | Django User + UserProfile(type="agent") | Integer | PK=99, username=agent.id | Authentication (token-based) |
+| **Service account** | Django User + UserProfile(type="service") | Integer | PK=100, username="vtf-kb" | Cross-service auth |
+
+The Agent entity and Agent user are linked only by `User.username == Agent.id` — no FK. This is the root of the identity resolution problem.
+
+### What Needs to Change
+
+The proper fix requires two things:
+
+**1. Formalize the Agent ↔ User link**
+
+Agent registration already creates both an Agent and a User. The link should be a database FK, not a naming convention:
+
+```python
+class Agent(NanoIDMixin, TimestampMixin):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="agent",
+        null=True,  # nullable for migration of existing agents
+    )
+    name = models.CharField(max_length=255)
+    # ... tags, pod_name, heartbeat, etc.
+```
+
+With this FK:
+- `agent.user` gives the Django User (for auth, profile, memberships)
+- `user.agent` gives the Agent entity (for execution context: pod_name, tags)
+- The implicit `username == agent.id` convention becomes a proper relationship
+
+**2. Convert identity CharFields to User ForeignKeys**
+
+Every field that references "who did this" should FK to Django User — because every identity in vtf (human, agent, service account) IS a Django User:
+
+```python
+class Task(NanoIDMixin, TimestampMixin):
+    # Identity fields — FK to User, not CharField
+    claimed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="claimed_tasks",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="assigned_tasks",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="+",
+    )
+```
+
+Same for:
+- `Project.owner` → FK to User
+- `Project.created_by` → FK to User
+- `Workplan.owner` → FK to User
+- `Workplan.created_by` → FK to User
+- `Milestone.created_by` → FK to User
+- `Review.reviewer` → FK to User (rename from `reviewer_id`)
+- `Note.actor` → FK to User (rename from `actor_id`)
+- `Link.created_by` → FK to User
+
+**Not converted:**
+- `TaskEvent.triggered_by` — This is NOT an identity field. It stores action labels ("submit", "system", "admin") alongside agent IDs. It should remain a CharField but be renamed to `trigger` or `trigger_source` to clarify it's not an entity reference.
+
+### How ActorRef Works After This Fix
+
+With all identity fields as FK to User, the v2 serializer resolves them uniformly:
+
+```python
+def resolve_actor(user: User | None) -> dict | None:
+    if user is None:
+        return None
+    profile = get_or_create_profile(user)
+    if profile.user_type == "agent" or hasattr(user, 'agent'):
+        agent = getattr(user, 'agent', None)
+        return {
+            "type": "agent",
+            "id": agent.id if agent else user.username,
+            "name": agent.name if agent else user.username,
+            "pod_name": agent.pod_name if agent else None,
+        }
+    return {
+        "type": "user",
+        "id": str(user.pk),
+        "username": user.username,
+    }
+```
+
+This is a proper resolution — not a string lookup, but a FK traversal with `select_related('claimed_by__profile', 'claimed_by__agent')`.
+
+### Migration Path
+
+1. Add `Agent.user` FK (nullable initially)
+2. Data migration: link existing Agents to their Users via `User.objects.get(username=agent.id)`
+3. Add new FK identity fields to all models (nullable, alongside existing CharFields)
+4. Data migration: resolve existing CharField values to User PKs where possible
+5. Update views to set FK from `request.user` instead of string values
+6. Remove CharField identity fields once all data is migrated
+7. Make `Agent.user` non-nullable
+
+This is a significant migration but each step is independently safe and testable.
+
+### Impact on v2 Design
+
+The v2 design doc's ActorRef pattern is **correct in concept but premature in implementation**. The ActorRef discriminated union (`AgentActor | UserActor`) works perfectly once identity fields are proper User FKs. The design doc should be updated to:
+
+1. Add this identity field migration as **Phase 0** (before v2 serializers)
+2. Note that ActorRef resolution depends on FK identity fields
+3. Document the `TaskEvent.triggered_by` exception (not an identity field)
+4. Add `Agent.user` FK to the Agent entity specification
+
+---
+
 ## REST API Best Practices Audit (v1 Baseline)
 
 Before designing `/v2/`, the existing `/v1/` API was audited against REST best practices across three dimensions: URL structure and endpoints, response patterns and conventions, and Richardson Maturity Model compliance.

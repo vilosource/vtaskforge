@@ -1662,9 +1662,35 @@ console.log(VERSION);  // "0.1.0"
 
 Each phase must pass all tests before the next begins.
 
+### Phase 0: Identity Field Migration (PREREQUISITE)
+
+**Scope:** Formalize Agent ↔ User relationship, convert all identity CharFields to User ForeignKeys. This is a v1 model change — prerequisite for v2 ActorRef to work correctly.
+
+**Why this must come first:** The v2 ActorRef pattern requires identity fields to be proper entity references, not arbitrary strings. The current CharField identity fields (`claimed_by`, `created_by`, `owner`, `reviewer_id`, `actor_id`) store inconsistent values (nanoids, usernames, free text) that cannot be reliably resolved. See analysis doc "Critical Finding: Identity Fields Are Unstructured."
+
+**Deliverables:**
+- `Agent.user` — OneToOneField FK to Django User (formalizes the implicit username=agent.id link)
+- All identity fields converted from CharField to FK User:
+  - Task: `claimed_by`, `assigned_to`, `created_by`
+  - Project: `owner`, `created_by`
+  - Workplan: `owner`, `created_by`
+  - Milestone: `created_by`
+  - Review: `reviewer_id` → rename to `reviewer`, FK User
+  - Note: `actor_id` → rename to `actor`, FK User
+  - Link: `created_by`
+- `TaskEvent.triggered_by` — remains CharField (NOT an identity field — stores action labels)
+- Rename `TaskEvent.triggered_by` → `trigger_source` to clarify it's not an entity reference
+- Data migrations:
+  - Link existing Agents to Users via `User.objects.get(username=agent.id)`
+  - Resolve CharField username values to User PKs
+  - Handle unresolvable values (set to null with migration log)
+- All views updated to set FK from `request.user` instead of string values
+- All existing v1 tests updated and passing
+- v1 serializers updated (CharField → PrimaryKeyRelatedField, backward-compatible on write)
+
 ### Phase 1: v2 Serializers and API
 
-**Scope:** v2 serializers, URL routing, error standardization, OpenAPI spec, idempotency.
+**Scope:** v2 serializers, URL routing, error standardization, OpenAPI spec, idempotency. Depends on Phase 0 (identity FKs must exist for ActorRef resolution).
 
 **Deliverables:**
 - `src/*/serializers_v2.py` — v2 serializer classes for all entities
