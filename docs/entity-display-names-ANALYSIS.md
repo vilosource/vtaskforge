@@ -795,24 +795,27 @@ The SDK encodes this asymmetry:
 
 ### What Changes at Each Layer
 
-**API Layer (DRF serializers):**
-- FK fields include `*_name` read-only companion fields
-- String ID fields (claimed_by, reviewer_id, etc.) include `*_name` companions
-- `?expand=` pattern for optional child collections
+**API Layer (v2 DRF serializers):**
+- FK fields return embedded summary objects: `"project": {"id": "xY9...", "name": "Auth System"}`
+- String ID fields (claimed_by, reviewer_id, etc.) resolve to `AgentRef` or `UserRef` objects
+- `?expand=` pattern for optional child collections (reviews, events, links, traces)
+- Write side accepts bare IDs (unchanged): `"project": "xY9..."`
+- DRF `to_representation()` handles the read/write asymmetry per field
 - Responses are identical for all consumers — the SDK adapts, not the API
 
 **Python SDK (`vtf-sdk-python`):**
-- Shared by CLI, MCP tools, vafi controller, future vtf-kb
+- Shared by CLI, vafi controller, future vtf-kb
 - Replaces `cli/vtf/client.py` and vafi's `VtfClient`
-- Entity objects with `EntityRef` for FK fields, `cached_property` for collections
+- Entity objects with `EntityRef` for FK fields, Manager pattern for collections
 - Auth handling (token, session) built into client
 - Published as internal package or git submodule
+- Note: MCP tools do NOT use the SDK — they use ORM + v2 serializers directly (see Gap 5)
 
 **TypeScript SDK (`vtf-sdk-ts`):**
 - Used by React SPA
 - Replaces ad-hoc `api/*.ts` fetch functions
 - Entity types with `EntityRef` for FK fields
-- React Query integration via hooks
+- React Query integration via hooks (`@vtf/sdk-react`)
 - Eliminates manual `useProject(task.project)` follow-up queries
 
 **Consumers (application code):**
@@ -1073,7 +1076,7 @@ Step 4: Migrate consumers one at a time
         4a: CLI → vtf-sdk-python
         4b: vafi controller → vtf-sdk-python
         4c: React SPA → vtf-sdk-ts
-        4d: MCP tools → vtf-sdk-python (or keep ORM — design decision)
+        4d: MCP tools → v2 serializers (ORM stays, shared contract — see Gap 5)
               │
 Step 5: Deprecate /v1/
         (Once all consumers confirmed on /v2/)
@@ -1084,19 +1087,23 @@ Step 6: Remove /v1/
 
 ### Open Questions (for future design doc)
 
-These need answers before implementation begins:
+These need answers before implementation begins. Questions resolved during this analysis are marked.
 
-1. **Versioning mechanism** — URL prefix (`/v2/tasks/`) vs header (`Accept: application/vnd.vtf.v2+json`) vs query param (`?version=2`). URL prefix is simplest and most visible.
+1. **Versioning mechanism** — URL prefix (`/v2/tasks/`) vs header (`Accept: application/vnd.vtf.v2+json`) vs query param (`?version=2`). URL prefix is simplest and most visible. **Leaning:** URL prefix — most visible, easiest to debug, aligns with GitLab's approach.
 
-2. **Shared vs separate serializers** — Do v1 and v2 share a base serializer with different `to_representation()`? Or are they completely separate classes? Shared base avoids drift but adds coupling.
+2. **Shared vs separate serializers** — ~~Do v1 and v2 share a base serializer with different `to_representation()`? Or are they completely separate classes?~~ **Resolved in Gap 5:** v2 serializers are the shared contract between REST API and MCP tools. v1 serializers remain untouched. v2 serializers should be separate classes (not subclasses of v1) to avoid coupling — v1 can be deleted cleanly when deprecated.
 
-3. **MCP tools and /v2/** — MCP tools currently use Django ORM directly (in-process). Should they switch to the Python SDK (which calls HTTP), or should they use v2 serializers directly? In-process ORM is faster but bypasses the SDK abstraction.
+3. ~~**MCP tools and /v2/**~~ — **Resolved in Gap 5:** MCP tools use ORM queries + v2 serializers directly. No SDK, no HTTP-to-self. The v2 serializer is the shared contract.
 
 4. **SDK packaging** — Monorepo subfolder, separate repos, or published packages? For internal use, monorepo subfolder is simplest. For open source, published packages (`pip install vtf-sdk`, `npm install @vtf/sdk`).
 
 5. **Migration testing** — How to verify that a consumer works correctly on /v2/ before cutting over? Shadow traffic? Feature flags? Parallel runs?
 
 6. **Summary field selection** — Which fields belong in each summary type? Minimal (`{id, name}`) or richer (`{id, name, status, web_url}`)? The GitLab case study suggests richer summaries reduce follow-up calls, but they also increase payload size and staleness risk.
+
+7. **v2 URL routing** — How do `/v1/` and `/v2/` coexist in Django's URL configuration? Options: separate URL modules per version, separate viewsets per version, or same viewsets with version-aware serializer selection. Needs design decision.
+
+8. **Authorization model in SDK** — Different consumers have different roles and permissions. How does the SDK surface authorization errors and available actions? See Gap 11.
 
 ---
 
@@ -2105,3 +2112,433 @@ def test_task_entity_matches_openapi_schema():
 | **Write side** | Named transition methods, return updated entity, domain exceptions | Command | Replace error codes with exceptions |
 | **Authentication** | Pluggable auth strategy, token as default | Strategy | Open/Closed |
 | **Schema** | Hand-written SDK, OpenAPI spec for CI validation | — | Stripe pattern |
+
+---
+
+### Gap 11: Authorization — Not All Clients Are Equal
+
+**The tension:** We covered authentication (Gap 9 — proving identity), but not authorization (what actions each identity is allowed to perform). vtf has a role-based permission model, and different consumers operate at different privilege levels.
+
+**Current authorization landscape:**
+
+| Consumer | Identity Type | Role | What They Can Do |
+|----------|-------------|------|-----------------|
+| **Web UI (human, project owner)** | Human user | owner | Full CRUD on project, workplans, tasks, members |
+| **Web UI (human, project member)** | Human user | member | CRUD on tasks/workplans, cannot manage members |
+| **Web UI (human, project viewer)** | Human user | viewer | Read-only access to project scope |
+| **CLI (human, staff)** | Human user | staff | Bypass project membership, access all projects |
+| **vafi controller** | Service account | agent | Claim, complete, fail tasks; post notes and reviews |
+| **MCP tools (architect agent)** | Service account or human | varies | Create workplans, plan tasks, manage milestones |
+| **MCP tools (executor agent)** | Service account | agent | Claim and execute tasks in assigned project |
+| **Cross-service (vtf-kb)** | Service account | service | Read-only access to task metadata for knowledge indexing |
+
+**The key architectural insight:** Authorization is enforced on the **server** (Django's `HasProjectMembership` permission, `IsStaff`, role checks). The SDK should **not** duplicate authorization logic. But the SDK should:
+
+1. **Surface authorization errors as typed exceptions** — not HTTP 403
+2. **Expose the user's permissions** so the UI can show/hide actions
+3. **Carry the authorization context** (role, project membership) from auth/validate response
+
+**Authorization in SDK responses:**
+
+The v2 API already returns `available_actions` in MCP tool responses. This should be formalized across all v2 endpoints:
+
+```json
+// GET /v2/tasks/tsk-abc
+{
+  "id": "tsk-abc",
+  "title": "Add auth endpoint",
+  "status": "todo",
+  "project": {"id": "xY9...", "name": "Auth System"},
+  "_permissions": {
+    "can_claim": true,
+    "can_edit": true,
+    "can_delete": false,
+    "can_submit": false,
+    "available_transitions": ["claim", "block", "defer", "cancel"]
+  }
+}
+```
+
+The `_permissions` object (prefixed with `_` to signal it's metadata, not entity data) tells the consumer what the current user can do with this entity. The SDK exposes this:
+
+```python
+task = vtf.tasks.get(task_id)
+task.permissions.can_claim          # True
+task.permissions.available_transitions  # ["claim", "block", "defer", "cancel"]
+
+if task.permissions.can_claim:
+    vtf.tasks.claim(task.id, agent_id=agent.id)
+```
+
+```typescript
+const task = await vtf.tasks.get(id);
+
+// UI conditionally renders buttons based on permissions
+{task.permissions.canClaim && <ClaimButton taskId={task.id} />}
+{task.permissions.canEdit && <EditButton taskId={task.id} />}
+```
+
+**Why server-computed permissions, not client-side role checks:**
+
+The alternative — `if (user.role === 'owner') showDeleteButton()` — is fragile. Permission logic lives in Django's permission classes and the state machine guards. Duplicating it in the SDK means two places that can disagree. The server is authoritative; the SDK reflects what the server says.
+
+**Authorization errors as domain exceptions:**
+
+```python
+from vtf_sdk.exceptions import PermissionDenied, ProjectAccessDenied
+
+try:
+    vtf.tasks.delete(task_id)
+except ProjectAccessDenied as e:
+    print(f"No access to project {e.project_name} (your role: {e.role})")
+except PermissionDenied as e:
+    print(f"Action not allowed: {e.action} — {e.reason}")
+```
+
+**Service account scopes:**
+
+vtf's `create_service_account` management command creates agent-type users. In the SDK, service accounts authenticate like any other token user, but their permissions are limited by their role and project membership. The SDK doesn't need special service account handling — the server enforces the boundaries.
+
+**Design principle:** **Single Source of Truth** for authorization — the server. The SDK is a faithful mirror, not an independent authority. **Tell, Don't Ask** — the server tells the consumer what's allowed via `_permissions`, rather than the consumer asking "am I allowed?" and computing the answer locally.
+
+---
+
+### Gap 12: Entity Immutability
+
+**The tension:** If SDK entity objects are mutable, consumers can accidentally modify cached state, creating subtle bugs — especially with React Query's cache.
+
+**Decision: Entities are immutable. Mutations return new instances.**
+
+```python
+# Python SDK — entities are frozen dataclasses
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Task:
+    id: str
+    title: str
+    status: str
+    project: ProjectRef
+    workplan: WorkplanRef | None
+    milestone: MilestoneRef | None
+    claimed_by: AgentRef | None
+
+# This raises FrozenInstanceError:
+task.status = "doing"  # TypeError!
+
+# Mutations return a new Task instance:
+claimed_task = vtf.tasks.claim(task.id, agent_id=agent.id)
+# claimed_task is a NEW Task object with status="doing"
+# task is unchanged — still status="todo"
+```
+
+```typescript
+// TypeScript SDK — entities are readonly interfaces
+interface Task {
+  readonly id: string;
+  readonly title: string;
+  readonly status: TaskStatus;
+  readonly project: EntityRef;
+  readonly workplan: EntityRef | null;
+  readonly milestone: EntityRef | null;
+  readonly claimedBy: EntityRef | null;
+}
+```
+
+**Why this matters for React Query:** React Query compares object references to detect changes. If the SDK mutated a cached Task in-place, React would not re-render — the reference is the same. Immutable entities guarantee that a new entity means a new object reference, which triggers re-render.
+
+**Design principle:** **Value Object** (DDD) — entity instances represent a snapshot in time. They are values, not live references to server state. If the server state changes, you get a new snapshot (via a fresh fetch or mutation response).
+
+---
+
+### Gap 13: Nullable References in the v2 Contract
+
+**The tension:** Task's `workplan` and `milestone` are nullable ForeignKeys. The v2 response must clearly define what `null` looks like — is it `null`, absent, or an empty object?
+
+**Decision: Null references are JSON `null`, never absent, never empty objects.**
+
+```json
+// Task with all references populated
+{
+  "project": {"id": "xY9...", "name": "Auth System"},
+  "workplan": {"id": "aBc...", "name": "Platform Hardening"},
+  "milestone": {"id": "zZz...", "name": "Phase 1 Core"},
+  "claimed_by": {"id": "agt...", "name": "executor-1"}
+}
+
+// Task with no workplan, no milestone, unclaimed
+{
+  "project": {"id": "xY9...", "name": "Auth System"},
+  "workplan": null,
+  "milestone": null,
+  "claimed_by": null
+}
+```
+
+**Rules:**
+- `null` means "not set" — the field is present but has no value
+- Fields are **never omitted** — every response includes every field, even if null
+- Empty objects `{}` are never used — that would be ambiguous (is it a ref with no data, or no ref?)
+
+**SDK handling:**
+
+```python
+# Python
+task.workplan          # WorkplanRef or None
+task.workplan.name     # raises AttributeError if None — consumer must check
+task.milestone?.name   # N/A in Python, use: task.milestone.name if task.milestone else None
+```
+
+```typescript
+// TypeScript — optional chaining
+task.workplan?.name    // string | undefined
+task.milestone?.name   // string | undefined
+```
+
+**Design principle:** **Explicit over implicit.** `null` is a clear signal. Missing fields are ambiguous — was it omitted intentionally or is the API broken? Always-present fields with `null` values make the contract unambiguous.
+
+---
+
+### Gap 14: Resolving String ID Fields (`claimed_by`, `assigned_to`, `reviewer_id`)
+
+**The tension:** These fields are `CharField` on the Django model — not ForeignKeys. You cannot `select_related()` on them. Resolving `claimed_by` to an `AgentRef` requires a separate query to the Agent table. This has a query cost that FK resolution (via `select_related`) does not.
+
+**Current state:** `claimed_by`, `assigned_to`, `created_by`, `reviewer_id`, `actor_id`, `triggered_by` are all plain string fields storing agent or user IDs. There is no FK constraint to Agent or User.
+
+**Why they're not FKs:** These fields can reference either an Agent (nanoid ID) or a Django User (integer ID). A single FK can't point at two different tables. Additionally, the value may reference an entity that no longer exists (deleted agent, deactivated user).
+
+**Resolution approach for v2 serializers:**
+
+```python
+class TaskSerializerV2(serializers.ModelSerializer):
+    claimed_by = serializers.SerializerMethodField()
+
+    def get_claimed_by(self, obj):
+        if not obj.claimed_by:
+            return None
+        # Try Agent first (most common for claimed_by)
+        from agents.models import Agent
+        try:
+            agent = Agent.objects.values('id', 'name').get(id=obj.claimed_by)
+            return {"id": agent["id"], "name": agent["name"]}
+        except Agent.DoesNotExist:
+            pass
+        # Fall back to User
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            user = User.objects.values('pk', 'username').get(pk=obj.claimed_by)
+            return {"id": str(user["pk"]), "name": user["username"]}
+        except (User.DoesNotExist, ValueError):
+            # ID exists but entity is gone — return degraded ref
+            return {"id": obj.claimed_by, "name": obj.claimed_by}
+    ```
+
+**Performance concern:** This is a per-row query — the same N+1 problem as the current `claimed_by_pod_name`. For list endpoints returning 20+ tasks, this means 20+ extra queries.
+
+**Mitigation: Batch resolution in list serializers.**
+
+```python
+class TaskListSerializerV2(serializers.ListSerializer):
+    def to_representation(self, data):
+        # Collect all claimed_by IDs across all tasks in the page
+        agent_ids = {t.claimed_by for t in data if t.claimed_by}
+
+        # Single batch query
+        from agents.models import Agent
+        agents = {a.id: a.name for a in Agent.objects.filter(id__in=agent_ids).only('id', 'name')}
+
+        # Pass lookup dict to child serializer via context
+        self.context['_agent_cache'] = agents
+        return super().to_representation(data)
+```
+
+The child serializer uses the cached lookup instead of per-row queries. This turns N queries into 1. Same pattern can batch-resolve `reviewer_id`, `actor_id`, `triggered_by`.
+
+**Design principle:** **Batch loading** — the same principle behind Facebook's DataLoader and Django's `prefetch_related()`. Collect IDs, batch-query, distribute results.
+
+**Degraded references:** If the referenced agent/user no longer exists, the v2 response returns a degraded ref: `{"id": "the-original-id", "name": "the-original-id"}`. The SDK creates an `EntityRef` where `name == id` — the consumer sees the ID as a fallback, not an error. This is better than returning `null` (which would hide that a reference exists) or raising an error (which would break the response for one stale reference).
+
+---
+
+### Gap 15: v2 URL Routing in Django
+
+**The tension:** `/v1/` and `/v2/` must coexist in the same Django application. How do we route them without duplicating viewsets?
+
+**Options:**
+
+| Approach | How it works | Trade-off |
+|----------|-------------|-----------|
+| **Separate URL modules** | `v1/urls.py`, `v2/urls.py`, each with own router | Clean separation but duplicates URL patterns |
+| **Separate viewsets per version** | `TaskViewSetV1`, `TaskViewSetV2` | Maximum control but significant code duplication |
+| **Same viewsets, version-aware serializer** | One `TaskViewSet` selects serializer based on URL prefix | DRY but mixes concerns in the viewset |
+| **Middleware-based version detection** | Middleware sets `request.api_version`, viewset reads it | Clean viewset code but implicit version passing |
+
+**Recommended approach: Same viewsets, versioned serializer selection via mixin**
+
+```python
+# src/core/versioning.py
+class VersionedSerializerMixin:
+    """Viewset mixin that selects serializer class based on API version."""
+    serializer_class_v1 = None  # set in viewset
+    serializer_class_v2 = None  # set in viewset
+
+    def get_serializer_class(self):
+        if self.request.version == 'v2':
+            return self.serializer_class_v2
+        return self.serializer_class_v1
+
+# src/tasks/views.py
+class TaskViewSet(VersionedSerializerMixin, ModelViewSet):
+    serializer_class_v1 = TaskSerializer       # existing
+    serializer_class_v2 = TaskSerializerV2     # new
+    queryset = Task.objects.all()
+
+# src/vtaskforge/urls.py
+from rest_framework.versioning import URLPathVersioning
+
+urlpatterns = [
+    path('v1/', include('tasks.urls')),
+    path('v2/', include('tasks.urls')),  # same URL module, different serializers
+]
+```
+
+DRF's built-in `URLPathVersioning` sets `request.version` based on the URL prefix. The viewset logic, queryset, permissions, and validation stay the same — only the serializer changes. This is the minimum-duplication approach.
+
+**v2 viewsets add `select_related()` to querysets** for efficient summary resolution:
+
+```python
+class TaskViewSet(VersionedSerializerMixin, ModelViewSet):
+    def get_queryset(self):
+        qs = Task.objects.all()
+        if self.request.version == 'v2':
+            qs = qs.select_related('project', 'workplan', 'milestone')
+        return qs
+```
+
+---
+
+### Gap 16: SDK Versioning and Backward Compatibility
+
+**The tension:** When the v2 API adds a new field (e.g., `Task.priority`), the SDK must add it too. Does this break existing consumers that don't expect the new field?
+
+**Decision: SDK follows semantic versioning. New fields are minor versions, not breaking.**
+
+- **Adding a field to an entity** = minor version bump (0.2.0 → 0.3.0). Existing consumers ignore the new field — frozen dataclasses allow extra fields in the response dict.
+- **Removing or renaming a field** = major version bump (0.3.0 → 1.0.0). This is a breaking change.
+- **Adding a new manager method** = minor version bump. Existing consumers don't call it.
+- **Changing a method signature** = major version bump.
+
+**The SDK's entity builder is lenient on input, strict on output:**
+
+```python
+@classmethod
+def from_dict(cls, data: dict) -> 'Task':
+    # Ignores unknown fields in the dict (forward-compatible)
+    # Raises if required fields are missing (contract enforcement)
+    return cls(
+        id=data["id"],
+        title=data["title"],
+        project=ProjectRef.from_dict(data["project"]),
+        # ... only extracts known fields
+    )
+```
+
+This means: when the API returns a new field, the SDK ignores it until the SDK is updated. No crash, no break. When the SDK adds the field in the next release, consumers who upgrade get it; consumers who don't upgrade continue working.
+
+---
+
+### Gap 17: `?expand=` Interaction with SDK Lazy Loading
+
+**The tension:** The v2 API supports `?expand=reviews,events,links` for optional child collections. The SDK has lazy loading via managers. How do these interact?
+
+**Decision: `expand` pre-populates the manager, bypassing the lazy fetch.**
+
+```python
+# Without expand — lazy loading
+task = vtf.tasks.get(task_id)
+task.reviews  # triggers GET /v2/tasks/{id}/reviews/ on first access
+
+# With expand — pre-populated from the initial response
+task = vtf.tasks.get(task_id, expand=["reviews", "events"])
+task.reviews  # already loaded — no extra call
+task.events   # already loaded — no extra call
+task.links    # NOT expanded — triggers lazy fetch on access
+```
+
+The SDK detects whether the API response included expanded collections and pre-populates accordingly. If the collection was not expanded, the manager falls back to lazy fetching.
+
+```python
+class Task:
+    def __init__(self, ..., _reviews: list[Review] | None = None):
+        self._reviews_cache = _reviews  # pre-populated if expanded
+
+    @cached_property
+    def reviews(self) -> list[Review]:
+        if self._reviews_cache is not None:
+            return self._reviews_cache
+        return self._client.list_reviews(task_id=self.id)
+```
+
+**TypeScript equivalent:**
+
+```typescript
+// Without expand
+const task = await vtf.tasks.get(id);
+const reviews = await task.reviews.list();  // separate call
+
+// With expand
+const task = await vtf.tasks.get(id, { expand: ['reviews'] });
+// task._reviews is pre-populated
+const reviews = await task.reviews.list();  // returns cached data, no call
+```
+
+**Design principle:** **Optimization hint, not behavioral change.** `expand` is a performance optimization — it pre-loads data that would otherwise be lazy-loaded. The consumer code is the same either way (`task.reviews`). The only difference is when the HTTP call happens.
+
+---
+
+### Gap 18: Staleness of Embedded Names
+
+**The tension:** If a project is renamed from "Auth System" to "Identity Platform", tasks fetched before the rename still carry `project.name == "Auth System"` in their `ProjectRef`. The embedded name is a snapshot, not a live reference.
+
+**Analysis:** This is inherent to any embedded summary pattern. GitLab has the same characteristic. The question is: does it matter?
+
+**At vtf's scale: no.** Reasons:
+- Projects, workplans, and milestones are rarely renamed
+- UI pages refetch data frequently (React Query stale time, SSE invalidation)
+- The SDK returns immutable snapshots (Gap 12) — there's no illusion of live data
+- The embedded name is a display hint, not an authoritative record — if the consumer needs the current name, they fetch the full entity
+
+**Mitigation for edge cases:**
+- React Query's `staleTime` / `refetchOnWindowFocus` naturally refreshes data
+- SSE events trigger cache invalidation for affected entities
+- The SDK does NOT cache entity objects across calls — each `.get()` returns a fresh snapshot
+
+**Documentation note for SDK consumers:** The SDK's entity objects represent a point-in-time snapshot. Display names in `EntityRef` objects reflect the name at the time of the API call. If an entity is renamed, previously fetched references will show the old name until re-fetched.
+
+**Design principle:** **Eventual consistency is acceptable for display names.** The SDK is not a distributed database — it's a view layer. Stale display names are a cosmetic issue, not a correctness issue. The `id` field is always authoritative.
+
+---
+
+### Revised Gap Summary
+
+| Gap | Decision | Design Pattern | Principle |
+|-----|----------|---------------|-----------|
+| **Pagination** | `.list()` returns page, `.list_all()` returns lazy iterator | Iterator | Least Surprise |
+| **Sync/Async** | Two clients (`VtfClient`, `AsyncVtfClient`), shared entity layer | Strategy | Interface Segregation |
+| **Real-time (SSE)** | Core event emitter + `@vtf/sdk-react` adapter for cache sync | Adapter, Observer | Dependency Inversion |
+| **Link model** | Discriminated union with `InternalRef` / `ExternalRef`, shared `.display_name` | Polymorphism | Liskov Substitution |
+| **MCP tools** | ORM queries + v2 serializers (no SDK, no HTTP-to-self) | Shared Kernel (DDD) | DRY, Uniform Interface |
+| **Bulk operations** | Domain-specific bulk methods, not generic batch framework | — | YAGNI |
+| **Testing** | Protocol + MockVtfClient + entity factories (three levels) | Dependency Injection | Dependency Inversion |
+| **Write side** | Named transition methods, return updated entity, domain exceptions | Command | Replace error codes with exceptions |
+| **Authentication** | Pluggable auth strategy, token as default | Strategy | Open/Closed |
+| **Schema** | Hand-written SDK, OpenAPI spec for CI validation | — | Stripe pattern |
+| **Authorization** | Server-computed `_permissions` object, typed auth exceptions | Tell Don't Ask | Single Source of Truth |
+| **Immutability** | Frozen dataclasses, mutations return new instances | Value Object (DDD) | Referential transparency |
+| **Nullable refs** | Always present, JSON `null` for unset, never omitted | — | Explicit over implicit |
+| **String ID resolution** | Batch lookup for agent/user refs, degraded ref as fallback | Batch Loading | N+1 prevention |
+| **URL routing** | Same viewsets, `VersionedSerializerMixin`, DRF `URLPathVersioning` | Template Method | DRY |
+| **SDK versioning** | Semver, lenient input builder, no crash on unknown fields | — | Forward compatibility |
+| **`?expand=` + lazy** | Expand pre-populates cache, fallback to lazy fetch | Cache-aside | Optimization hint |
+| **Staleness** | Accepted for display names, eventual consistency via refetch/SSE | — | Eventual consistency |
