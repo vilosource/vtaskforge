@@ -685,7 +685,9 @@ task.project.name
 }
 ```
 
-**Note:** Agent already uses the TaskRef pattern for `current_task` in v1. v2 preserves this.
+**Notes:**
+- Agent already uses the TaskRef pattern for `current_task` in v1. v2 preserves this.
+- Agent has both `registered_at` (domain event: when agent registered with the system) and `created_at` (infrastructure: when row was inserted). These currently coincide but are semantically distinct — if agents were pre-provisioned by an admin, `created_at` would be the provisioning time while `registered_at` would be when the agent first authenticated. Same rationale applies to `ExternalIdentity.linked_at`, `SessionRecord.started_at` — domain timestamps are preserved alongside infrastructure timestamps.
 
 ---
 
