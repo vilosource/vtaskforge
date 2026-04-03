@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin, TimestampMixin
@@ -10,6 +11,13 @@ class Agent(NanoIDMixin, TimestampMixin):
         ("busy", "Busy"),
     ]
 
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="agent",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=255)
     tags = models.JSONField(default=list, blank=True)
     status = models.CharField(

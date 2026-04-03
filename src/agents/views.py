@@ -44,6 +44,11 @@ class AgentViewSet(ModelViewSet):
                 user = User.objects.get(username=existing.id)
                 token = Token.objects.get(user=user)
 
+                # Ensure Agent.user FK is set (backfill for pre-FK agents)
+                if not existing.user_id:
+                    existing.user = user
+                    existing.save(update_fields=["user"])
+
                 data = serializer.data
                 data["token"] = token.key
                 return Response(data, status=status.HTTP_200_OK)
@@ -56,6 +61,10 @@ class AgentViewSet(ModelViewSet):
 
         user = User.objects.create_user(username=agent.id)
         token = Token.objects.create(user=user)
+
+        # Link Agent → User via FK
+        agent.user = user
+        agent.save(update_fields=["user"])
 
         data = serializer.data
         data["token"] = token.key

@@ -2,6 +2,7 @@
 Factory Boy factories for all vtaskforge models.
 """
 import factory
+from django.contrib.auth.models import User
 
 from agents.models import Agent
 from core.mixins import generate_nanoid
@@ -65,10 +66,20 @@ class BacklogTaskFactory(factory.django.DjangoModelFactory):
 class AgentFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Agent
+        skip_postgeneration_save = True
 
     name = factory.Sequence(lambda n: f"Agent {n}")
     tags = factory.List([])
     status = "online"
+
+    @factory.post_generation
+    def link_user(self, create, extracted, **kwargs):
+        """Create a User and link it to the Agent via FK."""
+        if not create:
+            return
+        user = User.objects.create_user(username=self.id)
+        self.user = user
+        self.save(update_fields=["user"])
 
 
 class LinkFactory(factory.django.DjangoModelFactory):
