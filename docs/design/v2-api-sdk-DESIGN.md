@@ -143,8 +143,8 @@ class TaskRef(VtfModel):
 Every field that references an identity (user or agent) uses ActorRef. The v2 response includes a `type` discriminator:
 
 ```json
-// Agent identity
-{"type": "agent", "id": "agt-001", "name": "executor-1"}
+// Agent identity (pod_name included when available — needed for console terminal)
+{"type": "agent", "id": "agt-001", "name": "executor-1", "pod_name": "vafi-executor-7f8b9c"}
 
 // User identity
 {"type": "user", "id": "42", "username": "jdoe"}
@@ -158,6 +158,7 @@ class AgentActor(VtfModel):
     type: Literal["agent"]
     id: str
     name: str
+    pod_name: str | None = None  # k8s pod name, needed for console terminal connection
 
     def __str__(self) -> str:
         return self.name
@@ -175,7 +176,7 @@ ActorRef = Annotated[AgentActor | UserActor, Discriminator("type")]
 
 ```typescript
 const ActorRefSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('agent'), id: z.string(), name: z.string() }),
+  z.object({ type: z.literal('agent'), id: z.string(), name: z.string(), pod_name: z.string().nullable().default(null) }),
   z.object({ type: z.literal('user'), id: z.string(), username: z.string() }),
 ]);
 type ActorRef = z.infer<typeof ActorRefSchema>;
@@ -537,8 +538,8 @@ task.project.name
     {"id": "tsk-def-456", "title": "Create user model", "status": "done"},
     {"id": "tsk-ghi-789", "title": "Add login endpoint", "status": "doing"}
   ],
-  "assigned_to": {"type": "agent", "id": "agt-001", "name": "executor-1"},
-  "claimed_by": {"type": "agent", "id": "agt-001", "name": "executor-1"},
+  "assigned_to": {"type": "agent", "id": "agt-001", "name": "executor-1", "pod_name": null},
+  "claimed_by": {"type": "agent", "id": "agt-001", "name": "executor-1", "pod_name": "vafi-executor-7f8b9c"},
   "claimed_at": "2026-04-03T10:00:00Z",
   "claim_timeout": "PT30M",
   "claim_expires_at": "2026-04-03T10:30:00Z",
@@ -827,7 +828,8 @@ task.project.name
       "role": "architect",
       "user": {"type": "user", "id": "42", "username": "jdoe"},
       "session_id": "sess-abc",
-      "created_at": "2026-04-03T10:00:00Z"
+      "created_at": "2026-04-03T10:00:00Z",
+      "last_activity": "2026-04-03T10:15:00Z"
     }
   ],
   "next": null,
@@ -1069,8 +1071,8 @@ class Workplan(VtfModel):
     owner: ActorRef
     tags: list[str]
     target_date: datetime | None
-    default_needs_review_before_start: bool | None
-    default_needs_review_on_completion: bool | None
+    default_needs_review_before_start: bool   # NOT nullable (default=False in model)
+    default_needs_review_on_completion: bool   # NOT nullable (default=False in model)
     created_by: ActorRef
     permissions: 'WorkplanPermissions'
     created_at: datetime
@@ -1315,6 +1317,7 @@ const AgentActorSchema = z.object({
   type: z.literal('agent'),
   id: z.string(),
   name: z.string(),
+  pod_name: z.string().nullable().default(null),
 });
 
 const UserActorSchema = z.object({
