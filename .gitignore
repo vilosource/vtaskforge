@@ -9,3 +9,7 @@ db.sqlite3
 htmlcov/
 *.log
 .DS_Store
+
+# Post-deploy verification artifacts
+web/e2e/verify/auth-state.json
+web/e2e/verify/seed-data.json
