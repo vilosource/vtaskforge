@@ -143,37 +143,37 @@ class TestClaimAutoLogging:
 
 @pytest.mark.django_db
 class TestUnclaimAutoLogging:
-    def test_unclaim_creates_unclaimed_event(self, api_client, task):
+    def _set_doing_with_claim(self, task, agent_name="agent-1"):
+        """Helper: set task to doing with a claimed_by User."""
+        agent = AgentFactory(name=agent_name)
         task.status = "doing"
-        task.claimed_by = "agent-1"
+        task.claimed_by = agent.user
         task.save(update_fields=["status", "claimed_by", "updated_at"])
+        return agent
+
+    def test_unclaim_creates_unclaimed_event(self, api_client, task):
+        self._set_doing_with_claim(task)
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert response.status_code == 200
         unclaimed_events = TaskEvent.objects.filter(task=task, event_type="unclaimed")
         assert unclaimed_events.count() == 1
 
     def test_unclaim_event_has_agent_id_in_data(self, api_client, task):
-        task.status = "doing"
-        task.claimed_by = "agent-99"
-        task.save(update_fields=["status", "claimed_by", "updated_at"])
+        agent = self._set_doing_with_claim(task, "agent-99")
         api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         event = TaskEvent.objects.get(task=task, event_type="unclaimed")
-        assert event.data["agent_id"] == "agent-99"
+        assert event.data["agent_id"] == agent.user.username
 
     def test_unclaim_also_creates_status_changed_event(self, api_client, task):
         """Unclaim produces both status_changed (from state machine) and unclaimed events."""
-        task.status = "doing"
-        task.claimed_by = "agent-1"
-        task.save(update_fields=["status", "claimed_by", "updated_at"])
+        self._set_doing_with_claim(task)
         api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert TaskEvent.objects.filter(task=task, event_type="status_changed").count() == 1
         assert TaskEvent.objects.filter(task=task, event_type="unclaimed").count() == 1
 
     def test_unclaim_status_changed_event_has_correct_from_to(self, api_client, task):
         """The status_changed event from unclaim should reflect doing -> todo."""
-        task.status = "doing"
-        task.claimed_by = "agent-1"
-        task.save(update_fields=["status", "claimed_by", "updated_at"])
+        self._set_doing_with_claim(task)
         api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         event = TaskEvent.objects.get(task=task, event_type="status_changed")
         assert event.data["from"] == "doing"

@@ -82,7 +82,7 @@ class AgentViewSet(ModelViewSet):
     @action(detail=True, methods=["get"])
     def tasks(self, request, pk=None):
         agent = self.get_object()
-        qs = Task.objects.filter(claimed_by=agent.id).order_by("-updated_at")
+        qs = Task.objects.filter(claimed_by=agent.user).order_by("-updated_at")
 
         task_status = request.query_params.get("status")
         if task_status:

@@ -9,6 +9,7 @@ import pytest
 
 from mcp_server.tools.manage import vtf_manage_task
 from tasks.models import Task
+from django.contrib.auth.models import User
 from tests.factories import ProjectFactory, TaskFactory
 
 
@@ -202,6 +203,7 @@ def test_manage_delete_task():
 @pytest.mark.django_db
 def test_manage_assign_task():
     """vtf_manage_task(action=assign) sets assigned_to on the task."""
+    agent_user = User.objects.create_user(username="agent-xyz")
     task = TaskFactory(status="todo")
 
     result = json.loads(vtf_manage_task(
@@ -212,7 +214,7 @@ def test_manage_assign_task():
 
     assert result["success"] is True
     task.refresh_from_db()
-    assert task.assigned_to == "agent-xyz"
+    assert task.assigned_to == agent_user
 
 
 # ---------------------------------------------------------------------------

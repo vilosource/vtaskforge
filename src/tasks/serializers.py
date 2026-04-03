@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from .models import Note, Task
@@ -11,6 +12,17 @@ class NoteSerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    # v1 backward compat: FK fields serialize as username strings
+    assigned_to = serializers.SlugRelatedField(
+        slug_field="username", queryset=User.objects.all(),
+        required=False, allow_null=True,
+    )
+    claimed_by = serializers.SlugRelatedField(
+        slug_field="username", read_only=True, allow_null=True,
+    )
+    created_by = serializers.SlugRelatedField(
+        slug_field="username", read_only=True, allow_null=True,
+    )
     claimed_by_pod_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -46,16 +58,17 @@ class TaskSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "status", "retry_count"]
+        read_only_fields = ["id", "created_at", "updated_at", "status", "retry_count",
+                            "created_by"]
 
     def get_claimed_by_pod_name(self, obj):
         if not obj.claimed_by:
             return None
         from agents.models import Agent
         try:
-            agent = Agent.objects.get(id=obj.claimed_by)
-            return agent.pod_name
-        except Agent.DoesNotExist:
+            agent = Agent.objects.filter(user=obj.claimed_by).first()
+            return agent.pod_name if agent else None
+        except Exception:
             return None
 
     def validate_acceptance_criteria(self, value):

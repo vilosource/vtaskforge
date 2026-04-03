@@ -207,7 +207,7 @@ class TestAgentComputedFields:
     """Tests for computed fields: current_task, tasks_completed, tasks_failed, effective_status."""
 
     def test_current_task_populated_when_agent_has_doing_task(self, api_client, agent):
-        task = TaskFactory(status="doing", claimed_by=agent.id)
+        task = TaskFactory(status="doing", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/")
         assert response.data["current_task"] is not None
         assert response.data["current_task"]["id"] == task.id
@@ -219,14 +219,14 @@ class TestAgentComputedFields:
         assert response.data["current_task"] is None
 
     def test_current_task_null_when_task_is_done(self, api_client, agent):
-        TaskFactory(status="done", claimed_by=agent.id)
+        TaskFactory(status="done", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/")
         assert response.data["current_task"] is None
 
     def test_tasks_completed_count(self, api_client, agent):
         for _ in range(3):
-            TaskFactory(status="done", claimed_by=agent.id)
-        TaskFactory(status="doing", claimed_by=agent.id)
+            TaskFactory(status="done", claimed_by=agent.user)
+        TaskFactory(status="doing", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/")
         assert response.data["tasks_completed"] == 3
 
@@ -236,8 +236,8 @@ class TestAgentComputedFields:
 
     def test_tasks_failed_count(self, api_client, agent):
         for _ in range(2):
-            TaskFactory(status="needs_attention", claimed_by=agent.id)
-        TaskFactory(status="done", claimed_by=agent.id)
+            TaskFactory(status="needs_attention", claimed_by=agent.user)
+        TaskFactory(status="done", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/")
         assert response.data["tasks_failed"] == 2
 
@@ -280,7 +280,7 @@ class TestAgentComputedFields:
         assert response.data["effective_status"] == "busy"
 
     def test_computed_fields_in_list(self, api_client, agent):
-        TaskFactory(status="doing", claimed_by=agent.id)
+        TaskFactory(status="doing", claimed_by=agent.user)
         response = api_client.get("/v1/agents/")
         result = response.data["results"][0]
         assert "current_task" in result
@@ -290,8 +290,8 @@ class TestAgentComputedFields:
 
     def test_counts_exclude_other_agents_tasks(self, api_client, agent):
         other = AgentFactory(name="Other Agent")
-        TaskFactory(status="done", claimed_by=other.id)
-        TaskFactory(status="done", claimed_by=agent.id)
+        TaskFactory(status="done", claimed_by=other.user)
+        TaskFactory(status="done", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/")
         assert response.data["tasks_completed"] == 1
 
@@ -303,8 +303,8 @@ class TestAgentTasks:
         assert response.status_code == status.HTTP_200_OK
 
     def test_tasks_returns_claimed_tasks(self, api_client, agent):
-        t1 = TaskFactory(status="doing", claimed_by=agent.id)
-        t2 = TaskFactory(status="done", claimed_by=agent.id)
+        t1 = TaskFactory(status="doing", claimed_by=agent.user)
+        t2 = TaskFactory(status="done", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
         ids = [t["id"] for t in response.data["results"]]
         assert t1.id in ids
@@ -312,20 +312,20 @@ class TestAgentTasks:
 
     def test_tasks_excludes_other_agents_tasks(self, api_client, agent):
         other = AgentFactory(name="Other Agent")
-        TaskFactory(status="doing", claimed_by=other.id)
-        TaskFactory(status="doing", claimed_by=agent.id)
+        TaskFactory(status="doing", claimed_by=other.user)
+        TaskFactory(status="doing", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
         assert len(response.data["results"]) == 1
 
     def test_tasks_filters_by_status(self, api_client, agent):
-        TaskFactory(status="doing", claimed_by=agent.id)
-        TaskFactory(status="done", claimed_by=agent.id)
+        TaskFactory(status="doing", claimed_by=agent.user)
+        TaskFactory(status="done", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/tasks/?status=done")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["status"] == "done"
 
     def test_tasks_returns_paginated_response(self, api_client, agent):
-        TaskFactory(status="doing", claimed_by=agent.id)
+        TaskFactory(status="doing", claimed_by=agent.user)
         response = api_client.get(f"/v1/agents/{agent.id}/tasks/")
         assert "results" in response.data
         assert "next" in response.data

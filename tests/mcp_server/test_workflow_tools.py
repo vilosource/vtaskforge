@@ -11,7 +11,13 @@ import pytest
 from django.utils import timezone
 
 from mcp_server.tools._workflow_agent import vtf_claim_and_start, vtf_next_work, vtf_report_progress, vtf_submit_work
-from tests.factories import LinkFactory, MilestoneFactory, ProjectFactory, TaskFactory
+from tests.factories import AgentFactory, LinkFactory, MilestoneFactory, ProjectFactory, TaskFactory
+
+
+@pytest.fixture
+def agent1(db):
+    """An Agent for claiming tasks in workflow tests."""
+    return AgentFactory(name="workflow-agent", tags=[])
 
 
 # ---------------------------------------------------------------------------
@@ -187,18 +193,18 @@ def test_next_work_with_project_filter():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_success():
+def test_claim_and_start_success(agent1):
     """vtf_claim_and_start claims the task and returns a success response."""
     task = TaskFactory(status="todo")
 
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is True
     assert result["data"] is not None
     assert result["data"]["task"]["id"] == task.id
     # Task should now be in doing status after claiming
     assert result["data"]["task"]["status"] == "doing"
-    assert result["data"]["task"]["claimed_by"] == "agent-1"
+    assert result["data"]["task"]["claimed_by"] == agent1.user.username
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +213,12 @@ def test_claim_and_start_success():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_includes_spec():
+def test_claim_and_start_includes_spec(agent1):
     """vtf_claim_and_start includes the full spec in the response."""
     spec_text = "description: My task spec\nfiles:\n  create:\n    - src/foo.py"
     task = TaskFactory(status="todo", spec=spec_text)
 
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is True
     assert "spec" in result["data"]
@@ -225,7 +231,7 @@ def test_claim_and_start_includes_spec():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_includes_deps():
+def test_claim_and_start_includes_deps(agent1):
     """vtf_claim_and_start includes dependency status in the response."""
     done_dep = TaskFactory(status="done")
     task = TaskFactory(status="todo")
@@ -237,7 +243,7 @@ def test_claim_and_start_includes_deps():
         link_type="depends_on",
     )
 
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is True
     assert "dependencies" in result["data"]
@@ -254,12 +260,12 @@ def test_claim_and_start_includes_deps():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_includes_test_command():
+def test_claim_and_start_includes_test_command(agent1):
     """vtf_claim_and_start includes test_command from the task."""
     test_cmd = {"unit": "pytest tests/foo/ -v", "integration": "pytest tests/integration/"}
     task = TaskFactory(status="todo", test_command=test_cmd)
 
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is True
     assert "test_command" in result["data"]
@@ -272,11 +278,11 @@ def test_claim_and_start_includes_test_command():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_includes_available_actions():
+def test_claim_and_start_includes_available_actions(agent1):
     """vtf_claim_and_start response includes available_actions for next steps."""
     task = TaskFactory(status="todo")
 
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is True
     assert "available_actions" in result
@@ -293,12 +299,12 @@ def test_claim_and_start_includes_available_actions():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_tag_mismatch_error():
+def test_claim_and_start_tag_mismatch_error(agent1):
     """vtf_claim_and_start returns actionable error when agent tags don't match task requirements."""
     task = TaskFactory(status="todo", requires=["python", "docker"])
 
     # Agent only has "python" — missing "docker"
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1", tags="python"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id, tags="python"))
 
     assert result["success"] is False
     assert result["message"] != ""
@@ -317,7 +323,7 @@ def test_claim_and_start_tag_mismatch_error():
 
 
 @pytest.mark.django_db
-def test_claim_and_start_deps_unmet_error():
+def test_claim_and_start_deps_unmet_error(agent1):
     """vtf_claim_and_start returns actionable error with which dep is blocking when deps are unmet."""
     blocker = TaskFactory(status="doing")
     task = TaskFactory(status="todo")
@@ -329,7 +335,7 @@ def test_claim_and_start_deps_unmet_error():
         link_type="depends_on",
     )
 
-    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is False
     assert result["message"] != ""
@@ -356,10 +362,11 @@ def test_claim_and_start_deps_unmet_error():
 @pytest.mark.django_db
 def test_report_progress_extends_claim():
     """vtf_report_progress extends claim_expires_at on a doing task."""
+    agent = AgentFactory(name="progress-agent")
     old_expires = timezone.now() + timedelta(minutes=5)
     task = TaskFactory(
         status="doing",
-        claimed_by="agent-1",
+        claimed_by=agent.user,
         claimed_at=timezone.now() - timedelta(minutes=25),
         claim_expires_at=old_expires,
     )
@@ -385,9 +392,10 @@ def test_report_progress_adds_note():
     """vtf_report_progress creates an event via record_event() when a note is provided."""
     from events.models import TaskEvent
 
+    agent = AgentFactory(name="note-agent")
     task = TaskFactory(
         status="doing",
-        claimed_by="agent-1",
+        claimed_by=agent.user,
         claimed_at=timezone.now() - timedelta(minutes=5),
         claim_expires_at=timezone.now() + timedelta(minutes=25),
     )
@@ -412,9 +420,10 @@ def test_report_progress_without_note():
     """vtf_report_progress with no note extends claim but does NOT create an event."""
     from events.models import TaskEvent
 
+    agent = AgentFactory(name="no-note-agent")
     task = TaskFactory(
         status="doing",
-        claimed_by="agent-1",
+        claimed_by=agent.user,
         claimed_at=timezone.now() - timedelta(minutes=5),
         claim_expires_at=timezone.now() + timedelta(minutes=25),
     )

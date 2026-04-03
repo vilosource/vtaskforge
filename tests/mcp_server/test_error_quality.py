@@ -28,7 +28,13 @@ from mcp_server.tools.detail import vtf_task_detail
 from mcp_server.tools.manage import vtf_manage_task
 from mcp_server.tools._review_agent import vtf_review_task
 from mcp_server.tools._workflow_agent import vtf_claim_and_start, vtf_report_progress, vtf_submit_work
-from tests.factories import LinkFactory, MilestoneFactory, ProjectFactory, TaskFactory, WorkplanFactory
+from tests.factories import AgentFactory, LinkFactory, MilestoneFactory, ProjectFactory, TaskFactory, WorkplanFactory
+
+
+@pytest.fixture
+def agent1(db):
+    """An Agent for claiming tasks in error quality tests."""
+    return AgentFactory(name="error-test-agent", tags=[])
 
 
 # ---------------------------------------------------------------------------
@@ -45,11 +51,11 @@ def _parse(raw: str) -> dict:
 
 
 @pytest.mark.django_db
-def test_claim_tag_mismatch_error():
+def test_claim_tag_mismatch_error(agent1):
     """tag_mismatch: error is actionable and has available_actions."""
     task = TaskFactory(status="todo", requires=["python", "docker"])
 
-    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id="agent-1", tags="python"))
+    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id, tags="python"))
 
     assert result["success"] is False
     msg = result["message"].lower()
@@ -59,7 +65,7 @@ def test_claim_tag_mismatch_error():
 
 
 @pytest.mark.django_db
-def test_claim_deps_unmet_error():
+def test_claim_deps_unmet_error(agent1):
     """deps_unmet: error names the blocking dependency and has available_actions."""
     blocker = TaskFactory(status="doing")
     task = TaskFactory(status="todo")
@@ -71,7 +77,7 @@ def test_claim_deps_unmet_error():
         link_type="depends_on",
     )
 
-    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is False
     assert blocker.id in result["message"]
@@ -80,11 +86,11 @@ def test_claim_deps_unmet_error():
 
 
 @pytest.mark.django_db
-def test_claim_already_claimed_error():
+def test_claim_already_claimed_error(agent1):
     """ALREADY_CLAIMED: error explains status and has available_actions."""
     task = TaskFactory(status="doing")
 
-    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is False
     msg = result["message"].lower()
@@ -93,11 +99,12 @@ def test_claim_already_claimed_error():
 
 
 @pytest.mark.django_db
-def test_claim_forbidden_error():
+def test_claim_forbidden_error(agent1):
     """FORBIDDEN: error explains task is assigned to another agent, has available_actions."""
-    task = TaskFactory(status="todo", assigned_to="other-agent")
+    other_agent = AgentFactory(name="other-agent")
+    task = TaskFactory(status="todo", assigned_to=other_agent.user)
 
-    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id="agent-1"))
+    result = _parse(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id))
 
     assert result["success"] is False
     msg = result["message"].lower()

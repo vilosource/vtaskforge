@@ -146,8 +146,8 @@ def find_claimable_tasks(
 
     # Filter by assignment — exclude tasks assigned to other agents
     if agent_id:
-        unassigned = tasks.filter(assigned_to__isnull=True) | tasks.filter(assigned_to="")
-        assigned_to_me = tasks.filter(assigned_to=agent_id)
+        unassigned = tasks.filter(assigned_to__isnull=True)
+        assigned_to_me = tasks.filter(assigned_to__username=agent_id)
         tasks = Task.objects.filter(
             id__in=list(unassigned.values_list("id", flat=True))
             + list(assigned_to_me.values_list("id", flat=True))
@@ -199,8 +199,8 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
                 details={"current_status": task.status},
             )
 
-        # Assignment check
-        if task.assigned_to and task.assigned_to != agent_id:
+        # Assignment check — compare via User.username since assigned_to is now FK
+        if task.assigned_to and task.assigned_to.username != agent_id:
             raise ClaimError(
                 message="Task assigned to another agent",
                 code="FORBIDDEN",
@@ -235,14 +235,18 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
             )
 
         # All checks passed — perform claim
-        perform_transition(task, "doing", trigger_source="claim")
-        task.claimed_by = agent_id
+        from agents.models import Agent
+        agent = Agent.objects.select_related("user").get(id=agent_id)
+
+        perform_transition(task, "doing", trigger_source="claim", actor=agent.user)
+        task.claimed_by = agent.user
         task.claimed_at = timezone.now()
         timeout = task.claim_timeout or timedelta(minutes=DEFAULT_CLAIM_TIMEOUT_MINUTES)
         task.claim_expires_at = timezone.now() + timeout
         task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
 
-        record_event(task, "claimed", data={"agent_id": agent_id}, trigger_source="claim")
+        record_event(task, "claimed", data={"agent_id": agent_id},
+                     trigger_source="claim", actor=agent.user)
 
     return task
 
@@ -345,11 +349,11 @@ def get_task_context(task_id: str) -> dict:
             "needs_review_on_completion": task.needs_review_on_completion,
             "review_return_to": task.review_return_to,
             "requires": task.requires,
-            "assigned_to": task.assigned_to,
-            "claimed_by": task.claimed_by,
+            "assigned_to": task.assigned_to.username if task.assigned_to else None,
+            "claimed_by": task.claimed_by.username if task.claimed_by else None,
             "claimed_at": task.claimed_at.isoformat() if task.claimed_at else None,
             "claim_expires_at": task.claim_expires_at.isoformat() if task.claim_expires_at else None,
-            "created_by": task.created_by,
+            "created_by": task.created_by.username if task.created_by else None,
             "agent_model": task.agent_model,
             "test_command": task.test_command,
             "judge": task.judge,
@@ -413,8 +417,6 @@ def get_board_summary(project_id: str = None, workplan_id: str = None) -> dict:
         status="doing"
     ).exclude(
         claimed_by__isnull=True
-    ).exclude(
-        claimed_by=""
     ).values("id", "claimed_by")
     active_agents = list(active_agents_qs)
 

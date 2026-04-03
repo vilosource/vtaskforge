@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin, TimestampMixin
@@ -54,12 +55,21 @@ class Task(NanoIDMixin, TimestampMixin):
     needs_review_on_completion = models.BooleanField(null=True, blank=True, default=True)
     review_return_to = models.CharField(max_length=30, null=True, blank=True, default=None)
     requires = models.JSONField(default=list, blank=True)
-    assigned_to = models.CharField(max_length=255, null=True, blank=True, default=None)
-    claimed_by = models.CharField(max_length=255, null=True, blank=True, default=None)
+    assigned_to = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="assigned_tasks",
+    )
+    claimed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="claimed_tasks",
+    )
     claimed_at = models.DateTimeField(null=True, blank=True, default=None)
     claim_timeout = models.DurationField(null=True, blank=True, default=None)
     claim_expires_at = models.DateTimeField(null=True, blank=True, default=None)
-    created_by = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_tasks",
+    )
     spec = models.TextField(blank=True, default="")
     agent_model = models.CharField(max_length=30, blank=True, default="")
     test_command = models.JSONField(default=dict, blank=True)

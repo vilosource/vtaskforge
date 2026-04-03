@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from tests.factories import AgentFactory, TaskFactory, WorkplanFactory, MilestoneFactory
+from tests.factories import AgentFactory, MilestoneFactory, TaskFactory, WorkplanFactory
 
 
 @pytest.fixture(scope="session")
@@ -62,9 +62,10 @@ def todo_task(db):
 
 @pytest.fixture
 def doing_task(db):
+    agent = AgentFactory(name="doing-task-agent")
     return TaskFactory(
         status="doing",
-        claimed_by="agent-1",
+        claimed_by=agent.user,
         claimed_at=timezone.now(),
         claim_expires_at=timezone.now() + timedelta(minutes=30),
     )

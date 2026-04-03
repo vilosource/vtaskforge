@@ -99,7 +99,7 @@ class TestClaimSuccess:
         )
         task.refresh_from_db()
         assert task.status == "doing"
-        assert task.claimed_by == agent1.id
+        assert task.claimed_by == agent1.user
         assert task.claimed_at is not None
         assert task.claim_expires_at is not None
 
@@ -135,7 +135,8 @@ class TestClaimRework:
     def test_claim_changes_requested_different_agent(self, api_client, milestone, workplan, agent1):
         """Any agent can claim a changes_requested task, not just the original executor."""
         agent2 = AgentFactory(name="Agent Two", tags=["executor"])
-        task = make_task(milestone, workplan, "changes_requested", claimed_by="original-agent")
+        original_agent = AgentFactory(name="original-agent")
+        task = make_task(milestone, workplan, "changes_requested", claimed_by=original_agent.user)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent2.id}, format="json"
         )
@@ -247,7 +248,7 @@ class TestClaimForbidden:
     def test_claim_assigned_to_other_returns_403(
         self, api_client, milestone, workplan, agent1, agent_other
     ):
-        task = make_task(milestone, workplan, assigned_to=agent_other.id)
+        task = make_task(milestone, workplan, assigned_to=agent_other.user)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
@@ -256,14 +257,14 @@ class TestClaimForbidden:
     def test_claim_assigned_to_other_error_code(
         self, api_client, milestone, workplan, agent1, agent_other
     ):
-        task = make_task(milestone, workplan, assigned_to=agent_other.id)
+        task = make_task(milestone, workplan, assigned_to=agent_other.user)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
         assert response.data["error"]["code"] == "FORBIDDEN"
 
     def test_claim_assigned_to_self_succeeds(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, assigned_to=agent1.id)
+        task = make_task(milestone, workplan, assigned_to=agent1.user)
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"
         )
@@ -627,7 +628,7 @@ class TestClaimableEndpoint:
     def test_claimable_agent_id_excludes_other_assigned(
         self, api_client, milestone, workplan, agent1, agent_other
     ):
-        make_task(milestone, workplan, assigned_to=agent_other.id, title="Other's task")
+        make_task(milestone, workplan, assigned_to=agent_other.user, title="Other's task")
         make_task(milestone, workplan, assigned_to=None, title="Unassigned")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent1.id}")
         assert len(response.data["results"]) == 1
@@ -636,13 +637,13 @@ class TestClaimableEndpoint:
     def test_claimable_agent_id_includes_own_assigned(
         self, api_client, milestone, workplan, agent1
     ):
-        make_task(milestone, workplan, assigned_to=agent1.id, title="My task")
+        make_task(milestone, workplan, assigned_to=agent1.user, title="My task")
         make_task(milestone, workplan, assigned_to=None, title="Unassigned")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent1.id}")
         assert len(response.data["results"]) == 2
 
     def test_claimable_no_agent_id_shows_all_todo(self, api_client, milestone, workplan, agent_other):
-        make_task(milestone, workplan, assigned_to=agent_other.id)
+        make_task(milestone, workplan, assigned_to=agent_other.user)
         make_task(milestone, workplan, assigned_to=None)
         response = api_client.get("/v1/tasks/claimable/")
         assert len(response.data["results"]) == 2

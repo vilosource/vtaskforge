@@ -33,16 +33,16 @@ class AgentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "registered_at", "created_at", "updated_at"]
 
     def get_current_task(self, obj):
-        task = Task.objects.filter(claimed_by=obj.id, status="doing").first()
+        task = Task.objects.filter(claimed_by=obj.user, status="doing").first()
         if task is None:
             return None
         return {"id": task.id, "title": task.title, "status": task.status}
 
     def get_tasks_completed(self, obj):
-        return Task.objects.filter(claimed_by=obj.id, status="done").count()
+        return Task.objects.filter(claimed_by=obj.user, status="done").count()
 
     def get_tasks_failed(self, obj):
-        return Task.objects.filter(claimed_by=obj.id, status="needs_attention").count()
+        return Task.objects.filter(claimed_by=obj.user, status="needs_attention").count()
 
     def get_effective_status(self, obj):
         if obj.status != "online":

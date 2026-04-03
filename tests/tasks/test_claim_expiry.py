@@ -10,17 +10,18 @@ from django.utils import timezone
 from events.models import TaskEvent
 from tasks.celery_tasks import expire_stale_claims
 from tasks.models import Task
-from tests.factories import TaskFactory
+from tests.factories import AgentFactory, TaskFactory
 
 
 @pytest.mark.django_db
 class TestExpireStaleClaims:
-    def _make_claimed_task(self, claimed_by="agent-1", offset_seconds=-10):
+    def _make_claimed_task(self, agent_name="agent-1", offset_seconds=-10):
         """Helper: create a 'doing' task with claim_expires_at relative to now."""
+        agent = AgentFactory(name=agent_name)
         now = timezone.now()
         task = TaskFactory(
             status="doing",
-            claimed_by=claimed_by,
+            claimed_by=agent.user,
             claimed_at=now - timedelta(hours=1),
             claim_expires_at=now + timedelta(seconds=offset_seconds),
         )
@@ -42,17 +43,19 @@ class TestExpireStaleClaims:
 
     def test_doing_task_without_claim_expires_at_not_affected(self):
         """A doing task with no claim_expires_at should not be touched."""
-        task = TaskFactory(status="doing", claimed_by="agent-1", claim_expires_at=None)
+        agent = AgentFactory(name="agent-1-no-expiry")
+        task = TaskFactory(status="doing", claimed_by=agent.user, claim_expires_at=None)
         expire_stale_claims()
         task.refresh_from_db()
         assert task.status == "doing"
 
     def test_non_doing_task_not_affected(self):
         """Tasks not in 'doing' status should not be expired even if claim_expires_at is past."""
+        agent = AgentFactory(name="agent-1-non-doing")
         now = timezone.now()
         task = TaskFactory(
             status="todo",
-            claimed_by="agent-1",
+            claimed_by=agent.user,
             claim_expires_at=now - timedelta(seconds=10),
         )
         expire_stale_claims()
@@ -70,12 +73,13 @@ class TestExpireStaleClaims:
 
     def test_task_event_created_with_claim_expired_type(self):
         """A TaskEvent with event_type='claim_expired' should be created."""
-        task = self._make_claimed_task(claimed_by="agent-42")
+        task = self._make_claimed_task(agent_name="agent-42")
+        claimed_username = task.claimed_by.username
         expire_stale_claims()
         events = TaskEvent.objects.filter(task=task, event_type="claim_expired")
         assert events.count() == 1
         event = events.first()
-        assert event.data["previous_agent"] == "agent-42"
+        assert event.data["previous_agent"] == claimed_username
         assert event.trigger_source == "system"
 
     def test_returns_count(self):
@@ -103,7 +107,7 @@ class TestExpireStaleClaims:
 
     def test_expire_creates_event_via_service(self):
         """expire_stale_claims must use EventService (record_event) to create the claim_expired event."""
-        task = self._make_claimed_task(claimed_by="agent-99")
+        task = self._make_claimed_task(agent_name="agent-99")
         with patch("tasks.celery_tasks.record_event") as mock_record_event:
             expire_stale_claims()
         # record_event must be called with the claim_expired event type
@@ -130,12 +134,13 @@ class TestExpireStaleClaims:
 
     def test_expired_with_frozen_time(self):
         """Verify expiry logic using mocked timezone.now."""
+        agent = AgentFactory(name="agent-frozen")
         now = timezone.now()
         future = now + timedelta(hours=1)
         # Create a task that will expire at 'future'
         task = TaskFactory(
             status="doing",
-            claimed_by="agent-frozen",
+            claimed_by=agent.user,
             claimed_at=now,
             claim_expires_at=future,
         )

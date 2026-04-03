@@ -82,7 +82,10 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         return context
 
     def get_queryset(self):
-        qs = Task.objects.select_related("project", "milestone", "workplan").all()
+        qs = Task.objects.select_related(
+            "project", "milestone", "workplan",
+            "assigned_to", "claimed_by", "created_by",
+        ).all()
         params = self.request.query_params
 
         task_status = params.get("status")
@@ -107,7 +110,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
 
         assigned_to = params.get("assigned_to")
         if assigned_to:
-            qs = qs.filter(assigned_to=assigned_to)
+            qs = qs.filter(assigned_to__username=assigned_to)
 
         labels = params.get("labels")
         if labels:
@@ -130,6 +133,9 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
         return super().update(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
     # -------------------------------------------------------------------------
     # Lifecycle actions
@@ -231,7 +237,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         Only valid when the task is in 'doing' status.
         """
         task = self.get_object()
-        previous_agent = task.claimed_by
+        previous_user = task.claimed_by  # User FK or None
         if task.status != "doing":
             exc = InvalidTransition(task.status, "todo", get_valid_transitions(task.status))
             return invalid_transition_response(exc)
@@ -248,7 +254,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         record_event(
             task,
             "unclaimed",
-            data={"agent_id": previous_agent} if previous_agent else {},
+            data={"agent_id": previous_user.username} if previous_user else {},
             trigger_source="unclaim",
         )
 
@@ -408,7 +414,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def assign(self, request, pk=None):
-        """Set assigned_to field."""
+        """Set assigned_to field. Accepts username string, resolves to User FK."""
         task = self.get_object()
         assigned_to = request.data.get("assigned_to")
         if not assigned_to:
@@ -416,7 +422,15 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
                 {"detail": "assigned_to is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        task.assigned_to = assigned_to
+        from django.contrib.auth.models import User
+        try:
+            user = User.objects.get(username=assigned_to)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": f"User '{assigned_to}' not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        task.assigned_to = user
         task.save(update_fields=["assigned_to", "updated_at"])
         serializer = self.get_serializer(task)
         return Response(serializer.data)
@@ -534,7 +548,7 @@ class MilestoneTasksView(APIView):
             tasks = tasks.filter(status=task_status)
         assigned_to = request.query_params.get("assigned_to")
         if assigned_to:
-            tasks = tasks.filter(assigned_to=assigned_to)
+            tasks = tasks.filter(assigned_to__username=assigned_to)
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(tasks, request)
         if page is not None:
@@ -581,7 +595,7 @@ class ProjectTasksView(APIView):
             tasks = tasks.filter(status=task_status)
         assigned_to = request.query_params.get("assigned_to")
         if assigned_to:
-            tasks = tasks.filter(assigned_to=assigned_to)
+            tasks = tasks.filter(assigned_to__username=assigned_to)
         labels = request.query_params.get("labels")
         if labels:
             label_list = [l.strip() for l in labels.split(",") if l.strip()]

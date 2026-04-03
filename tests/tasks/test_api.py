@@ -8,7 +8,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from tasks.models import Task
-from tests.factories import LinkFactory, MilestoneFactory, ReviewFactory, TaskEventFactory, TaskFactory, WorkplanFactory
+from tests.factories import AgentFactory, LinkFactory, MilestoneFactory, ReviewFactory, TaskEventFactory, TaskFactory, WorkplanFactory
 from workplans.models import Milestone
 
 
@@ -33,12 +33,13 @@ def task(db, milestone, workplan):
 
 @pytest.fixture
 def doing_task(db, milestone, workplan):
+    agent = AgentFactory(name="agent-1")
     return TaskFactory(
         title="Doing Task",
         milestone=milestone,
         workplan=workplan,
         status="doing",
-        claimed_by="agent-1",
+        claimed_by=agent.user,
     )
 
 
@@ -78,7 +79,8 @@ class TestTaskList:
         assert len(response.data["results"]) == 1
 
     def test_filter_by_assigned_to(self, api_client, milestone, workplan):
-        TaskFactory(title="Assigned", milestone=milestone, workplan=workplan, assigned_to="bob")
+        bob_user = User.objects.create_user(username="bob")
+        TaskFactory(title="Assigned", milestone=milestone, workplan=workplan, assigned_to=bob_user)
         TaskFactory(title="Unassigned", milestone=milestone, workplan=workplan)
         response = api_client.get("/v1/tasks/?assigned_to=bob")
         assert response.status_code == status.HTTP_200_OK
@@ -151,7 +153,6 @@ class TestTaskCreate:
             "acceptance_criteria": ["AC1", "AC2"],
             "needs_review_before_start": True,
             "needs_review_on_completion": False,
-            "created_by": "alice",
         }
         response = api_client.post("/v1/tasks/", payload, format="json")
         assert response.status_code == status.HTTP_201_CREATED
@@ -161,7 +162,8 @@ class TestTaskCreate:
         assert response.data["acceptance_criteria"] == ["AC1", "AC2"]
         assert response.data["needs_review_before_start"] is True
         assert response.data["needs_review_on_completion"] is False
-        assert response.data["created_by"] == "alice"
+        # created_by is set by perform_create to request.user, not from payload
+        assert response.data["created_by"] == "testuser"
 
     def test_create_persists_to_db(self, api_client, milestone, workplan):
         payload = {"title": "Persist Task", "project": workplan.project.id, "milestone": milestone.id, "workplan": workplan.id}
@@ -571,8 +573,9 @@ class TestTaskReset:
     def test_reset_preserves_claim_fields_when_target_is_doing(self, api_client, task):
         """When resetting TO doing, claim fields should NOT be cleared."""
         # First set up a task with claim fields by resetting to doing
+        agent = AgentFactory(name="agent-x")
         task.status = "todo"
-        task.claimed_by = "agent-x"
+        task.claimed_by = agent.user
         task.save()
         response = api_client.post(
             f"/v1/tasks/{task.id}/reset/",
@@ -581,7 +584,7 @@ class TestTaskReset:
         )
         assert response.status_code == status.HTTP_200_OK
         task.refresh_from_db()
-        assert task.claimed_by == "agent-x"
+        assert task.claimed_by == agent.user
 
     def test_reset_invalid_status_returns_400(self, api_client, task):
         response = api_client.post(

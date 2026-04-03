@@ -134,9 +134,10 @@ class TestCeleryNewSignature:
         settings.CELERY_TASK_ALWAYS_EAGER = True
         settings.CELERY_TASK_EAGER_PROPAGATES = True
 
+        agent = AgentFactory(name="celery-test-agent")
         task = TaskFactory(
             status="doing",
-            claimed_by="agent-1",
+            claimed_by=agent.user,
             claimed_at=timezone.now() - timedelta(hours=2),
             claim_expires_at=timezone.now() - timedelta(hours=1),
         )

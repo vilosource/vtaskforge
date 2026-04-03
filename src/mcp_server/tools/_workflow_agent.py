@@ -244,7 +244,7 @@ def vtf_report_progress(task_id: str, note: str = "", agent_id: str = "") -> str
     # Optionally record a progress note as an event
     note_added = False
     if note:
-        actor_id = agent_id or task.claimed_by or ""
+        actor_id = agent_id or (task.claimed_by.username if task.claimed_by else "")
         record_event(
             task,
             "progress_note",
@@ -307,7 +307,7 @@ def vtf_submit_work(task_id: str, completion_note: str = "", agent_id: str = "")
 
     # Optionally record a completion note before transitioning
     if completion_note:
-        actor_id = agent_id or task.claimed_by or ""
+        actor_id = agent_id or (task.claimed_by.username if task.claimed_by else "")
         record_event(
             task,
             "completion_note",

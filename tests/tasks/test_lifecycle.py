@@ -28,6 +28,20 @@ def agent_abc(db):
     return AgentFactory(name="Agent ABC", tags=[])
 
 
+@pytest.fixture
+def claimed_user(db):
+    """A User instance for use as claimed_by in tests."""
+    agent = AgentFactory(name="agent-1")
+    return agent.user
+
+
+@pytest.fixture
+def agent_x_user(db):
+    """A User instance for assign/unassign tests."""
+    from django.contrib.auth.models import User
+    return User.objects.create_user(username="agent-x")
+
+
 def make_task(milestone, workplan, task_status="draft", **kwargs):
     return TaskFactory(
         title="Test Task",
@@ -176,7 +190,7 @@ class TestClaim:
         api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent_abc.id}, format="json")
         task.refresh_from_db()
         assert task.status == "doing"
-        assert task.claimed_by == agent_abc.id
+        assert task.claimed_by == agent_abc.user
         assert task.claimed_at is not None
         assert task.claim_expires_at is not None
 
@@ -210,38 +224,38 @@ class TestClaim:
 
 @pytest.mark.django_db
 class TestUnclaim:
-    def test_unclaim_doing_returns_200(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "doing", claimed_by="agent-1")
+    def test_unclaim_doing_returns_200(self, api_client, milestone, workplan, claimed_user):
+        task = make_task(milestone, workplan, "doing", claimed_by=claimed_user)
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_unclaim_transitions_to_todo(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "doing", claimed_by="agent-1")
+    def test_unclaim_transitions_to_todo(self, api_client, milestone, workplan, claimed_user):
+        task = make_task(milestone, workplan, "doing", claimed_by=claimed_user)
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert response.data["status"] == "todo"
 
-    def test_unclaim_clears_claimed_by(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "doing", claimed_by="agent-1")
+    def test_unclaim_clears_claimed_by(self, api_client, milestone, workplan, claimed_user):
+        task = make_task(milestone, workplan, "doing", claimed_by=claimed_user)
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert response.data["claimed_by"] is None
 
-    def test_unclaim_clears_claimed_at(self, api_client, milestone, workplan):
+    def test_unclaim_clears_claimed_at(self, api_client, milestone, workplan, claimed_user):
         from django.utils import timezone
-        task = make_task(milestone, workplan, "doing", claimed_by="agent-1", claimed_at=timezone.now())
+        task = make_task(milestone, workplan, "doing", claimed_by=claimed_user, claimed_at=timezone.now())
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert response.data["claimed_at"] is None
 
-    def test_unclaim_clears_claim_expires_at(self, api_client, milestone, workplan):
+    def test_unclaim_clears_claim_expires_at(self, api_client, milestone, workplan, claimed_user):
         from django.utils import timezone
-        task = make_task(milestone, workplan, "doing", claimed_by="agent-1", claim_expires_at=timezone.now())
+        task = make_task(milestone, workplan, "doing", claimed_by=claimed_user, claim_expires_at=timezone.now())
         response = api_client.post(f"/v1/tasks/{task.id}/unclaim/")
         assert response.data["claim_expires_at"] is None
 
-    def test_unclaim_persists_to_db(self, api_client, milestone, workplan):
+    def test_unclaim_persists_to_db(self, api_client, milestone, workplan, claimed_user):
         from django.utils import timezone
         task = make_task(
             milestone, workplan, "doing",
-            claimed_by="agent-1",
+            claimed_by=claimed_user,
             claimed_at=timezone.now(),
             claim_expires_at=timezone.now(),
         )
@@ -339,14 +353,14 @@ class TestFail:
         assert_invalid_transition_error(response, "done", "needs_attention")
 
     def test_fail_clears_claimed_by(self, api_client, milestone, workplan, agent_abc):
-        task = make_task(milestone, workplan, "doing", claimed_by=agent_abc)
+        task = make_task(milestone, workplan, "doing", claimed_by=agent_abc.user)
         api_client.post(f"/v1/tasks/{task.id}/fail/")
         task.refresh_from_db()
         assert task.claimed_by is None
 
     def test_fail_clears_claimed_at(self, api_client, milestone, workplan, agent_abc):
         from django.utils import timezone
-        task = make_task(milestone, workplan, "doing", claimed_by=agent_abc, claimed_at=timezone.now())
+        task = make_task(milestone, workplan, "doing", claimed_by=agent_abc.user, claimed_at=timezone.now())
         api_client.post(f"/v1/tasks/{task.id}/fail/")
         task.refresh_from_db()
         assert task.claimed_at is None
@@ -355,7 +369,7 @@ class TestFail:
         from django.utils import timezone
         task = make_task(
             milestone, workplan, "doing",
-            claimed_by=agent_abc,
+            claimed_by=agent_abc.user,
             claimed_at=timezone.now(),
             claim_expires_at=timezone.now() + timezone.timedelta(minutes=10),
         )
@@ -403,7 +417,7 @@ class TestRecover:
         from django.utils import timezone
         task = make_task(
             milestone, workplan, "needs_attention",
-            claimed_by=agent_abc,
+            claimed_by=agent_abc.user,
             claimed_at=timezone.now(),
             claim_expires_at=timezone.now() + timezone.timedelta(minutes=10),
         )
@@ -687,22 +701,22 @@ class TestCancel:
 
 @pytest.mark.django_db
 class TestHeartbeat:
-    def test_heartbeat_doing_returns_200(self, api_client, milestone, workplan):
+    def test_heartbeat_doing_returns_200(self, api_client, milestone, workplan, claimed_user):
         from django.utils import timezone
         task = make_task(
             milestone, workplan, "doing",
-            claimed_by="agent-1",
+            claimed_by=claimed_user,
             claim_expires_at=timezone.now(),
         )
         response = api_client.post(f"/v1/tasks/{task.id}/heartbeat/")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_heartbeat_extends_claim_expires_at(self, api_client, milestone, workplan):
+    def test_heartbeat_extends_claim_expires_at(self, api_client, milestone, workplan, claimed_user):
         from django.utils import timezone
         old_expiry = timezone.now()
         task = make_task(
             milestone, workplan, "doing",
-            claimed_by="agent-1",
+            claimed_by=claimed_user,
             claim_expires_at=old_expiry,
         )
         response = api_client.post(f"/v1/tasks/{task.id}/heartbeat/")
@@ -725,12 +739,12 @@ class TestHeartbeat:
         response = api_client.post(f"/v1/tasks/{task.id}/heartbeat/")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_heartbeat_persists_to_db(self, api_client, milestone, workplan):
+    def test_heartbeat_persists_to_db(self, api_client, milestone, workplan, claimed_user):
         from django.utils import timezone
         old_expiry = timezone.now()
         task = make_task(
             milestone, workplan, "doing",
-            claimed_by="agent-1",
+            claimed_by=claimed_user,
             claim_expires_at=old_expiry,
         )
         api_client.post(f"/v1/tasks/{task.id}/heartbeat/")
@@ -771,28 +785,28 @@ class TestProgress:
 
 @pytest.mark.django_db
 class TestAssign:
-    def test_assign_returns_200(self, api_client, milestone, workplan):
+    def test_assign_returns_200(self, api_client, milestone, workplan, agent_x_user):
         task = make_task(milestone, workplan, "todo")
         response = api_client.post(f"/v1/tasks/{task.id}/assign/", {"assigned_to": "agent-x"}, format="json")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_assign_sets_assigned_to(self, api_client, milestone, workplan):
+    def test_assign_sets_assigned_to(self, api_client, milestone, workplan, agent_x_user):
         task = make_task(milestone, workplan, "todo")
         response = api_client.post(f"/v1/tasks/{task.id}/assign/", {"assigned_to": "agent-x"}, format="json")
         assert response.data["assigned_to"] == "agent-x"
 
-    def test_assign_persists_to_db(self, api_client, milestone, workplan):
+    def test_assign_persists_to_db(self, api_client, milestone, workplan, agent_x_user):
         task = make_task(milestone, workplan, "todo")
         api_client.post(f"/v1/tasks/{task.id}/assign/", {"assigned_to": "agent-x"}, format="json")
         task.refresh_from_db()
-        assert task.assigned_to == "agent-x"
+        assert task.assigned_to == agent_x_user
 
     def test_assign_without_assigned_to_returns_400(self, api_client, milestone, workplan):
         task = make_task(milestone, workplan, "todo")
         response = api_client.post(f"/v1/tasks/{task.id}/assign/", {}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_assign_works_on_any_status(self, api_client, milestone, workplan):
+    def test_assign_works_on_any_status(self, api_client, milestone, workplan, agent_x_user):
         for task_status in ["draft", "todo", "doing", "blocked"]:
             task = make_task(milestone, workplan, task_status)
             response = api_client.post(f"/v1/tasks/{task.id}/assign/", {"assigned_to": "agent-x"}, format="json")
@@ -801,18 +815,18 @@ class TestAssign:
 
 @pytest.mark.django_db
 class TestUnassign:
-    def test_unassign_returns_200(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "todo", assigned_to="agent-x")
+    def test_unassign_returns_200(self, api_client, milestone, workplan, agent_x_user):
+        task = make_task(milestone, workplan, "todo", assigned_to=agent_x_user)
         response = api_client.post(f"/v1/tasks/{task.id}/unassign/")
         assert response.status_code == status.HTTP_200_OK
 
-    def test_unassign_clears_assigned_to(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "todo", assigned_to="agent-x")
+    def test_unassign_clears_assigned_to(self, api_client, milestone, workplan, agent_x_user):
+        task = make_task(milestone, workplan, "todo", assigned_to=agent_x_user)
         response = api_client.post(f"/v1/tasks/{task.id}/unassign/")
         assert response.data["assigned_to"] is None
 
-    def test_unassign_persists_to_db(self, api_client, milestone, workplan):
-        task = make_task(milestone, workplan, "todo", assigned_to="agent-x")
+    def test_unassign_persists_to_db(self, api_client, milestone, workplan, agent_x_user):
+        task = make_task(milestone, workplan, "todo", assigned_to=agent_x_user)
         api_client.post(f"/v1/tasks/{task.id}/unassign/")
         task.refresh_from_db()
         assert task.assigned_to is None

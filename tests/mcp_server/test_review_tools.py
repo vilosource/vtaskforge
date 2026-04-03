@@ -8,6 +8,7 @@ import json
 import pytest
 
 from mcp_server.tools._review_agent import vtf_review_task
+from django.contrib.auth.models import User
 from tests.factories import MilestoneFactory, ProjectFactory, TaskFactory, WorkplanFactory
 
 
@@ -151,7 +152,8 @@ def test_review_fuzzy_no_match_no_suggestion():
 @pytest.mark.django_db
 def test_review_rejected_when_reviewer_is_claimer():
     """vtf_review_task rejects when reviewer_id matches task.claimed_by."""
-    task = TaskFactory(status="pending_completion_review", claimed_by="supervisor")
+    supervisor_user = User.objects.create_user(username="supervisor")
+    task = TaskFactory(status="pending_completion_review", claimed_by=supervisor_user)
 
     result = json.loads(
         vtf_review_task(task_id=task.id, decision="approved", reviewer_id="supervisor")
@@ -166,7 +168,8 @@ def test_review_rejected_when_reviewer_is_claimer():
 @pytest.mark.django_db
 def test_review_accepted_when_reviewer_differs_from_claimer():
     """vtf_review_task succeeds when reviewer_id differs from claimed_by."""
-    task = TaskFactory(status="pending_completion_review", claimed_by="supervisor")
+    supervisor_user = User.objects.create_user(username="supervisor")
+    task = TaskFactory(status="pending_completion_review", claimed_by=supervisor_user)
 
     result = json.loads(
         vtf_review_task(task_id=task.id, decision="approved", reviewer_id="judge-abc")

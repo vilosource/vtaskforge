@@ -60,7 +60,7 @@ def vtf_search_tasks(
         qs = qs.filter(milestone_id=milestone_id_filter)
 
     if assigned_to_filter:
-        qs = qs.filter(assigned_to=assigned_to_filter)
+        qs = qs.filter(assigned_to__username=assigned_to_filter)
 
     if labels:
         label_list = [l.strip() for l in labels.split(",") if l.strip()]
@@ -86,7 +86,7 @@ def vtf_search_tasks(
             "title": task.title,
             "status": task.status,
             "milestone": task.milestone.name if task.milestone else None,
-            "claimed_by": task.claimed_by,
+            "claimed_by": task.claimed_by.username if task.claimed_by else None,
             "labels": task.labels,
             "has_spec": bool(task.spec),
             "judge": task.judge,

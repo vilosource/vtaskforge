@@ -667,7 +667,18 @@ def _action_assign(task_id, assigned_to):
     if err:
         return err
 
-    task.assigned_to = assigned_to
+    from django.contrib.auth.models import User
+    try:
+        user = User.objects.get(username=assigned_to)
+    except User.DoesNotExist:
+        return json.dumps(
+            error_response(
+                code="NOT_FOUND",
+                message=f"User '{assigned_to}' not found.",
+                data={"assigned_to": assigned_to},
+            )
+        )
+    task.assigned_to = user
     task.save(update_fields=["assigned_to", "updated_at"])
 
     return json.dumps(
@@ -677,7 +688,7 @@ def _action_assign(task_id, assigned_to):
                     "id": task.id,
                     "title": task.title,
                     "status": task.status,
-                    "assigned_to": task.assigned_to,
+                    "assigned_to": task.assigned_to.username if task.assigned_to else None,
                 }
             },
             message=f"Task {task.id} assigned to '{assigned_to}'.",
@@ -714,7 +725,7 @@ def _action_unassign(task_id):
                     "id": task.id,
                     "title": task.title,
                     "status": task.status,
-                    "assigned_to": task.assigned_to,
+                    "assigned_to": task.assigned_to.username if task.assigned_to else None,
                 }
             },
             message=f"Task {task.id} unassigned.",

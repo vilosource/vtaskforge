@@ -203,7 +203,7 @@ class TestClaimTaskSuccess:
         task = TaskFactory(status="todo")
         claimed = claim_task(task.id, agent.id, [])
         task.refresh_from_db()
-        assert task.claimed_by == agent.id
+        assert task.claimed_by == agent.user
         assert task.claimed_at is not None
         assert task.claim_expires_at is not None
         assert task.claim_expires_at > task.claimed_at
@@ -233,7 +233,7 @@ class TestClaimTaskErrors:
         """ClaimError raised when task is assigned to a different agent."""
         agent = AgentFactory(tags=[])
         other = AgentFactory(tags=[])
-        task = TaskFactory(status="todo", assigned_to=other.id)
+        task = TaskFactory(status="todo", assigned_to=other.user)
         with pytest.raises(ClaimError) as exc_info:
             claim_task(task.id, agent.id, [])
         assert exc_info.value.code == "FORBIDDEN"
@@ -378,8 +378,8 @@ class TestFindClaimableTasks:
         other = AgentFactory(tags=[])
 
         task_unassigned = TaskFactory(status="todo", assigned_to=None, title="Unassigned")
-        task_mine = TaskFactory(status="todo", assigned_to=agent.id, title="Mine")
-        task_other = TaskFactory(status="todo", assigned_to=other.id, title="Other agent's")
+        task_mine = TaskFactory(status="todo", assigned_to=agent.user, title="Mine")
+        task_other = TaskFactory(status="todo", assigned_to=other.user, title="Other agent's")
 
         result_ids = [t.id for t in find_claimable_tasks(agent_id=agent.id)]
 
@@ -603,9 +603,10 @@ class TestGetBoardSummary:
         from django.utils import timezone
         from datetime import timedelta
 
+        agent = AgentFactory(name="agent-xyz")
         doing_task = TaskFactory(
             status="doing",
-            claimed_by="agent-xyz",
+            claimed_by=agent.user,
             claimed_at=timezone.now(),
             claim_expires_at=timezone.now() + timedelta(minutes=30),
         )
@@ -617,6 +618,6 @@ class TestGetBoardSummary:
         agent_task_ids = [a["id"] for a in summary["active_agents"]]
         assert doing_task.id in agent_task_ids
 
-        # Verify agent info is included
+        # Verify agent info is included (claimed_by is returned as User PK from .values())
         agent_entry = next(a for a in summary["active_agents"] if a["id"] == doing_task.id)
-        assert agent_entry["claimed_by"] == "agent-xyz"
+        assert agent_entry["claimed_by"] == agent.user.pk

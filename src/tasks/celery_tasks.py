@@ -25,7 +25,7 @@ def expire_stale_claims():
 
     count = 0
     for task in expired_tasks:
-        previous_agent = task.claimed_by
+        previous_agent = task.claimed_by.username if task.claimed_by else None
 
         # Clear claim fields separately from the status transition
         task.claimed_by = None
