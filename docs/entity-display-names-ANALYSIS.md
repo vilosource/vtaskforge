@@ -1367,3 +1367,125 @@ Each layer has one job:
 | **Prisma** | TypeScript | Generated typed client from schema, `include` for relations, type-safe filtering |
 
 The vtf SDK doesn't need to be as sophisticated as any of these. The key patterns to adopt are: **typed entity objects**, **EntityRef for references**, **Manager for collections**, **domain exceptions**, and **write accepts ID or entity**.
+
+---
+
+## Alternatives Considered
+
+### Why Not GraphQL?
+
+GraphQL is the natural "what about..." question for anyone reviewing this architecture. It directly solves the entity display name problem — a client can request exactly the nested fields it needs in a single query:
+
+```graphql
+query {
+  task(id: "tsk-abc") {
+    title
+    status
+    project { name }
+    milestone { name status }
+    claimedBy { name }
+    requires { title status }
+  }
+}
+```
+
+One round-trip, no follow-up queries, no over-fetching. The client declares its data needs, the server fulfills them. This is elegant and would eliminate every issue documented in this analysis.
+
+**However, GraphQL optimizes for a problem vtf doesn't have, while introducing costs vtf can't justify.**
+
+#### What GraphQL Optimizes For
+
+GraphQL excels when:
+- **Many diverse clients need different shapes of the same data** — a mobile app, a desktop dashboard, a third-party integration, and an admin panel all query the same entities but need different field subsets
+- **The API is public** and you cannot predict or control what clients will request
+- **Bandwidth is constrained** (mobile networks) and payload minimization matters
+- **The entity graph is deep and complex** — clients routinely need 4-5 levels of nested data in unpredictable combinations
+
+#### vtf's Situation
+
+| GraphQL Strength | vtf Reality |
+|-----------------|-------------|
+| Many diverse clients needing different shapes | 4-5 known consumers, all need roughly the same data |
+| Public API with unpredictable client needs | Internal API where we control every consumer |
+| Bandwidth-constrained mobile clients | Server-to-server (vafi, MCP) and desktop browser |
+| Deep, unpredictable query patterns | Stable 4-level hierarchy (Project → Workplan → Milestone → Task) |
+| Rapidly evolving frontend data needs | Entity model is mature and stable |
+
+vtf's consumers are known, controlled, and have similar data needs. The "different clients need different shapes" problem barely exists — Task detail looks roughly the same whether the Web UI, CLI, or an MCP tool is asking.
+
+#### Costs GraphQL Would Introduce
+
+**1. The N+1 problem moves server-side.** In REST, the N+1 is the client's problem (it makes extra calls). In GraphQL, every nested field in a query can trigger separate database queries on the server. The standard solution — Facebook's DataLoader pattern for batching — adds significant infrastructure:
+
+```python
+# Without DataLoader: N+1 per nested field
+# Query for 20 tasks with project { name } triggers 20 separate project queries
+
+# With DataLoader: batched, but adds a layer of complexity
+class ProjectLoader(DataLoader):
+    async def batch_load_fn(self, project_ids):
+        projects = await Project.objects.filter(id__in=project_ids)
+        return [projects_by_id[pid] for pid in project_ids]
+```
+
+Django + Graphene (or Strawberry) + DataLoaders is substantially more complex than `select_related()` in a DRF serializer.
+
+**2. HTTP caching breaks.** REST responses cache naturally — `GET /v2/tasks/tsk-abc` is a stable cache key. GraphQL uses POST requests with arbitrary query bodies. HTTP-level caching (CDN, browser cache, reverse proxy) doesn't work without additional infrastructure (persisted queries, cache key extraction).
+
+**3. Three API surfaces instead of two.** vtf would maintain REST `/v1/` (current consumers), GraphQL (new consumers), and eventually REST `/v2/` if we still want versioned REST. Or we abandon REST entirely and go all-in on GraphQL, which is a much larger commitment.
+
+**4. Schema duplication.** The Django models define the data shape. DRF serializers re-define it for REST. GraphQL types would re-define it again. Three places that must stay in sync. (Tools like `graphene-django` reduce this but don't eliminate it.)
+
+**5. Query complexity risks.** An unconstrained GraphQL API lets clients write expensive queries:
+
+```graphql
+# A client could request this — joins across the entire entity graph
+query {
+  projects {
+    workplans {
+      milestones {
+        tasks {
+          requires { requires { requires { title } } }
+          reviews { ... }
+          events { ... }
+        }
+      }
+    }
+  }
+}
+```
+
+This requires depth limiting, complexity analysis, and query cost budgets — infrastructure that REST doesn't need because the server controls the response shape.
+
+**6. The SDK still needs to exist.** GraphQL gives flexible queries, but consumers still want typed entity objects with methods, lazy collections, and domain exceptions. You'd build the SDK on top of GraphQL instead of REST, but the SDK work is the same either way.
+
+#### The Teaching Perspective
+
+GraphQL vs REST is a valuable architectural trade-off to understand:
+
+| Dimension | REST + SDK | GraphQL |
+|-----------|-----------|---------|
+| **Server controls response shape** | Yes — server decides what to include | No — client decides |
+| **Client flexibility** | Limited — `?expand=` for optional fields | Full — any combination of fields |
+| **Caching** | HTTP-native (URL = cache key) | Requires custom infrastructure |
+| **Server complexity** | Low — serializers + `select_related()` | Higher — resolvers + DataLoaders |
+| **Type safety** | SDK provides types | Schema provides types |
+| **N+1 prevention** | Server-side (`select_related`) | Server-side (DataLoaders) — harder |
+| **Best for** | Known consumers, stable entity model | Unknown consumers, diverse data needs |
+
+The right choice depends on the system's characteristics, not on which technology is newer. For vtf — a system with a small number of known consumers, a stable entity hierarchy, and a reference-architecture goal that values clarity — REST `/v2/` with typed SDKs is the simpler, more teachable, and more appropriate choice.
+
+GraphQL would be the right answer if vtf evolved into a public platform API serving hundreds of third-party integrations. That's not the current trajectory, and designing for a hypothetical future violates YAGNI (You Aren't Gonna Need It) — another principle worth demonstrating in a reference architecture.
+
+**Importantly, the door stays open.** The `/v2/` + SDK architecture doesn't preclude adding GraphQL later. The domain layer (Django models, services, state machine, guards) is transport-agnostic. GraphQL would slot in as an additional transport alongside REST, consuming the same service layer. The SDK would gain a GraphQL backend option without consumers needing to change. Good architecture keeps options open without paying for them upfront.
+
+### Why Not gRPC?
+
+For completeness: gRPC with Protocol Buffers was also considered. gRPC excels at high-throughput, low-latency service-to-service communication with strict schema contracts (`.proto` files). However:
+
+- vtf's web UI is a browser-based React SPA — gRPC requires gRPC-Web proxy for browser clients
+- vtf's CLI and MCP tools benefit from human-readable JSON for debugging — Protocol Buffers are binary
+- The performance characteristics gRPC optimizes for (streaming, binary encoding, HTTP/2 multiplexing) are not vtf's bottleneck
+- gRPC's code generation from `.proto` files provides typed clients automatically, which is appealing, but the same can be achieved with OpenAPI code generation for REST if needed later
+
+gRPC would be appropriate for the vafi controller ↔ vtf API path if latency became critical (high-frequency heartbeats, streaming task events). It could be introduced later as a transport optimization for that specific path without replacing the REST API for other consumers.
