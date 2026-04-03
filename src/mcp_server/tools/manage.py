@@ -581,7 +581,7 @@ def _action_block(task_id, reason):
             task,
             "blocked_reason",
             data={"reason": reason},
-            triggered_by="",
+            trigger_source="",
         )
 
     task.refresh_from_db()
@@ -746,7 +746,7 @@ def _action_note(task_id, note_text):
     if err:
         return err
 
-    record_event(task, "note", data={"text": note_text}, triggered_by="")
+    record_event(task, "note", data={"text": note_text}, trigger_source="")
 
     return json.dumps(
         success_response(
@@ -804,7 +804,7 @@ def _action_recover(task_id, reason, target=""):
         )
 
     try:
-        perform_transition(task, resolved_target, triggered_by="recover")
+        perform_transition(task, resolved_target, trigger_source="recover")
     except InvalidTransition as exc:
         return json.dumps(
             error_response(
@@ -822,7 +822,7 @@ def _action_recover(task_id, reason, target=""):
         task.retry_count += 1
     task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "retry_count"])
 
-    record_event(task, "recover", data={"target": resolved_target, "reason": reason}, triggered_by="recover")
+    record_event(task, "recover", data={"target": resolved_target, "reason": reason}, trigger_source="recover")
 
     return json.dumps(
         success_response(

@@ -47,27 +47,27 @@ def agent42(db):
 class TestStateMachineAutoLogging:
     def test_perform_transition_creates_event(self):
         task = make_task("draft")
-        perform_transition(task, "todo", triggered_by="system")
+        perform_transition(task, "todo", trigger_source="system")
         events = TaskEvent.objects.filter(task=task, event_type="status_changed")
         assert events.count() == 1
 
     def test_event_has_correct_from_and_to(self):
         task = make_task("draft")
-        perform_transition(task, "todo", triggered_by="system")
+        perform_transition(task, "todo", trigger_source="system")
         event = TaskEvent.objects.get(task=task, event_type="status_changed")
         assert event.data["from"] == "draft"
         assert event.data["to"] == "todo"
 
-    def test_event_triggered_by_is_set(self):
+    def test_event_trigger_source_is_set(self):
         task = make_task("draft")
-        perform_transition(task, "todo", triggered_by="test-agent")
+        perform_transition(task, "todo", trigger_source="submit")
         event = TaskEvent.objects.get(task=task, event_type="status_changed")
-        assert event.triggered_by == "test-agent"
+        assert event.trigger_source == "submit"
 
     def test_old_status_captured_before_change(self):
         """Verifies that 'from' reflects the pre-transition status."""
         task = make_task("todo")
-        perform_transition(task, "doing", triggered_by="agent-1")
+        perform_transition(task, "doing", trigger_source="agent-1")
         event = TaskEvent.objects.get(task=task, event_type="status_changed")
         assert event.data["from"] == "todo"
         assert event.data["to"] == "doing"
@@ -86,11 +86,11 @@ class TestStateMachineAutoLogging:
             perform_transition(task, "doing")
         assert TaskEvent.objects.filter(task=task).count() == 0
 
-    def test_empty_triggered_by_defaults_to_empty_string(self):
+    def test_empty_trigger_source_defaults_to_empty_string(self):
         task = make_task("draft")
         perform_transition(task, "todo")
         event = TaskEvent.objects.get(task=task, event_type="status_changed")
-        assert event.triggered_by == ""
+        assert event.trigger_source == ""
 
 
 # ---------------------------------------------------------------------------
@@ -114,12 +114,12 @@ class TestClaimAutoLogging:
         event = TaskEvent.objects.get(task=task, event_type="claimed")
         assert event.data["agent_id"] == agent42.id
 
-    def test_claim_event_triggered_by_agent_id(self, api_client, task, agent42):
+    def test_claim_event_trigger_source_is_claim(self, api_client, task, agent42):
         task.status = "todo"
         task.save(update_fields=["status", "updated_at"])
         api_client.post(f"/v1/tasks/{task.id}/claim/", {"agent_id": agent42.id}, format="json")
         event = TaskEvent.objects.get(task=task, event_type="claimed")
-        assert event.triggered_by == agent42.id
+        assert event.trigger_source == "claim"
 
     def test_claim_also_creates_status_changed_event(self, api_client, task, agent1):
         task.status = "todo"

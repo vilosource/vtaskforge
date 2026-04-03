@@ -119,3 +119,5 @@ class TaskEventFactory(factory.django.DjangoModelFactory):
     task = factory.SubFactory(TaskFactory)
     event_type = "status_changed"
     data = factory.Dict({"from": "draft", "to": "todo"})
+    trigger_source = "test"
+    actor = None

@@ -358,9 +358,9 @@ class TestPerformTransition:
         task.refresh_from_db()
         assert task.status == "draft"
 
-    def test_triggered_by_param_accepted(self):
+    def test_trigger_source_param_accepted(self):
         task = make_task("todo")
-        result = perform_transition(task, "doing", triggered_by="agent-1")
+        result = perform_transition(task, "doing", trigger_source="claim")
         assert result.status == "doing"
 
     def test_chain_of_transitions(self):

@@ -76,7 +76,7 @@ class TestExpireStaleClaims:
         assert events.count() == 1
         event = events.first()
         assert event.data["previous_agent"] == "agent-42"
-        assert event.triggered_by == "system"
+        assert event.trigger_source == "system"
 
     def test_returns_count(self):
         """expire_stale_claims should return the number of tasks expired."""
@@ -115,7 +115,7 @@ class TestExpireStaleClaims:
         assert len(claim_expired_calls) == 1
         _, kwargs = claim_expired_calls[0].args, claim_expired_calls[0].kwargs
         assert claim_expired_calls[0].args[0].pk == task.pk
-        assert claim_expired_calls[0].kwargs.get("triggered_by") == "system"
+        assert claim_expired_calls[0].kwargs.get("trigger_source") == "system"
 
     def test_expire_uses_state_machine(self):
         """expire_stale_claims must use perform_transition (not direct status assignment) for status changes."""
@@ -126,7 +126,7 @@ class TestExpireStaleClaims:
         args = mock_transition.call_args
         assert args.args[0].pk == task.pk
         assert args.args[1] == "needs_attention"
-        assert args.kwargs.get("triggered_by") == "system"
+        assert args.kwargs.get("trigger_source") == "system"
 
     def test_expired_with_frozen_time(self):
         """Verify expiry logic using mocked timezone.now."""

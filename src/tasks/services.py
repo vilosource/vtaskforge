@@ -235,14 +235,14 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
             )
 
         # All checks passed — perform claim
-        perform_transition(task, "doing", triggered_by=agent_id)
+        perform_transition(task, "doing", trigger_source="claim")
         task.claimed_by = agent_id
         task.claimed_at = timezone.now()
         timeout = task.claim_timeout or timedelta(minutes=DEFAULT_CLAIM_TIMEOUT_MINUTES)
         task.claim_expires_at = timezone.now() + timeout
         task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at", "updated_at"])
 
-        record_event(task, "claimed", data={"agent_id": agent_id}, triggered_by=agent_id)
+        record_event(task, "claimed", data={"agent_id": agent_id}, trigger_source="claim")
 
     return task
 
@@ -315,7 +315,7 @@ def get_task_context(task_id: str) -> dict:
             "event_type": e.event_type,
             "data": e.data,
             "timestamp": e.timestamp.isoformat(),
-            "triggered_by": e.triggered_by,
+            "triggered_by": e.actor.username if e.actor else e.trigger_source,
         }
         for e in task.events.all()[:20]
     ]

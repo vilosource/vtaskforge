@@ -142,7 +142,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         before_start, _ = get_effective_review_flags(task)
         target = "pending_start_review" if before_start else "todo"
         try:
-            perform_transition(task, target, triggered_by="submit")
+            perform_transition(task, target, trigger_source="submit")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -236,7 +236,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             exc = InvalidTransition(task.status, "todo", get_valid_transitions(task.status))
             return invalid_transition_response(exc)
         try:
-            perform_transition(task, "todo", triggered_by=previous_agent or "unclaim")
+            perform_transition(task, "todo", trigger_source="unclaim")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
 
@@ -249,7 +249,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             task,
             "unclaimed",
             data={"agent_id": previous_agent} if previous_agent else {},
-            triggered_by=previous_agent or "",
+            trigger_source="unclaim",
         )
 
         serializer = self.get_serializer(task)
@@ -262,7 +262,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         _, on_completion = get_effective_review_flags(task)
         target = "pending_completion_review" if on_completion else "done"
         try:
-            perform_transition(task, target, triggered_by="complete")
+            perform_transition(task, target, trigger_source="complete")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -273,7 +273,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         """doing -> needs_attention."""
         task = self.get_object()
         try:
-            perform_transition(task, "needs_attention", triggered_by="fail")
+            perform_transition(task, "needs_attention", trigger_source="fail")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         # Clear stale claim fields (matching unclaim and expire_stale_claims behavior)
@@ -308,7 +308,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             )
 
         try:
-            perform_transition(task, target, triggered_by="recover")
+            perform_transition(task, target, trigger_source="recover")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
 
@@ -334,7 +334,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            perform_transition(task, task.review_return_to, triggered_by="resubmit")
+            perform_transition(task, task.review_return_to, trigger_source="resubmit")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -345,7 +345,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         """todo/doing -> blocked."""
         task = self.get_object()
         try:
-            perform_transition(task, "blocked", triggered_by="block")
+            perform_transition(task, "blocked", trigger_source="block")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -356,7 +356,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         """blocked -> todo (default)."""
         task = self.get_object()
         try:
-            perform_transition(task, "todo", triggered_by="unblock")
+            perform_transition(task, "todo", trigger_source="unblock")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -367,7 +367,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         """any non-terminal -> deferred."""
         task = self.get_object()
         try:
-            perform_transition(task, "deferred", triggered_by="defer")
+            perform_transition(task, "deferred", trigger_source="defer")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -378,7 +378,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         """any non-terminal -> cancelled."""
         task = self.get_object()
         try:
-            perform_transition(task, "cancelled", triggered_by="cancel")
+            perform_transition(task, "cancelled", trigger_source="cancel")
         except InvalidTransition as exc:
             return invalid_transition_response(exc)
         serializer = self.get_serializer(task)
@@ -475,7 +475,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             task,
             "force_transition",
             data={"from": old_status, "to": target_status, "reason": reason},
-            triggered_by="admin",
+            trigger_source="admin",
         )
 
         serializer = self.get_serializer(task)

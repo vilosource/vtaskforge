@@ -75,7 +75,7 @@ def submit_review(
             "reviewer_type": reviewer_type,
             "previous_status": previous_status,
         },
-        triggered_by=reviewer_id,
+        trigger_source="review",
     )
 
     return {"review": review, "task": task, "previous_status": previous_status}

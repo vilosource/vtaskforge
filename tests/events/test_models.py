@@ -16,12 +16,12 @@ class TestTaskEventModel:
             task=task,
             event_type="status_changed",
             data={"from": "draft", "to": "todo"},
-            triggered_by="system",
+            trigger_source="system",
         )
         assert event.pk is not None
         assert event.event_type == "status_changed"
         assert event.data == {"from": "draft", "to": "todo"}
-        assert event.triggered_by == "system"
+        assert event.trigger_source == "system"
 
     def test_create_claimed_event(self):
         task = make_task()
@@ -29,7 +29,7 @@ class TestTaskEventModel:
             task=task,
             event_type="claimed",
             data={"agent_id": "agent-1"},
-            triggered_by="agent-1",
+            trigger_source="agent-1",
         )
         assert event.event_type == "claimed"
         assert event.data["agent_id"] == "agent-1"
@@ -40,7 +40,7 @@ class TestTaskEventModel:
             task=task,
             event_type="unclaimed",
             data={"agent_id": "agent-1"},
-            triggered_by="agent-1",
+            trigger_source="agent-1",
         )
         assert event.event_type == "unclaimed"
 
@@ -62,14 +62,15 @@ class TestTaskEventModel:
         )
         assert event.timestamp is not None
 
-    def test_default_triggered_by_is_empty_string(self):
+    def test_default_trigger_source_is_empty_string(self):
         task = make_task()
         event = TaskEventFactory(
             task=task,
             event_type="status_changed",
             data={"from": "draft", "to": "todo"},
+            trigger_source="",
         )
-        assert event.triggered_by == ""
+        assert event.trigger_source == ""
 
     def test_default_data_is_dict(self):
         task = make_task()

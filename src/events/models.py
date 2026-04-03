@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin
@@ -25,7 +26,14 @@ class TaskEvent(NanoIDMixin):
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES)
     data = models.JSONField(default=dict)
     timestamp = models.DateTimeField(auto_now_add=True)
-    triggered_by = models.CharField(max_length=255, blank=True, default="")
+    trigger_source = models.CharField(max_length=50, blank=True, default="")
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_events",
+    )
 
     class Meta:
         ordering = ["-timestamp"]

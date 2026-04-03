@@ -31,7 +31,7 @@ def event(db, task):
         task=task,
         event_type="status_changed",
         data={"from": "draft", "to": "todo"},
-        triggered_by="system",
+        trigger_source="system",
     )
 
 

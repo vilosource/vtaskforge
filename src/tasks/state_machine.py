@@ -133,13 +133,14 @@ def validate_transition(task, new_status: str) -> None:
         raise InvalidTransition(task.status, new_status, valid)
 
 
-def perform_transition(task, new_status: str, triggered_by: str = ""):
+def perform_transition(task, new_status: str, trigger_source: str = "", actor=None):
     validate_transition(task, new_status)
     _run_guards(task, task.status, new_status)
     old_status = task.status
     task.status = new_status
     task.save(update_fields=["status", "updated_at"])
-    record_event(task, "status_changed", data={"from": old_status, "to": new_status}, triggered_by=triggered_by)
+    record_event(task, "status_changed", data={"from": old_status, "to": new_status},
+                 trigger_source=trigger_source, actor=actor)
 
     if new_status in TERMINAL_STATUSES:
         try:

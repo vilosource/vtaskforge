@@ -34,10 +34,10 @@ def expire_stale_claims():
         task.save(update_fields=["claimed_by", "claimed_at", "claim_expires_at"])
 
         # Use state machine for status transition
-        perform_transition(task, "needs_attention", triggered_by="system")
+        perform_transition(task, "needs_attention", trigger_source="system")
 
         # Record the claim_expired event via EventService
-        record_event(task, "claim_expired", data={"previous_agent": previous_agent}, triggered_by="system")
+        record_event(task, "claim_expired", data={"previous_agent": previous_agent}, trigger_source="system")
         count += 1
 
     return count

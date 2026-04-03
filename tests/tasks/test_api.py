@@ -554,7 +554,7 @@ class TestTaskReset:
         assert event.data["from"] == "draft"
         assert event.data["to"] == "todo"
         assert event.data["reason"] == "board recovery"
-        assert event.triggered_by == "admin"
+        assert event.trigger_source == "admin"
 
     def test_reset_clears_claim_fields_when_target_is_not_doing(self, api_client, doing_task):
         response = api_client.post(

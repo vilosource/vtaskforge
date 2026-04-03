@@ -244,12 +244,12 @@ def vtf_report_progress(task_id: str, note: str = "", agent_id: str = "") -> str
     # Optionally record a progress note as an event
     note_added = False
     if note:
-        actor = agent_id or task.claimed_by or ""
+        actor_id = agent_id or task.claimed_by or ""
         record_event(
             task,
             "progress_note",
-            data={"note": note, "agent_id": actor},
-            triggered_by=actor,
+            data={"note": note, "agent_id": actor_id},
+            trigger_source="progress",
         )
         note_added = True
 
@@ -307,12 +307,12 @@ def vtf_submit_work(task_id: str, completion_note: str = "", agent_id: str = "")
 
     # Optionally record a completion note before transitioning
     if completion_note:
-        actor = agent_id or task.claimed_by or ""
+        actor_id = agent_id or task.claimed_by or ""
         record_event(
             task,
             "completion_note",
-            data={"note": completion_note, "agent_id": actor},
-            triggered_by=actor,
+            data={"note": completion_note, "agent_id": actor_id},
+            trigger_source="complete",
         )
 
     # Determine target status via review policy
@@ -320,8 +320,7 @@ def vtf_submit_work(task_id: str, completion_note: str = "", agent_id: str = "")
     target_status = "pending_completion_review" if needs_review_on_completion else "done"
 
     # Perform state transition via state machine (handles event recording)
-    actor = agent_id or task.claimed_by or ""
-    perform_transition(task, target_status, triggered_by=actor)
+    perform_transition(task, target_status, trigger_source="complete")
 
     # Refresh to pick up any changes from transition
     task.refresh_from_db()
