@@ -2,7 +2,7 @@ from rest_framework import mixins, status
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from core.authorization import ProjectScopedPermission, scope_queryset_to_user_projects
+from core.authorization import ProjectScopedPermission, require_project_membership, scope_queryset_to_user_projects
 from rest_framework.permissions import IsAuthenticated
 from core.pagination import VTFEventCursorPagination
 from tasks.models import Task
@@ -49,9 +49,12 @@ class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
-        # For nested endpoint, verify the task exists
+        # For nested endpoint, verify the task exists and check membership
         task_id = self.kwargs.get("task_id")
         if task_id is not None:
-            if not Task.objects.filter(pk=task_id).exists():
+            try:
+                task = Task.objects.get(pk=task_id)
+            except Task.DoesNotExist:
                 return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+            require_project_membership(request.user, task.project_id)
         return super().list(request, *args, **kwargs)

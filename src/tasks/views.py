@@ -547,8 +547,10 @@ class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet
         return Note.objects.filter(task_id=task_id)
 
     def list(self, request, *args, **kwargs):
-        if self.get_task() is None:
+        task = self.get_task()
+        if task is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, task.project_id)
         return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
@@ -556,8 +558,10 @@ class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet
         serializer.save(task=task, actor=self.request.user)
 
     def create(self, request, *args, **kwargs):
-        if self.get_task() is None:
+        task = self.get_task()
+        if task is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, task.project_id)
         return super().create(request, *args, **kwargs)
 
 
@@ -565,6 +569,7 @@ class MilestoneTasksView(APIView):
     """Nested endpoint: list and create tasks under a milestone.
     Auto-sets milestone, workplan, and project from milestone.workplan.project on create.
     """
+    permission_classes = [IsAuthenticated]
 
     def get_milestone(self, milestone_id):
         try:
@@ -576,6 +581,7 @@ class MilestoneTasksView(APIView):
         milestone = self.get_milestone(milestone_id)
         if milestone is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, milestone.workplan.project_id)
         tasks = Task.objects.filter(milestone=milestone)
         # Apply same query filters as the viewset
         task_status = request.query_params.get("status")
@@ -596,13 +602,14 @@ class MilestoneTasksView(APIView):
         milestone = self.get_milestone(milestone_id)
         if milestone is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, milestone.workplan.project_id)
         data = request.data.copy()
         data["milestone"] = milestone.id
         data["workplan"] = milestone.workplan_id
         data["project"] = milestone.workplan.project_id
         serializer = TaskSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -611,6 +618,7 @@ class ProjectTasksView(APIView):
     """Nested endpoint: list and create backlog tasks under a project.
     Auto-sets project from URL, leaves workplan and milestone null for backlog tasks.
     """
+    permission_classes = [IsAuthenticated]
 
     def get_project(self, project_id):
         try:
@@ -622,6 +630,7 @@ class ProjectTasksView(APIView):
         project = self.get_project(project_id)
         if project is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, project.id)
         # List backlog tasks (tasks with no workplan)
         tasks = Task.objects.filter(project=project, workplan__isnull=True)
         # Apply same query filters as the viewset
@@ -652,6 +661,7 @@ class ProjectTasksView(APIView):
         project = self.get_project(project_id)
         if project is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, project.id)
         data = request.data.copy()
         data["project"] = project.id
         # Explicitly set workplan and milestone to None for backlog tasks
@@ -659,6 +669,6 @@ class ProjectTasksView(APIView):
         data["milestone"] = None
         serializer = TaskSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -2,7 +2,7 @@ from rest_framework import mixins, status
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from core.authorization import ProjectScopedPermission, RoleBasedPermission
+from core.authorization import ProjectScopedPermission, RoleBasedPermission, require_project_membership
 from rest_framework.permissions import IsAuthenticated
 from tasks.exceptions import InvalidTransition
 from tasks.models import Task
@@ -29,14 +29,17 @@ class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewS
         return Review.objects.filter(task_id=task_id)
 
     def list(self, request, *args, **kwargs):
-        if self.get_task() is None:
+        task = self.get_task()
+        if task is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, task.project_id)
         return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         task = self.get_task()
         if task is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_project_membership(request.user, task.project_id)
 
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():

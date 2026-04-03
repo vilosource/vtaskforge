@@ -20,6 +20,16 @@ class BulkImportView(APIView):
     def post(self, request):
         payload = request.data
 
+        # Authorization: check project membership
+        project_id = payload.get("project_id")
+        if project_id and not request.user.is_staff:
+            from core.authorization import check_project_membership
+            if not check_project_membership(request.user, project_id):
+                return Response(
+                    {"error": {"code": "PERMISSION_DENIED", "message": "You are not a member of this project."}},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         # Validate top-level required fields
         if "project_id" not in payload and "project" not in payload:
             return Response(
