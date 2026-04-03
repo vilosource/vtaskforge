@@ -30,11 +30,26 @@ Database stores:         tasks.project_id FK → projects.id
 
 These types are the single source of truth. They appear identically (modulo language syntax) in the v2 API JSON, the Python SDK, and the TypeScript SDK.
 
-### 1.1 Entity Reference Types
+### 1.1 Base Model
+
+All Python SDK models inherit from a common base that provides immutability and forward compatibility:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+class VtfModel(BaseModel):
+    """Base for all vtf SDK models. Frozen (immutable) and forward-compatible."""
+    model_config = ConfigDict(frozen=True, extra="ignore")
+```
+
+- `frozen=True` — immutable; mutations return new instances (see analysis Gap 12)
+- `extra="ignore"` — unknown fields from newer API versions are silently ignored (forward compatibility, see analysis Gap 16)
+
+All ref types and entity types inherit from `VtfModel`. This is defined once, not repeated per class.
+
+### 1.2 Entity Reference Types
 
 Every FK or string-ID reference in a v2 response is one of these shapes. Never a bare ID.
-
-Python models use **Pydantic v2** (`BaseModel` with `frozen=True`). Pydantic provides validated construction from API response dicts via `model_validate()`, discriminated union support, and immutability — eliminating manual `from_dict()` boilerplate.
 
 #### ProjectRef
 
@@ -43,9 +58,7 @@ Python models use **Pydantic v2** (`BaseModel` with `frozen=True`). Pydantic pro
 ```
 
 ```python
-from pydantic import BaseModel
-
-class ProjectRef(BaseModel, frozen=True):
+class ProjectRef(VtfModel):
     id: str
     name: str
 
@@ -54,10 +67,8 @@ class ProjectRef(BaseModel, frozen=True):
 ```
 
 ```typescript
-interface ProjectRef {
-  readonly id: string;
-  readonly name: string;
-}
+const ProjectRefSchema = z.object({ id: z.string(), name: z.string() }).passthrough();
+type ProjectRef = z.infer<typeof ProjectRefSchema>;
 ```
 
 **Appears in:** Task.project, Workplan.project, Membership.project, Lock.project, ChannelMapping.project
@@ -71,19 +82,12 @@ interface ProjectRef {
 ```
 
 ```python
-class WorkplanRef(BaseModel, frozen=True):
+class WorkplanRef(VtfModel):
     id: str
     name: str
 
     def __str__(self) -> str:
         return self.name
-```
-
-```typescript
-interface WorkplanRef {
-  readonly id: string;
-  readonly name: string;
-}
 ```
 
 **Appears in:** Task.workplan, Milestone.workplan
@@ -97,23 +101,13 @@ interface WorkplanRef {
 ```
 
 ```python
-from typing import Literal
-
-class MilestoneRef(BaseModel, frozen=True):
+class MilestoneRef(VtfModel):
     id: str
     name: str
     status: Literal["pending", "active", "completed"]
 
     def __str__(self) -> str:
         return self.name
-```
-
-```typescript
-interface MilestoneRef {
-  readonly id: string;
-  readonly name: string;
-  readonly status: 'pending' | 'active' | 'completed';
-}
 ```
 
 **Appears in:** Task.milestone
@@ -129,7 +123,7 @@ interface MilestoneRef {
 ```
 
 ```python
-class TaskRef(BaseModel, frozen=True):
+class TaskRef(VtfModel):
     id: str
     title: str
     status: str
@@ -138,93 +132,29 @@ class TaskRef(BaseModel, frozen=True):
         return self.title
 ```
 
-```typescript
-interface TaskRef {
-  readonly id: string;
-  readonly title: string;
-  readonly status: TaskStatus;
-}
-```
-
 **Appears in:** Task.requires, Link.source (when type=task), Link.target (when type=task), Agent.current_task
 
 **Note:** Tasks use `title` not `name`. All ref types implement `__str__()` returning the display name.
 
 ---
 
-#### AgentRef
+#### ActorRef (discriminated union — the single identity reference type)
+
+Every field that references an identity (user or agent) uses ActorRef. The v2 response includes a `type` discriminator:
 
 ```json
-{"id": "agt-executor-001", "name": "executor-1"}
-```
-
-```python
-class AgentRef(BaseModel, frozen=True):
-    id: str
-    name: str
-
-    def __str__(self) -> str:
-        return self.name
-```
-
-```typescript
-interface AgentRef {
-  readonly id: string;
-  readonly name: string;
-}
-```
-
-**Appears in:** Task.claimed_by, Task.assigned_to, Review.reviewer, Note.actor, TaskEvent.triggered_by
-
-**Resolution:** `claimed_by`, `assigned_to`, etc. are CharField on the model (not FK). The v2 serializer resolves them via batch lookup against the Agent table, falling back to User table, falling back to degraded ref `{"id": "original-value", "name": "original-value"}`.
-
----
-
-#### UserRef
-
-```json
-{"id": "42", "username": "jdoe"}
-```
-
-```python
-class UserRef(BaseModel, frozen=True):
-    id: str
-    username: str
-
-    def __str__(self) -> str:
-        return self.username
-```
-
-```typescript
-interface UserRef {
-  readonly id: string;
-  readonly username: string;
-}
-```
-
-**Appears in:** Project.owner, Project.created_by, Workplan.owner, Workplan.created_by, Milestone.created_by, Membership.user
-
-**Note:** UserRef uses `username` not `name`, following Django's User model convention.
-
----
-
-#### ActorRef (discriminated union — agent or user)
-
-Some fields can reference either an agent or a user. The v2 response includes a `type` discriminator:
-
-```json
-// Agent actor
+// Agent identity
 {"type": "agent", "id": "agt-001", "name": "executor-1"}
 
-// User actor
+// User identity
 {"type": "user", "id": "42", "username": "jdoe"}
 ```
 
 ```python
 from typing import Annotated, Literal
-from pydantic import Discriminator, Tag
+from pydantic import Discriminator
 
-class AgentActor(BaseModel, frozen=True):
+class AgentActor(VtfModel):
     type: Literal["agent"]
     id: str
     name: str
@@ -232,7 +162,7 @@ class AgentActor(BaseModel, frozen=True):
     def __str__(self) -> str:
         return self.name
 
-class UserActor(BaseModel, frozen=True):
+class UserActor(VtfModel):
     type: Literal["user"]
     id: str
     username: str
@@ -241,21 +171,35 @@ class UserActor(BaseModel, frozen=True):
         return self.username
 
 ActorRef = Annotated[AgentActor | UserActor, Discriminator("type")]
-
-# Usage — Pydantic auto-selects the correct type:
-# ActorRef.model_validate({"type": "agent", "id": "agt-001", "name": "executor-1"})
-# → AgentActor(type='agent', id='agt-001', name='executor-1')
 ```
 
 ```typescript
-type ActorRef =
-  | { readonly type: 'agent'; readonly id: string; readonly name: string }
-  | { readonly type: 'user'; readonly id: string; readonly username: string };
+const ActorRefSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('agent'), id: z.string(), name: z.string() }),
+  z.object({ type: z.literal('user'), id: z.string(), username: z.string() }),
+]);
+type ActorRef = z.infer<typeof ActorRefSchema>;
 ```
 
-**Appears in:** Task.claimed_by, Task.assigned_to, Task.created_by, Review.reviewer, Note.actor, TaskEvent.triggered_by
+**Appears in all identity fields:**
+- Task: `claimed_by`, `assigned_to`, `created_by`
+- Review: `reviewer`
+- Note: `actor`
+- TaskEvent: `triggered_by`
+- Project: `owner`, `created_by`
+- Workplan: `owner`, `created_by`
+- Milestone: `created_by`
+- Membership: `user`
+- Lock: `user`
 
-**Rationale for ActorRef over separate AgentRef/UserRef:** These fields can hold either type. Without a discriminator, the SDK would need to guess based on ID format (fragile). The `type` field makes it explicit. Pydantic's `Discriminator` handles the dispatch automatically.
+**Why one type for all identities (no separate AgentRef/UserRef):**
+- `claimed_by` is always an agent today, but the field is a CharField, not a FK — it could hold a user ID in the future
+- `owner` is always a user today, but the discriminator makes it explicit rather than assumed
+- One type means one SDK contract — consumers handle identity display the same way everywhere: `str(actor)` returns the name/username
+- The `type` discriminator enables type narrowing when needed: `if actor.type == "agent": ...`
+- Follows Liskov Substitution: any ActorRef is displayable without knowing its concrete type
+
+**Resolution of string ID fields:** `claimed_by`, `assigned_to`, `created_by`, `reviewer_id`, `actor_id`, `triggered_by` are all CharField on the Django model (not FK). The v2 serializer resolves them via batch lookup — first against the Agent table, then the User table, falling back to a degraded ref `{"type": "agent", "id": "original-value", "name": "original-value"}` if the entity no longer exists.
 
 ---
 
@@ -337,16 +281,16 @@ type LinkRef = InternalLinkRef | ExternalLinkRef;
 
 ---
 
-### 1.2 Permissions Object
+### 1.3 Permissions Object
 
-Every v2 entity response includes a `_permissions` object describing what the authenticated user can do:
+Every v2 entity response includes a `permissions` object describing what the authenticated user can do. This is server-computed metadata — the SDK exposes it but never duplicates the authorization logic (see analysis Gap 11).
 
 ```json
 {
   "id": "tsk-abc",
   "title": "Add auth endpoint",
   "status": "todo",
-  "_permissions": {
+  "permissions": {
     "can_edit": true,
     "can_delete": false,
     "available_actions": ["claim", "block", "defer", "cancel"]
@@ -392,7 +336,7 @@ The shape varies by entity type:
 
 ---
 
-### 1.3 Null Contract
+### 1.4 Null Contract
 
 - Nullable references are JSON `null`, never absent, never empty objects
 - Every field is always present in the response
@@ -407,7 +351,7 @@ The shape varies by entity type:
 }
 ```
 
-### 1.4 Error Contract
+### 1.5 Error Contract
 
 All v2 errors use one format:
 
@@ -529,7 +473,31 @@ Contract-first would generate SDKs from the spec automatically. But generated SD
 
 The Stripe pattern — hand-crafted SDKs validated against a generated spec — gives the best of both: ergonomic developer experience AND contract-enforced consistency.
 
-### 2.3 Global Conventions
+### 2.3 Field Naming: snake_case in Both SDKs
+
+The v2 API uses `snake_case` for all field names. Both SDKs preserve snake_case rather than converting to camelCase (TypeScript convention).
+
+**Rationale:**
+- Consistency: the SDK field names match what you see in the browser network tab and API docs
+- No mapping layer: a camelCase transform is a whole layer that can drift and introduces debugging confusion
+- Precedent: GitHub's Octokit SDK uses snake_case matching the API
+- Simplicity over convention: snake_case works in TypeScript, it's just not the usual style
+
+```typescript
+// TypeScript SDK uses snake_case (matches API)
+task.claimed_by?.name;    // not task.claimedBy
+task.created_at;          // not task.createdAt
+task.project.name;        // same in both languages
+```
+
+```python
+# Python SDK uses snake_case (natural)
+task.claimed_by.name
+task.created_at
+task.project.name
+```
+
+### 2.4 Global Conventions
 
 | Convention | v2 Rule |
 |-----------|---------|
@@ -545,7 +513,7 @@ The Stripe pattern — hand-crafted SDKs validated against a generated spec — 
 | **Idempotency** | `Idempotency-Key` header honored on all POST mutations |
 | **Content type** | JSON only (`application/json`) |
 
-### 2.3 Entity Response Shapes
+### 2.5 Entity Response Shapes
 
 #### Task (v2)
 
@@ -584,7 +552,7 @@ The Stripe pattern — hand-crafted SDKs validated against a generated spec — 
   "execution_summary": null,
   "created_at": "2026-04-03T09:00:00Z",
   "updated_at": "2026-04-03T10:00:00Z",
-  "_permissions": {
+  "permissions": {
     "can_edit": true,
     "can_delete": false,
     "available_actions": ["complete", "fail", "block"]
@@ -625,7 +593,7 @@ The Stripe pattern — hand-crafted SDKs validated against a generated spec — 
   "created_by": {"type": "user", "id": "42", "username": "jdoe"},
   "created_at": "2026-03-01T00:00:00Z",
   "updated_at": "2026-04-03T10:00:00Z",
-  "_permissions": {
+  "permissions": {
     "can_edit": true,
     "can_delete": false,
     "can_archive": true,
@@ -655,7 +623,7 @@ The Stripe pattern — hand-crafted SDKs validated against a generated spec — 
   "created_by": {"type": "user", "id": "42", "username": "jdoe"},
   "created_at": "2026-03-15T00:00:00Z",
   "updated_at": "2026-04-03T10:00:00Z",
-  "_permissions": {
+  "permissions": {
     "can_edit": true,
     "can_delete": false,
     "can_archive": true,
@@ -683,7 +651,7 @@ The Stripe pattern — hand-crafted SDKs validated against a generated spec — 
   "created_by": {"type": "user", "id": "42", "username": "jdoe"},
   "created_at": "2026-03-15T00:00:00Z",
   "updated_at": "2026-04-03T10:00:00Z",
-  "_permissions": {
+  "permissions": {
     "can_edit": true,
     "can_delete": false,
     "can_activate": true,
@@ -822,7 +790,125 @@ The Stripe pattern — hand-crafted SDKs validated against a generated spec — 
 
 ---
 
-### 2.4 SSE Event Payload (v2)
+#### Membership (v2)
+
+`GET /v2/projects/{id}/members/`
+
+```json
+{
+  "results": [
+    {
+      "id": 1,
+      "user": {"type": "user", "id": "42", "username": "jdoe"},
+      "project": {"id": "xY9...", "name": "Auth System"},
+      "role": "owner",
+      "created_at": "2026-03-01T00:00:00Z"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+
+**Change from v1:** `user_id` and `project_id` (bare IDs) → `user` (ActorRef) and `project` (ProjectRef).
+
+---
+
+#### Lock (v2)
+
+`GET /v2/locks/`
+
+```json
+{
+  "results": [
+    {
+      "id": 1,
+      "project": {"id": "xY9...", "name": "Auth System"},
+      "role": "architect",
+      "user": {"type": "user", "id": "42", "username": "jdoe"},
+      "session_id": "sess-abc",
+      "created_at": "2026-04-03T10:00:00Z"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+
+**Change from v1:** `project_id` (bare string) → `project` (ProjectRef). `user` (username string) → `user` (ActorRef).
+
+---
+
+#### ChannelMapping (v2)
+
+`GET /v2/channel-mappings/`
+
+```json
+{
+  "results": [
+    {
+      "id": 1,
+      "provider": "slack",
+      "channel_id": "C1234567890",
+      "channel_name": "#dev",
+      "project": {"id": "xY9...", "name": "Auth System"},
+      "created_at": "2026-04-03T10:00:00Z"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+
+**Change from v1:** `project_id` (bare string) → `project` (ProjectRef).
+
+---
+
+#### User Detail (v2)
+
+`GET /v2/users/{id}/`
+
+```json
+{
+  "id": 42,
+  "username": "jdoe",
+  "user_type": "human",
+  "is_staff": false,
+  "is_active": true,
+  "date_joined": "2026-01-01T00:00:00Z",
+  "last_login": "2026-04-03T09:00:00Z",
+  "memberships": [
+    {
+      "project": {"id": "xY9...", "name": "Auth System"},
+      "role": "owner"
+    }
+  ]
+}
+```
+
+**Change from v1:** `project_id` in memberships (bare string) → `project` (ProjectRef).
+
+---
+
+#### Link Write Shape (v2)
+
+`POST /v2/links/` — write accepts flat IDs (read returns nested objects):
+
+```json
+{
+  "source_type": "task",
+  "source_id": "tsk-abc",
+  "target_type": "task",
+  "target_id": "tsk-def",
+  "link_type": "depends_on"
+}
+```
+
+Response returns the Link entity with embedded `source` and `target` objects (see Link v2 shape above).
+
+---
+
+### 2.6 SSE Event Payload (v2)
 
 Events enriched with display data:
 
@@ -891,18 +977,19 @@ vtf.bulk        # BulkManager
 
 ### 3.3 Entity Types
 
-All entities are **Pydantic v2 models** with `frozen=True` (immutable). Mutations return new instances. Construction from API response dicts uses `model_validate()` — Pydantic handles recursive parsing, null fields, and discriminated unions automatically.
+All entities inherit from `VtfModel` (Section 1.1) — frozen, forward-compatible Pydantic v2 models. Mutations return new instances. Construction from API response dicts uses `model_validate()` — Pydantic handles recursive parsing, null fields, and discriminated unions automatically.
+
+#### Task (the most complex entity — shown in full)
 
 ```python
 from datetime import datetime, timedelta
-from pydantic import BaseModel
 
-class TaskPermissions(BaseModel, frozen=True):
+class TaskPermissions(VtfModel):
     can_edit: bool
     can_delete: bool
     available_actions: list[str]
 
-class Task(BaseModel, frozen=True):
+class Task(VtfModel):
     id: str
     title: str
     description: str
@@ -933,23 +1020,141 @@ class Task(BaseModel, frozen=True):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"extra": "ignore"}  # forward-compatible: ignore unknown fields
+    # Expandable collections (?expand=links,reviews,events,traces)
+    # None = not requested. [] = requested but empty.
+    links: list['Link'] | None = None
+    reviews: list['Review'] | None = None
+    events: list['TaskEvent'] | None = None
+    traces: list[dict] | None = None
 
     def __str__(self) -> str:
         return self.title
+```
 
-# Construction from API response — one line, fully validated:
-# task = Task.model_validate(response_dict)
-# task.project.name → "Auth System" (ProjectRef, parsed automatically)
-# task.claimed_by → AgentActor or UserActor (discriminated, parsed automatically)
-# task.requires[0].title → "Create user model" (list of TaskRef, parsed automatically)
+**Usage:**
+```python
+task = Task.model_validate(response_dict)
+task.project.name           # "Auth System" — ProjectRef, parsed automatically
+str(task.claimed_by)        # "executor-1" — AgentActor.__str__()
+task.requires[0].title      # "Create user model" — list[TaskRef]
+task.reviews                # None (not expanded) or list[Review] (expanded)
+```
+
+#### Other Entities (same pattern, key fields listed)
+
+```python
+class Project(VtfModel):
+    id: str
+    name: str
+    description: str
+    status: str
+    repo_url: str
+    default_branch: str
+    tags: list[str]
+    owner: ActorRef
+    created_by: ActorRef
+    permissions: 'ProjectPermissions'
+    created_at: datetime
+    updated_at: datetime
+
+    def __str__(self) -> str:
+        return self.name
+
+class Workplan(VtfModel):
+    id: str
+    name: str
+    description: str
+    status: str
+    project: ProjectRef
+    owner: ActorRef
+    tags: list[str]
+    target_date: datetime | None
+    default_needs_review_before_start: bool | None
+    default_needs_review_on_completion: bool | None
+    created_by: ActorRef
+    permissions: 'WorkplanPermissions'
+    created_at: datetime
+    updated_at: datetime
+
+    def __str__(self) -> str:
+        return self.name
+
+class Milestone(VtfModel):
+    id: str
+    name: str
+    description: str
+    status: str
+    order: int
+    workplan: WorkplanRef
+    default_needs_review_before_start: bool | None
+    default_needs_review_on_completion: bool | None
+    created_by: ActorRef
+    permissions: 'MilestonePermissions'
+    created_at: datetime
+    updated_at: datetime
+
+    def __str__(self) -> str:
+        return self.name
+
+class Agent(VtfModel):
+    id: str
+    name: str
+    tags: list[str]
+    status: str
+    effective_status: str
+    last_heartbeat: datetime | None
+    pod_name: str
+    registered_at: datetime
+    current_task: TaskRef | None
+    tasks_completed: int
+    tasks_failed: int
+    created_at: datetime
+    updated_at: datetime
+
+    def __str__(self) -> str:
+        return self.name
+
+class Review(VtfModel):
+    id: str
+    task: TaskRef
+    decision: str
+    reason: str
+    reviewer: ActorRef
+    reviewer_type: str
+    created_at: datetime
+    updated_at: datetime
+
+class Note(VtfModel):
+    id: str
+    task: TaskRef
+    text: str
+    actor: ActorRef
+    created_at: datetime
+
+class Link(VtfModel):
+    id: str
+    source: InternalLinkRef
+    target: LinkRef
+    link_type: str
+    metadata: dict | None
+    created_by: ActorRef
+    created_at: datetime
+    updated_at: datetime
+
+class TaskEvent(VtfModel):
+    id: str
+    task: TaskRef
+    event_type: str
+    data: dict
+    triggered_by: ActorRef
+    timestamp: datetime
 ```
 
 **Why Pydantic over dataclasses:**
 - `model_validate(dict)` replaces manual `from_dict()` with recursive nested parsing
 - Discriminated unions (ActorRef, LinkRef) handled natively via `Discriminator`
 - Validation on construction catches API contract violations immediately
-- `model_config = {"extra": "ignore"}` enables forward compatibility — unknown fields from newer API versions don't crash older SDK versions
+- `VtfModel` base provides `extra="ignore"` for forward compatibility everywhere
 - `model_dump()` serializes back to dict for debugging and testing
 - `frozen=True` enforces immutability (same as frozen dataclasses)
 
@@ -999,7 +1204,25 @@ class TaskManager:
                       reviewer_id: str, reviewer_type: str = "agent") -> Review: ...
 ```
 
-### 3.5 Pagination
+### 3.5 Async Manager API
+
+`AsyncVtfClient` provides the same manager interface as `VtfClient`, with `async` methods:
+
+```python
+# AsyncTaskManager mirrors TaskManager exactly, but all methods are async
+vtf = AsyncVtfClient(url="...", token="...")
+task = await vtf.tasks.get(task_id)
+task = await vtf.tasks.claim(task_id, agent_id=agent_id)
+tasks = await vtf.tasks.list(status="doing")
+
+# list_all returns an async iterator
+async for task in vtf.tasks.list_all(status="doing"):
+    print(task.title)
+```
+
+Both sync and async managers share entity construction logic via `BaseTaskManager._build_task()` — only the HTTP transport differs (see analysis Gap 2).
+
+### 3.6 Pagination
 
 ```python
 from typing import Generic, TypeVar
@@ -1014,7 +1237,7 @@ class PagedResult(BaseModel, Generic[T], frozen=True):
     previous_cursor: str | None = None
 ```
 
-### 3.6 Exception Hierarchy
+### 3.7 Exception Hierarchy
 
 Exceptions are plain Python classes (not Pydantic models) — they extend `Exception` and carry structured context from the API error response.
 
@@ -1123,13 +1346,19 @@ const TaskSchema = z.object({
   milestone: MilestoneRefSchema.nullable(),
   labels: z.array(z.string()),
   acceptance_criteria: z.array(z.string()),
+  needs_review_before_start: z.boolean().nullable(),
+  needs_review_on_completion: z.boolean().nullable(),
+  review_return_to: z.string().nullable(),
   requires: z.array(TaskRefSchema),
-  claimed_by: ActorRefSchema.nullable(),
   assigned_to: ActorRefSchema.nullable(),
-  created_by: ActorRefSchema.nullable(),
+  claimed_by: ActorRefSchema.nullable(),
   claimed_at: z.string().nullable(),
+  claim_timeout: z.string().nullable(),       // ISO 8601 duration
+  claim_expires_at: z.string().nullable(),
+  created_by: ActorRefSchema.nullable(),
   spec: z.string(),
   agent_model: z.string(),
+  test_command: z.record(z.unknown()),
   judge: z.boolean(),
   isolation: z.string(),
   retry_count: z.number(),
@@ -1137,6 +1366,11 @@ const TaskSchema = z.object({
   permissions: TaskPermissionsSchema,
   created_at: z.string(),
   updated_at: z.string(),
+  // Expandable collections (null = not requested, [] = requested but empty)
+  links: z.array(z.lazy(() => LinkSchema)).nullable().default(null),
+  reviews: z.array(z.lazy(() => ReviewSchema)).nullable().default(null),
+  events: z.array(z.lazy(() => TaskEventSchema)).nullable().default(null),
+  traces: z.array(z.record(z.unknown())).nullable().default(null),
 }).passthrough();  // forward-compatible: ignore unknown fields
 
 type Task = z.infer<typeof TaskSchema>;
@@ -1217,7 +1451,54 @@ task.project.name;  // string — guaranteed at parse time, not render time
 - `@vtf/sdk`: `zod>=3.22`
 - `@vtf/sdk-react`: `@vtf/sdk`, `@tanstack/react-query>=5.0`, `react>=18`
 
-### 4.3 Client
+### 4.3 Core Manager API (framework-agnostic)
+
+The core `@vtf/sdk` package provides managers with the same interface as the Python SDK. These are `async` (returning Promises) since TypeScript HTTP is inherently async:
+
+```typescript
+class TaskManager {
+  // Read
+  get(id: string, options?: { expand?: string[] }): Promise<Task>;
+  list(filters?: TaskFilters): Promise<PagedResult<Task>>;
+  listAll(filters?: TaskFilters): AsyncIterable<Task>;
+  claimable(filters?: { tags?: string[]; project_id?: string }): Promise<PagedResult<Task>>;
+
+  // State transitions (return updated Task)
+  submit(id: string): Promise<Task>;
+  claim(id: string, params: { agent_id: string }): Promise<Task>;
+  unclaim(id: string): Promise<Task>;
+  complete(id: string): Promise<Task>;
+  fail(id: string): Promise<Task>;
+  recover(id: string, params: { target: string }): Promise<Task>;
+  block(id: string, params?: { reason?: string }): Promise<Task>;
+  unblock(id: string): Promise<Task>;
+  defer(id: string): Promise<Task>;
+  cancel(id: string): Promise<Task>;
+  heartbeat(id: string): Promise<void>;
+
+  // Write
+  create(params: CreateTaskParams): Promise<Task>;
+  update(id: string, params: Partial<UpdateTaskParams>): Promise<Task>;
+  delete(id: string): Promise<void>;
+
+  // Notes
+  listNotes(taskId: string): Promise<PagedResult<Note>>;
+  addNote(taskId: string, params: { text: string }): Promise<Note>;
+
+  // Reviews
+  listReviews(taskId: string): Promise<PagedResult<Review>>;
+  submitReview(taskId: string, params: SubmitReviewParams): Promise<Review>;
+}
+```
+
+The React hooks in `@vtf/sdk-react` wrap these managers — they don't contain their own HTTP logic:
+
+```typescript
+// useTask internally calls: vtfClient.tasks.get(id)
+// useClaimTask internally calls: vtfClient.tasks.claim(id, params)
+```
+
+### 4.4 Client
 
 ```typescript
 import { VtfClient } from '@vtf/sdk';
@@ -1237,7 +1518,7 @@ vtf.milestones  // MilestoneManager
 vtf.agents      // AgentManager
 ```
 
-### 4.4 React Hooks
+### 4.5 React Hooks
 
 ```typescript
 import { VtfProvider, useTask, useTasks, useClaimTask, useVtfEvents } from '@vtf/sdk-react';
