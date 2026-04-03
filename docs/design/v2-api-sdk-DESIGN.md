@@ -1051,45 +1051,173 @@ class ServiceUnavailable(VtfError): ...
 
 ## 4. TypeScript SDK Specification
 
-### 4.1 Package Structure
+### 4.1 Runtime Validation with Zod
+
+TypeScript interfaces are compile-time only — erased at runtime. If the API returns an unexpected shape, the error surfaces at render time, not parse time. **Zod** provides runtime validation for TypeScript, equivalent to Pydantic in Python.
+
+Zod schemas define the runtime validation AND infer the TypeScript types — no duplication:
+
+```typescript
+import { z } from 'zod';
+
+// ── Reference schemas ──────────────────────────────────
+const ProjectRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+type ProjectRef = z.infer<typeof ProjectRefSchema>;
+
+const WorkplanRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+type WorkplanRef = z.infer<typeof WorkplanRefSchema>;
+
+const MilestoneRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(['pending', 'active', 'completed']),
+});
+type MilestoneRef = z.infer<typeof MilestoneRefSchema>;
+
+const TaskRefSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+});
+type TaskRef = z.infer<typeof TaskRefSchema>;
+
+// ── Discriminated unions ───────────────────────────────
+const AgentActorSchema = z.object({
+  type: z.literal('agent'),
+  id: z.string(),
+  name: z.string(),
+});
+
+const UserActorSchema = z.object({
+  type: z.literal('user'),
+  id: z.string(),
+  username: z.string(),
+});
+
+const ActorRefSchema = z.discriminatedUnion('type', [
+  AgentActorSchema,
+  UserActorSchema,
+]);
+type ActorRef = z.infer<typeof ActorRefSchema>;
+
+// ── Full entity schema ─────────────────────────────────
+const TaskPermissionsSchema = z.object({
+  can_edit: z.boolean(),
+  can_delete: z.boolean(),
+  available_actions: z.array(z.string()),
+});
+
+const TaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  status: z.string(),
+  project: ProjectRefSchema,
+  workplan: WorkplanRefSchema.nullable(),
+  milestone: MilestoneRefSchema.nullable(),
+  labels: z.array(z.string()),
+  acceptance_criteria: z.array(z.string()),
+  requires: z.array(TaskRefSchema),
+  claimed_by: ActorRefSchema.nullable(),
+  assigned_to: ActorRefSchema.nullable(),
+  created_by: ActorRefSchema.nullable(),
+  claimed_at: z.string().nullable(),
+  spec: z.string(),
+  agent_model: z.string(),
+  judge: z.boolean(),
+  isolation: z.string(),
+  retry_count: z.number(),
+  execution_summary: z.record(z.unknown()).nullable(),
+  permissions: TaskPermissionsSchema,
+  created_at: z.string(),
+  updated_at: z.string(),
+}).passthrough();  // forward-compatible: ignore unknown fields
+
+type Task = z.infer<typeof TaskSchema>;
+
+// Usage — one line, validated at runtime:
+const task = TaskSchema.parse(apiResponseJson);
+task.project.name;  // string — guaranteed at parse time, not render time
+```
+
+**The Pydantic ↔ Zod parallel:**
+
+| Concern | Python (Pydantic) | TypeScript (Zod) |
+|---------|-------------------|------------------|
+| Schema definition | `class ProjectRef(BaseModel)` | `const ProjectRefSchema = z.object({...})` |
+| Type derivation | Class IS the type | `type ProjectRef = z.infer<typeof ProjectRefSchema>` |
+| Parsing | `Task.model_validate(dict)` | `TaskSchema.parse(json)` |
+| Discriminated unions | `Discriminator("type")` | `z.discriminatedUnion("type", [...])` |
+| Nullable fields | `field: Type \| None` | `Schema.nullable()` |
+| Forward compatibility | `extra = "ignore"` | `.passthrough()` |
+| Validation errors | `ValidationError` | `ZodError` with path + message |
+
+### 4.2 Package Structure
 
 ```
 @vtf/sdk/
+  package.json              # zod, dependencies
   src/
-    index.ts              # VtfClient
-    client.ts             # Client implementation
-    entities.ts           # Task, Project, Workplan, etc.
-    refs.ts               # ProjectRef, WorkplanRef, etc.
-    managers.ts           # TaskManager, ProjectManager, etc.
-    exceptions.ts         # Error class hierarchy
-    auth.ts               # Auth strategies
-    pagination.ts         # PagedResult
-    types.ts              # TaskStatus, MilestoneStatus, etc.
+    index.ts                # VtfClient
+    client.ts               # Client implementation
+    schemas/
+      refs.ts               # Zod schemas for all ref types
+      task.ts               # TaskSchema, TaskPermissionsSchema
+      project.ts            # ProjectSchema
+      workplan.ts           # WorkplanSchema
+      milestone.ts          # MilestoneSchema
+      agent.ts              # AgentSchema
+      review.ts             # ReviewSchema
+      note.ts               # NoteSchema
+      link.ts               # LinkSchema
+      event.ts              # TaskEventSchema
+      errors.ts             # ApiErrorSchema
+    types.ts                # z.infer<> type exports (Task, Project, etc.)
+    managers.ts             # TaskManager, ProjectManager, etc.
+    exceptions.ts           # VtfError class hierarchy
+    auth.ts                 # Auth strategies
+    pagination.ts           # PagedResult schema
+    events.ts               # SSE event emitter (framework-agnostic)
   testing/
-    index.ts              # createMockClient, factories
-    mock-client.ts
-    factories.ts
+    index.ts                # createMockClient, factories
+    mock-client.ts          # In-memory implementation
+    factories.ts            # buildTask, buildProject, etc.
 
 @vtf/sdk-react/
+  package.json              # @vtf/sdk, @tanstack/react-query
   src/
-    index.ts              # hooks
+    index.ts                # hooks, provider
+    provider.ts             # VtfProvider (React context with VtfClient)
     hooks/
-      useTask.ts
-      useTasks.ts
-      useProject.ts
-      useWorkplan.ts
-      useMilestone.ts
-      useAgents.ts
-      useVtfEvents.ts     # SSE → React Query cache bridge
+      useTask.ts            # single task by ID
+      useTasks.ts           # task list with filters
+      useTasksPage.ts       # paginated task list
+      useProject.ts         # single project by ID
+      useProjects.ts        # project list
+      useWorkplan.ts        # single workplan by ID
+      useMilestone.ts       # single milestone by ID
+      useAgents.ts          # agent list
+      useVtfEvents.ts       # SSE → React Query cache bridge
     mutations/
-      useClaimTask.ts
+      useClaimTask.ts       # with optimistic update
       useSubmitTask.ts
       useCompleteTask.ts
+      useCreateTask.ts
+      useUpdateTask.ts
       ...
-    provider.ts           # VtfProvider (React context)
 ```
 
-### 4.2 Client
+**Dependencies:**
+- `@vtf/sdk`: `zod>=3.22`
+- `@vtf/sdk-react`: `@vtf/sdk`, `@tanstack/react-query>=5.0`, `react>=18`
+
+### 4.3 Client
 
 ```typescript
 import { VtfClient } from '@vtf/sdk';
@@ -1098,6 +1226,8 @@ const vtf = new VtfClient({
   baseUrl: 'https://vtf.example.com',
   token: '...',
   // or: credentials: 'include' (for session auth in browser)
+  retry: { maxRetries: 3, backoffFactor: 0.5, retryOn: [429, 503] },
+  timeout: 30_000,  // ms
 });
 
 vtf.projects    // ProjectManager
@@ -1107,32 +1237,142 @@ vtf.milestones  // MilestoneManager
 vtf.agents      // AgentManager
 ```
 
-### 4.3 React Hooks
+### 4.4 React Hooks
 
 ```typescript
 import { VtfProvider, useTask, useTasks, useClaimTask, useVtfEvents } from '@vtf/sdk-react';
 
-// Provider wraps the app
+// Provider wraps the app — injects VtfClient into React context
 <VtfProvider client={vtf}>
   <App />
 </VtfProvider>
 
-// Read hooks (built on React Query)
+// Read hooks (built on React Query, responses validated via Zod)
 const { data: task, isLoading } = useTask(taskId);
+task?.project.name;  // string — Zod-validated at fetch time
+
 const { data: tasks } = useTasks({ status: 'doing', projectId });
 const { data: project } = useProject(projectId);
+
+// Paginated hooks
+const { data, fetchNextPage, hasNextPage } = useInfiniteTasks({ status: 'doing' });
 
 // Mutation hooks (with optimistic updates)
 const { mutate: claim } = useClaimTask();
 claim({ taskId, agentId });
 
 // SSE integration (auto-updates React Query cache)
-useVtfEvents({ projectId });  // subscribe to project events
+useVtfEvents({ projectId });  // subscribe to project events, merge into cache
 ```
 
 ---
 
-## 5. Implementation Phases
+## 5. Cross-Cutting Concerns (Both SDKs)
+
+These apply to both the Python and TypeScript SDKs.
+
+### 5.1 Retry with Exponential Backoff
+
+Network failures and transient server errors (429, 503) are retried automatically with exponential backoff. Retries are configurable at client construction time.
+
+**Python:**
+```python
+vtf = VtfClient(
+    url="...",
+    token="...",
+    retry=RetryConfig(
+        max_retries=3,
+        backoff_factor=0.5,   # delays: 0.5s, 1.0s, 2.0s
+        retry_on_status=[429, 503],
+    ),
+)
+```
+
+**TypeScript:**
+```typescript
+const vtf = new VtfClient({
+  baseUrl: '...',
+  token: '...',
+  retry: { maxRetries: 3, backoffFactor: 0.5, retryOn: [429, 503] },
+});
+```
+
+**Rules:**
+- Only retry idempotent requests (GET) and requests with `Idempotency-Key` header
+- Non-idempotent POST without Idempotency-Key: do NOT retry (could cause duplicates)
+- Respect `Retry-After` header from 429 responses
+- Max total retry time capped (e.g., 30s) to prevent infinite waits
+
+### 5.2 Request Timeout
+
+Configurable per-client, with a sensible default:
+
+```python
+vtf = VtfClient(url="...", token="...", timeout=30.0)  # seconds
+```
+
+```typescript
+const vtf = new VtfClient({ baseUrl: '...', token: '...', timeout: 30_000 });  // ms
+```
+
+Default: 30 seconds. Heartbeat endpoint may need a shorter timeout (5s).
+
+### 5.3 User-Agent Header
+
+Every SDK request includes a User-Agent header for server-side debugging and traffic analysis:
+
+```
+User-Agent: vtf-sdk-python/0.1.0
+User-Agent: vtf-sdk-ts/0.1.0
+```
+
+Helps the server distinguish SDK traffic from raw API calls, identify SDK version distribution, and debug consumer-specific issues.
+
+### 5.4 Request Logging
+
+Structured logging for debugging API calls — off by default, enabled via configuration.
+
+**Python:**
+```python
+import logging
+logging.getLogger("vtf_sdk").setLevel(logging.DEBUG)
+
+# Output:
+# vtf_sdk: POST /v2/tasks/tsk-abc/claim/ → 200 (143ms)
+# vtf_sdk: GET /v2/tasks/?status=doing&project_id=xY9... → 200 (89ms) [23 results]
+```
+
+**TypeScript:**
+```typescript
+const vtf = new VtfClient({ baseUrl: '...', token: '...', debug: true });
+
+// Console output:
+// [vtf-sdk] POST /v2/tasks/tsk-abc/claim/ → 200 (143ms)
+```
+
+Logs include: method, path, status code, duration. Request/response bodies are NOT logged by default (may contain sensitive data). A `verbose` level can be enabled to include bodies.
+
+### 5.5 py.typed Marker (Python SDK)
+
+The Python SDK includes an empty `vtf_sdk/py.typed` file for PEP 561 compliance. This allows type checkers (`mypy`, `pyright`) to recognize the SDK's type annotations when installed as a package.
+
+### 5.6 SDK Version Reporting
+
+Both SDKs expose their version programmatically:
+
+```python
+import vtf_sdk
+vtf_sdk.__version__  # "0.1.0"
+```
+
+```typescript
+import { VERSION } from '@vtf/sdk';
+console.log(VERSION);  // "0.1.0"
+```
+
+---
+
+## 6. Implementation Phases
 
 Each phase must pass all tests before the next begins.
 
@@ -1157,40 +1397,43 @@ Each phase must pass all tests before the next begins.
 
 ### Phase 2: Python SDK
 
-**Scope:** vtf-sdk-python package with entity types, managers, auth, pagination.
+**Scope:** vtf-sdk-python package with Pydantic entity types, managers, auth, pagination.
 
 **Deliverables:**
 - `vtf-sdk-python/` package (monorepo subfolder initially)
-- Entity dataclasses matching Section 1 contracts
-- Sync (`VtfClient`) and async (`AsyncVtfClient`) client implementations
+- Pydantic v2 entity models matching Section 1 contracts
+- Sync (`VtfClient`) and async (`AsyncVtfClient`) client implementations via httpx
 - Manager API per Section 3.4
 - Exception hierarchy per Section 3.6
+- Retry with backoff, timeout, User-Agent, request logging (Section 5)
 - Testing utilities (MockVtfClient, factories, Protocol)
-- Unit tests: entity construction from v2 response dicts
+- `py.typed` marker for PEP 561 compliance
+- Unit tests: `model_validate()` from v2 response dicts, discriminated union dispatch
 - Integration tests: SDK against running v2 API (full lifecycle: create → claim → complete)
-- **OpenAPI alignment test:** CI fetches `/v2/schema/`, verifies every SDK entity type matches the spec (Stripe pattern)
+- **OpenAPI alignment test:** CI fetches `/v2/schema/`, verifies every Pydantic model matches the spec
 
 ### Phase 3: TypeScript SDK
 
-**Scope:** @vtf/sdk and @vtf/sdk-react packages.
+**Scope:** @vtf/sdk (Zod schemas + client) and @vtf/sdk-react (hooks + SSE).
 
 **Deliverables:**
-- `@vtf/sdk` — core client, entity types, managers, event emitter
-- `@vtf/sdk-react` — React Query hooks, SSE → cache bridge, mutation hooks with optimistic updates
+- `@vtf/sdk` — Zod schemas, inferred types, client, managers, event emitter
+- `@vtf/sdk-react` — React Query hooks, SSE → cache bridge, mutation hooks with optimistic updates, VtfProvider
+- Retry with backoff, timeout, User-Agent, request logging (Section 5)
 - Testing utilities (createMockClient, factories)
-- Unit tests: entity construction, type safety
+- Unit tests: `Schema.parse()` from v2 response JSON, discriminated union dispatch
 - Integration tests: SDK against running v2 API
-- React component tests: hooks return correct entity types
-- **OpenAPI alignment test:** CI fetches `/v2/schema/`, verifies TypeScript types match the spec
+- React component tests: hooks return Zod-validated entity types
+- **OpenAPI alignment test:** CI fetches `/v2/schema/`, verifies Zod schemas match the spec
 
 ### Phase 4: Consumer Migration
 
 **Scope:** Migrate each consumer from raw v1 to SDK + v2, one at a time.
 
-- 4a: CLI → vtf-sdk-python
-- 4b: vafi controller → vtf-sdk-python (async)
+- 4a: CLI → vtf-sdk-python (Pydantic entities, sync VtfClient)
+- 4b: vafi controller → vtf-sdk-python (Pydantic entities, async AsyncVtfClient)
 - 4c: MCP tools → v2 serializers (ORM + shared serializer, not SDK)
-- 4d: React SPA → @vtf/sdk-react
+- 4d: React SPA → @vtf/sdk-react (Zod-validated entities, React Query hooks)
 - Each migration verified by existing E2E tests + new SDK-specific tests
 
 ### Phase 5: Deprecate v1
