@@ -7,6 +7,7 @@ manage task lifecycle. Proves the full MCP tool chain works for non-executor rol
 import json
 
 import pytest
+from django.contrib.auth.models import User
 
 from events.models import TaskEvent
 from mcp_server.tools.board import vtf_board_overview
@@ -105,6 +106,7 @@ def test_supervisor_board_to_review_workflow():
     # ------------------------------------------------------------------
     # Step 4: vtf_review_task — supervisor approves the task
     # ------------------------------------------------------------------
+    User.objects.create_user(username="supervisor-agent")
     review_result = json.loads(
         vtf_review_task(
             task_id=task.id,

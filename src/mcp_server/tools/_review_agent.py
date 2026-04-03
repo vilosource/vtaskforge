@@ -79,11 +79,13 @@ def vtf_review_task(
         )
 
     try:
+        from django.contrib.auth.models import User
+        reviewer_user = User.objects.filter(username=reviewer_id).first()
         result = submit_review(
             task_id=task_id,
             decision=decision,
             reason=reason,
-            reviewer_id=reviewer_id,
+            reviewer=reviewer_user,
             reviewer_type=reviewer_type,
         )
     except ReviewError as e:

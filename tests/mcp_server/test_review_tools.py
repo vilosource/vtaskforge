@@ -13,12 +13,22 @@ from tests.factories import MilestoneFactory, ProjectFactory, TaskFactory, Workp
 
 
 # ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mcp_reviewer(db):
+    """Default MCP reviewer user (matches vtf_review_task default reviewer_id)."""
+    return User.objects.create_user(username="mcp-reviewer")
+
+
+# ---------------------------------------------------------------------------
 # test_review_approve_start — pending_start_review → todo
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
-def test_review_approve_start():
+def test_review_approve_start(mcp_reviewer):
     """Approving a task in pending_start_review moves it to todo."""
     task = TaskFactory(status="pending_start_review")
 
@@ -35,7 +45,7 @@ def test_review_approve_start():
 
 
 @pytest.mark.django_db
-def test_review_approve_completion():
+def test_review_approve_completion(mcp_reviewer):
     """Approving a task in pending_completion_review moves it to done."""
     task = TaskFactory(status="pending_completion_review")
 
@@ -52,7 +62,7 @@ def test_review_approve_completion():
 
 
 @pytest.mark.django_db
-def test_review_changes_requested():
+def test_review_changes_requested(mcp_reviewer):
     """changes_requested with a reason moves task to changes_requested status."""
     task = TaskFactory(status="pending_completion_review")
 
@@ -74,7 +84,7 @@ def test_review_changes_requested():
 
 
 @pytest.mark.django_db
-def test_review_not_in_review_status_error():
+def test_review_not_in_review_status_error(mcp_reviewer):
     """Returns actionable error when task is not in a review status."""
     task = TaskFactory(status="doing")
 
@@ -92,7 +102,7 @@ def test_review_not_in_review_status_error():
 
 
 @pytest.mark.django_db
-def test_review_includes_milestone_progress():
+def test_review_includes_milestone_progress(mcp_reviewer):
     """Response includes milestone_progress when task belongs to a milestone."""
     project = ProjectFactory()
     workplan = WorkplanFactory(project=project)
@@ -123,7 +133,7 @@ def test_review_includes_milestone_progress():
 
 
 @pytest.mark.django_db
-def test_review_fuzzy_approve_suggests_approved():
+def test_review_fuzzy_approve_suggests_approved(mcp_reviewer):
     """vtf_review_task(decision='approve') suggests 'approved'."""
     task = TaskFactory(status="pending_completion_review")
 
@@ -134,7 +144,7 @@ def test_review_fuzzy_approve_suggests_approved():
 
 
 @pytest.mark.django_db
-def test_review_fuzzy_no_match_no_suggestion():
+def test_review_fuzzy_no_match_no_suggestion(mcp_reviewer):
     """vtf_review_task(decision='frobnicate') gives no suggestion."""
     task = TaskFactory(status="pending_completion_review")
 
@@ -168,7 +178,8 @@ def test_review_rejected_when_reviewer_is_claimer():
 @pytest.mark.django_db
 def test_review_accepted_when_reviewer_differs_from_claimer():
     """vtf_review_task succeeds when reviewer_id differs from claimed_by."""
-    supervisor_user = User.objects.create_user(username="supervisor")
+    supervisor_user = User.objects.create_user(username="supervisor-diff")
+    judge_user = User.objects.create_user(username="judge-abc")
     task = TaskFactory(status="pending_completion_review", claimed_by=supervisor_user)
 
     result = json.loads(
@@ -182,6 +193,7 @@ def test_review_accepted_when_reviewer_differs_from_claimer():
 @pytest.mark.django_db
 def test_review_allowed_when_no_claimer():
     """vtf_review_task succeeds when task has no claimed_by (e.g., imported tasks)."""
+    anyone_user = User.objects.create_user(username="anyone")
     task = TaskFactory(status="pending_completion_review", claimed_by=None)
 
     result = json.loads(

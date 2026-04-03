@@ -99,7 +99,9 @@ class NoteFactory(factory.django.DjangoModelFactory):
 
     task = factory.SubFactory(TaskFactory)
     text = "Test note"
-    actor_id = "test-actor"
+    actor = factory.LazyFunction(lambda: User.objects.create_user(
+        username=f"note-actor-{generate_nanoid()[:8]}"
+    ))
 
 
 class ReviewFactory(factory.django.DjangoModelFactory):
@@ -108,7 +110,9 @@ class ReviewFactory(factory.django.DjangoModelFactory):
 
     task = factory.SubFactory(TaskFactory)
     decision = "approved"
-    reviewer_id = "test-reviewer"
+    reviewer = factory.LazyFunction(lambda: User.objects.create_user(
+        username=f"reviewer-{generate_nanoid()[:8]}"
+    ))
     reviewer_type = "human"
 
 

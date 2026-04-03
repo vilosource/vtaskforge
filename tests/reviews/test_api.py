@@ -2,6 +2,7 @@
 Tests for Review API endpoints (nested under tasks).
 """
 import pytest
+from django.contrib.auth.models import User
 from rest_framework import status
 
 from reviews.models import Review
@@ -53,6 +54,11 @@ def task_todo(db, milestone, workplan):
     )
 
 
+@pytest.fixture
+def reviewer_user(db):
+    return User.objects.create_user(username="review-api-user")
+
+
 # ---------------------------------------------------------------------------
 # List tests
 # ---------------------------------------------------------------------------
@@ -75,7 +81,6 @@ class TestReviewList:
         ReviewFactory(
             task=task_pending_start,
             decision="approved",
-            reviewer_id="user-1",
         )
         # Force to done state so we can query
         task_pending_start.status = "done"
@@ -89,8 +94,8 @@ class TestReviewList:
         other_task = TaskFactory(
             title="Other Task", milestone=milestone, workplan=workplan, status="pending_start_review"
         )
-        ReviewFactory(task=task_pending_start, decision="approved", reviewer_id="user-1")
-        ReviewFactory(task=other_task, decision="rejected", reviewer_id="user-2")
+        ReviewFactory(task=task_pending_start, decision="approved")
+        ReviewFactory(task=other_task, decision="rejected")
         response = api_client.get(f"/v1/tasks/{task_pending_start.id}/reviews/")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["decision"] == "approved"
@@ -105,7 +110,7 @@ class TestReviewCreateApproved:
     def test_approve_pending_start_review_returns_201(self, api_client, task_pending_start):
         response = api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -113,7 +118,7 @@ class TestReviewCreateApproved:
     def test_approve_pending_start_review_transitions_to_todo(self, api_client, task_pending_start):
         api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         task_pending_start.refresh_from_db()
@@ -124,7 +129,7 @@ class TestReviewCreateApproved:
     ):
         api_client.post(
             f"/v1/tasks/{task_pending_completion.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         task_pending_completion.refresh_from_db()
@@ -133,7 +138,7 @@ class TestReviewCreateApproved:
     def test_approve_creates_review_record(self, api_client, task_pending_start):
         api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert Review.objects.filter(task=task_pending_start, decision="approved").exists()
@@ -141,7 +146,7 @@ class TestReviewCreateApproved:
     def test_approve_response_has_expected_fields(self, api_client, task_pending_start):
         response = api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert "id" in response.data
@@ -153,7 +158,7 @@ class TestReviewCreateApproved:
     def test_approve_response_task_id_matches(self, api_client, task_pending_start):
         response = api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert response.data["task"] == task_pending_start.id
@@ -170,7 +175,7 @@ class TestReviewCreateRejected:
     ):
         api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "rejected", "reviewer_id": "user-1"},
+            {"decision": "rejected"},
             format="json",
         )
         task_pending_start.refresh_from_db()
@@ -181,7 +186,7 @@ class TestReviewCreateRejected:
     ):
         api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "rejected", "reviewer_id": "user-1"},
+            {"decision": "rejected"},
             format="json",
         )
         task_pending_start.refresh_from_db()
@@ -192,7 +197,7 @@ class TestReviewCreateRejected:
     ):
         api_client.post(
             f"/v1/tasks/{task_pending_completion.id}/reviews/",
-            {"decision": "rejected", "reviewer_id": "user-1"},
+            {"decision": "rejected"},
             format="json",
         )
         task_pending_completion.refresh_from_db()
@@ -204,7 +209,7 @@ class TestReviewCreateRejected:
     ):
         api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "changes_requested", "reviewer_id": "user-1"},
+            {"decision": "changes_requested"},
             format="json",
         )
         task_pending_start.refresh_from_db()
@@ -213,7 +218,7 @@ class TestReviewCreateRejected:
     def test_reject_creates_review_record(self, api_client, task_pending_start):
         api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "rejected", "reviewer_id": "user-1", "reason": "Not ready"},
+            {"decision": "rejected", "reason": "Not ready"},
             format="json",
         )
         assert Review.objects.filter(task=task_pending_start, decision="rejected").exists()
@@ -221,7 +226,7 @@ class TestReviewCreateRejected:
     def test_reject_returns_201(self, api_client, task_pending_start):
         response = api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "rejected", "reviewer_id": "user-1"},
+            {"decision": "rejected"},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -236,7 +241,7 @@ class TestReviewCreateValidation:
     def test_returns_400_if_task_not_in_review_state(self, api_client, task_todo):
         response = api_client.post(
             f"/v1/tasks/{task_todo.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -244,7 +249,7 @@ class TestReviewCreateValidation:
     def test_returns_404_if_task_not_found(self, api_client):
         response = api_client.post(
             "/v1/tasks/nonexistent-id/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -252,15 +257,7 @@ class TestReviewCreateValidation:
     def test_requires_decision(self, api_client, task_pending_start):
         response = api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"reviewer_id": "user-1"},
-            format="json",
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-    def test_requires_reviewer_id(self, api_client, task_pending_start):
-        response = api_client.post(
-            f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "approved"},
+            {},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -268,7 +265,7 @@ class TestReviewCreateValidation:
     def test_invalid_decision_value(self, api_client, task_pending_start):
         response = api_client.post(
             f"/v1/tasks/{task_pending_start.id}/reviews/",
-            {"decision": "maybe", "reviewer_id": "user-1"},
+            {"decision": "maybe"},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -276,7 +273,7 @@ class TestReviewCreateValidation:
     def test_400_error_message_includes_current_status(self, api_client, task_todo):
         response = api_client.post(
             f"/v1/tasks/{task_todo.id}/reviews/",
-            {"decision": "approved", "reviewer_id": "user-1"},
+            {"decision": "approved"},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -293,7 +290,6 @@ class TestReviewAppendOnly:
         review = ReviewFactory(
             task=task_pending_start,
             decision="approved",
-            reviewer_id="user-1",
         )
         response = api_client.patch(
             f"/v1/tasks/{task_pending_start.id}/reviews/{review.id}/",
@@ -306,7 +302,6 @@ class TestReviewAppendOnly:
         review = ReviewFactory(
             task=task_pending_start,
             decision="approved",
-            reviewer_id="user-1",
         )
         response = api_client.delete(
             f"/v1/tasks/{task_pending_start.id}/reviews/{review.id}/"

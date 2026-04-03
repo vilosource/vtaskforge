@@ -41,7 +41,6 @@ class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewS
 
         decision = serializer.validated_data["decision"]
         reason = serializer.validated_data.get("reason", "")
-        reviewer_id = serializer.validated_data.get("reviewer_id", "")
         reviewer_type = serializer.validated_data.get("reviewer_type", "human")
 
         try:
@@ -49,7 +48,7 @@ class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewS
                 task_id=task.id,
                 decision=decision,
                 reason=reason,
-                reviewer_id=reviewer_id,
+                reviewer=request.user,
                 reviewer_type=reviewer_type,
             )
         except ReviewError as exc:

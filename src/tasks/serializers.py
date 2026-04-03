@@ -5,10 +5,15 @@ from .models import Note, Task
 
 
 class NoteSerializer(serializers.ModelSerializer):
+    # v1 backward compat: expose as "actor_id" with username string
+    actor_id = serializers.SlugRelatedField(
+        source="actor", slug_field="username", read_only=True, allow_null=True,
+    )
+
     class Meta:
         model = Note
         fields = ["id", "task", "text", "actor_id", "created_at"]
-        read_only_fields = ["id", "task", "created_at"]
+        read_only_fields = ["id", "task", "created_at", "actor_id"]
 
 
 class TaskSerializer(serializers.ModelSerializer):

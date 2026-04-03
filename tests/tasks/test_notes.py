@@ -2,6 +2,7 @@
 Tests for Note model and nested notes API endpoint.
 """
 import pytest
+from django.contrib.auth.models import User
 from rest_framework import status
 
 from tasks.models import Note, Task
@@ -28,8 +29,13 @@ def task(db, milestone, workplan):
 
 
 @pytest.fixture
-def note(db, task):
-    return NoteFactory(task=task, text="First note", actor_id="agent-1")
+def note_user(db):
+    return User.objects.create_user("note-agent-1")
+
+
+@pytest.fixture
+def note(db, task, note_user):
+    return NoteFactory(task=task, text="First note", actor=note_user)
 
 
 # ---------------------------------------------------------------------------
@@ -38,22 +44,22 @@ def note(db, task):
 
 @pytest.mark.django_db
 class TestNoteModel:
-    def test_create_note(self, task):
-        note = NoteFactory(task=task, text="Hello world", actor_id="agent-1")
+    def test_create_note(self, task, note_user):
+        note = NoteFactory(task=task, text="Hello world", actor=note_user)
         assert note.id is not None
         assert len(note.id) == 21
         assert note.task == task
         assert note.text == "Hello world"
-        assert note.actor_id == "agent-1"
+        assert note.actor == note_user
         assert note.created_at is not None
 
-    def test_note_str_truncates(self, task):
+    def test_note_str_truncates(self, task, note_user):
         long_text = "A" * 100
-        note = NoteFactory(task=task, text=long_text, actor_id="agent-1")
+        note = NoteFactory(task=task, text=long_text, actor=note_user)
         assert str(note) == long_text[:50]
 
-    def test_note_str_short_text(self, task):
-        note = NoteFactory(task=task, text="Short", actor_id="agent-1")
+    def test_note_str_short_text(self, task, note_user):
+        note = NoteFactory(task=task, text="Short", actor=note_user)
         assert str(note) == "Short"
 
     def test_cascade_delete(self, task, note):
@@ -62,14 +68,16 @@ class TestNoteModel:
         assert not Note.objects.filter(id=note_id).exists()
 
     def test_ordering_ascending(self, task):
-        note1 = NoteFactory(task=task, text="First", actor_id="agent-1")
-        note2 = NoteFactory(task=task, text="Second", actor_id="agent-2")
+        u1 = User.objects.create_user("note-ord-1")
+        u2 = User.objects.create_user("note-ord-2")
+        note1 = NoteFactory(task=task, text="First", actor=u1)
+        note2 = NoteFactory(task=task, text="Second", actor=u2)
         notes = list(Note.objects.filter(task=task))
         assert notes[0].id == note1.id
         assert notes[1].id == note2.id
 
-    def test_no_updated_at_field(self, task):
-        note = NoteFactory(task=task, text="Test", actor_id="agent-1")
+    def test_no_updated_at_field(self, task, note_user):
+        note = NoteFactory(task=task, text="Test", actor=note_user)
         assert not hasattr(note, "updated_at")
 
 
@@ -92,7 +100,7 @@ class TestNoteList:
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["id"] == note.id
         assert response.data["results"][0]["text"] == note.text
-        assert response.data["results"][0]["actor_id"] == note.actor_id
+        assert response.data["results"][0]["actor_id"] == note.actor.username
 
     def test_list_404_if_task_not_found(self, api_client):
         response = api_client.get("/v1/tasks/nonexistent-task-id/notes/")
@@ -100,15 +108,15 @@ class TestNoteList:
 
     def test_list_only_returns_notes_for_task(self, api_client, milestone, workplan, task):
         other_task = TaskFactory(title="Other Task", milestone=milestone, workplan=workplan)
-        NoteFactory(task=task, text="Task note", actor_id="agent-1")
-        NoteFactory(task=other_task, text="Other note", actor_id="agent-2")
+        NoteFactory(task=task, text="Task note")
+        NoteFactory(task=other_task, text="Other note")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["text"] == "Task note"
 
     def test_list_ordered_ascending(self, api_client, task):
-        NoteFactory(task=task, text="First", actor_id="agent-1")
-        NoteFactory(task=task, text="Second", actor_id="agent-2")
+        NoteFactory(task=task, text="First")
+        NoteFactory(task=task, text="Second")
         response = api_client.get(f"/v1/tasks/{task.id}/notes/")
         assert response.data["results"][0]["text"] == "First"
         assert response.data["results"][1]["text"] == "Second"
@@ -123,7 +131,7 @@ class TestNoteCreate:
     def test_create_returns_201(self, api_client, task):
         response = api_client.post(
             f"/v1/tasks/{task.id}/notes/",
-            {"text": "A note", "actor_id": "agent-1"},
+            {"text": "A note"},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -131,16 +139,27 @@ class TestNoteCreate:
     def test_create_sets_task_from_url(self, api_client, task):
         response = api_client.post(
             f"/v1/tasks/{task.id}/notes/",
-            {"text": "A note", "actor_id": "agent-1"},
+            {"text": "A note"},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["task"] == task.id
 
+    def test_create_sets_actor_from_request_user(self, api_client, task):
+        """actor is server-set from request.user, not from client payload."""
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/notes/",
+            {"text": "A note"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        # api_client is staff user "testuser"
+        assert response.data["actor_id"] == "testuser"
+
     def test_create_persists_note(self, api_client, task):
         api_client.post(
             f"/v1/tasks/{task.id}/notes/",
-            {"text": "Saved note", "actor_id": "agent-1"},
+            {"text": "Saved note"},
             format="json",
         )
         assert Note.objects.filter(task=task, text="Saved note").exists()
@@ -148,7 +167,7 @@ class TestNoteCreate:
     def test_create_404_if_task_not_found(self, api_client):
         response = api_client.post(
             "/v1/tasks/nonexistent-id/notes/",
-            {"text": "A note", "actor_id": "agent-1"},
+            {"text": "A note"},
             format="json",
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -156,15 +175,7 @@ class TestNoteCreate:
     def test_create_requires_text(self, api_client, task):
         response = api_client.post(
             f"/v1/tasks/{task.id}/notes/",
-            {"actor_id": "agent-1"},
-            format="json",
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-    def test_create_requires_actor_id(self, api_client, task):
-        response = api_client.post(
-            f"/v1/tasks/{task.id}/notes/",
-            {"text": "A note"},
+            {},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -172,7 +183,7 @@ class TestNoteCreate:
     def test_create_response_has_id_and_created_at(self, api_client, task):
         response = api_client.post(
             f"/v1/tasks/{task.id}/notes/",
-            {"text": "A note", "actor_id": "agent-1"},
+            {"text": "A note"},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED

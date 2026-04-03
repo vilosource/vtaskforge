@@ -88,7 +88,10 @@ class Task(NanoIDMixin, TimestampMixin):
 class Note(NanoIDMixin):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="notes")
     text = models.TextField()
-    actor_id = models.CharField(max_length=255)
+    actor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="task_notes",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

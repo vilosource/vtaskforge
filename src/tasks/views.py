@@ -518,7 +518,7 @@ class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet
 
     def perform_create(self, serializer):
         task = self.get_task()
-        serializer.save(task=task)
+        serializer.save(task=task, actor=self.request.user)
 
     def create(self, request, *args, **kwargs):
         if self.get_task() is None:

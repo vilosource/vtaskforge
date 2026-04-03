@@ -2,6 +2,7 @@
 Unit tests for reviews.services.submit_review().
 """
 import pytest
+from django.contrib.auth.models import User
 
 from reviews.models import Review
 from reviews.services import ReviewError, submit_review
@@ -52,17 +53,22 @@ def task_todo(db, milestone, workplan):
     )
 
 
+@pytest.fixture
+def reviewer_user(db):
+    return User.objects.create_user(username="reviewer-svc-1")
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_submit_review_approved_start_review(task_pending_start):
+def test_submit_review_approved_start_review(task_pending_start, reviewer_user):
     """approved + pending_start_review transitions task to todo."""
     result = submit_review(
         task_id=task_pending_start.id,
         decision="approved",
-        reviewer_id="user-1",
+        reviewer=reviewer_user,
     )
     task_pending_start.refresh_from_db()
     assert task_pending_start.status == "todo"
@@ -71,12 +77,12 @@ def test_submit_review_approved_start_review(task_pending_start):
 
 
 @pytest.mark.django_db
-def test_submit_review_approved_completion_review(task_pending_completion):
+def test_submit_review_approved_completion_review(task_pending_completion, reviewer_user):
     """approved + pending_completion_review transitions task to done."""
     result = submit_review(
         task_id=task_pending_completion.id,
         decision="approved",
-        reviewer_id="user-1",
+        reviewer=reviewer_user,
     )
     task_pending_completion.refresh_from_db()
     assert task_pending_completion.status == "done"
@@ -84,12 +90,12 @@ def test_submit_review_approved_completion_review(task_pending_completion):
 
 
 @pytest.mark.django_db
-def test_submit_review_changes_requested(task_pending_start):
+def test_submit_review_changes_requested(task_pending_start, reviewer_user):
     """changes_requested sets review_return_to and transitions to changes_requested."""
     result = submit_review(
         task_id=task_pending_start.id,
         decision="changes_requested",
-        reviewer_id="user-1",
+        reviewer=reviewer_user,
         reason="Needs more work",
     )
     task_pending_start.refresh_from_db()
@@ -99,13 +105,13 @@ def test_submit_review_changes_requested(task_pending_start):
 
 
 @pytest.mark.django_db
-def test_submit_review_not_in_review_status_raises(task_todo):
+def test_submit_review_not_in_review_status_raises(task_todo, reviewer_user):
     """Raises ReviewError when task is not in a review status."""
     with pytest.raises(ReviewError) as exc_info:
         submit_review(
             task_id=task_todo.id,
             decision="approved",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
         )
     assert exc_info.value.status_code == 400
     assert "todo" in exc_info.value.message
@@ -114,14 +120,16 @@ def test_submit_review_not_in_review_status_raises(task_todo):
 @pytest.mark.django_db
 def test_submit_review_creates_review_record(task_pending_start):
     """submit_review creates a Review record with correct fields."""
+    reviewer_42 = User.objects.create_user(username="reviewer-42")
     submit_review(
         task_id=task_pending_start.id,
         decision="approved",
-        reviewer_id="reviewer-42",
+        reviewer=reviewer_42,
         reviewer_type="agent",
         reason="Looks good",
     )
     review = Review.objects.get(task=task_pending_start, decision="approved")
-    assert review.reviewer_id == "reviewer-42"
+    assert review.reviewer == reviewer_42
+    assert review.reviewer.username == "reviewer-42"
     assert review.reviewer_type == "agent"
     assert review.reason == "Looks good"

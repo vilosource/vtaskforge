@@ -19,7 +19,7 @@ def submit_review(
     task_id: str,
     decision: str,
     reason: str = "",
-    reviewer_id: str = "",
+    reviewer=None,
     reviewer_type: str = "human",
 ) -> dict:
     """
@@ -62,20 +62,22 @@ def submit_review(
         task=task,
         decision=decision,
         reason=reason,
-        reviewer_id=reviewer_id,
+        reviewer=reviewer,
         reviewer_type=reviewer_type,
     )
 
+    reviewer_name = reviewer.username if reviewer else ""
     record_event(
         task,
         "review_submitted",
         data={
             "decision": decision,
-            "reviewer_id": reviewer_id,
+            "reviewer_id": reviewer_name,
             "reviewer_type": reviewer_type,
             "previous_status": previous_status,
         },
         trigger_source="review",
+        actor=reviewer,
     )
 
     return {"review": review, "task": task, "previous_status": previous_status}

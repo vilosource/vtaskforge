@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 from core.mixins import NanoIDMixin, TimestampMixin
@@ -22,7 +23,10 @@ class Review(NanoIDMixin, TimestampMixin):
     )
     decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
     reason = models.TextField(blank=True, default="")
-    reviewer_id = models.CharField(max_length=255)
+    reviewer = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reviews",
+    )
     reviewer_type = models.CharField(
         max_length=10,
         choices=REVIEWER_TYPE_CHOICES,
@@ -33,4 +37,5 @@ class Review(NanoIDMixin, TimestampMixin):
         ordering = ["created_at"]
 
     def __str__(self):
-        return f"{self.decision} by {self.reviewer_id} on {self.task_id}"
+        reviewer_name = self.reviewer.username if self.reviewer else "unknown"
+        return f"{self.decision} by {reviewer_name} on {self.task_id}"

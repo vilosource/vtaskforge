@@ -2,6 +2,7 @@
 Tests for Review model.
 """
 import pytest
+from django.contrib.auth.models import User
 
 from reviews.models import Review
 from tests.factories import MilestoneFactory, ReviewFactory, TaskFactory, WorkplanFactory
@@ -31,84 +32,96 @@ def task(db, milestone, workplan):
     )
 
 
+@pytest.fixture
+def reviewer_user(db):
+    return User.objects.create_user(username="user-1")
+
+
+@pytest.fixture
+def reviewer_user_2(db):
+    return User.objects.create_user(username="user-2")
+
+
 # ---------------------------------------------------------------------------
 # Model tests
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
 class TestReviewModel:
-    def test_create_review(self, task):
+    def test_create_review(self, task, reviewer_user):
         review = ReviewFactory(
             task=task,
             decision="approved",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
         )
         assert review.id is not None
         assert len(review.id) == 21
         assert review.task == task
         assert review.decision == "approved"
-        assert review.reviewer_id == "user-1"
+        assert review.reviewer == reviewer_user
+        assert review.reviewer.username == "user-1"
         assert review.reviewer_type == "human"
         assert review.reason == ""
         assert review.created_at is not None
         assert review.updated_at is not None
 
-    def test_default_reviewer_type_is_human(self, task):
+    def test_default_reviewer_type_is_human(self, task, reviewer_user):
         review = ReviewFactory(
             task=task,
             decision="approved",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
         )
         assert review.reviewer_type == "human"
 
     def test_agent_reviewer_type(self, task):
+        agent_user = User.objects.create_user(username="agent-1")
         review = ReviewFactory(
             task=task,
             decision="rejected",
-            reviewer_id="agent-1",
+            reviewer=agent_user,
             reviewer_type="agent",
         )
         assert review.reviewer_type == "agent"
 
-    def test_reason_optional(self, task):
+    def test_reason_optional(self, task, reviewer_user):
         review = ReviewFactory(
             task=task,
             decision="approved",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
         )
         assert review.reason == ""
 
-    def test_reason_can_be_set(self, task):
+    def test_reason_can_be_set(self, task, reviewer_user):
         review = ReviewFactory(
             task=task,
             decision="changes_requested",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
             reason="Needs more detail",
         )
         assert review.reason == "Needs more detail"
 
-    def test_cascade_delete(self, task):
+    def test_cascade_delete(self, task, reviewer_user):
         review = ReviewFactory(
             task=task,
             decision="approved",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
         )
         review_id = review.id
         task.delete()
         assert not Review.objects.filter(id=review_id).exists()
 
-    def test_ordering_ascending(self, task):
-        review1 = ReviewFactory(task=task, decision="approved", reviewer_id="user-1")
-        review2 = ReviewFactory(task=task, decision="rejected", reviewer_id="user-2")
+    def test_ordering_ascending(self, task, reviewer_user, reviewer_user_2):
+        review1 = ReviewFactory(task=task, decision="approved", reviewer=reviewer_user)
+        review2 = ReviewFactory(task=task, decision="rejected", reviewer=reviewer_user_2)
         reviews = list(Review.objects.filter(task=task))
         assert reviews[0].id == review1.id
         assert reviews[1].id == review2.id
 
-    def test_str_representation(self, task):
+    def test_str_representation(self, task, reviewer_user):
         review = ReviewFactory(
             task=task,
             decision="approved",
-            reviewer_id="user-1",
+            reviewer=reviewer_user,
         )
         assert "approved" in str(review)
         assert "user-1" in str(review)
