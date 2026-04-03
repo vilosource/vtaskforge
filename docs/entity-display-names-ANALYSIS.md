@@ -2709,6 +2709,73 @@ This is a proper resolution — not a string lookup, but a FK traversal with `se
 
 This is a significant migration but each step is independently safe and testable.
 
+---
+
+## User Management, Identity, and Authorization Audit
+
+**Discovered during design review (2026-04-03).** Complements the identity field finding above with a full assessment of the auth/authz system.
+
+### Current Architecture (verified)
+
+vtf uses Django's default User model (no custom `AUTH_USER_MODEL`). Authentication is via DRF TokenAuthentication + Django SessionAuthentication. User types are tracked via `UserProfile.user_type` (human/agent/service).
+
+**Identity entities:**
+- **Human users** — Django User with password, UserProfile(type="human"), session or token auth
+- **Agent users** — Django User without password (username=Agent.id), UserProfile(type="agent"), token auth
+- **Service accounts** — Django User without password, UserProfile(type="service"), created via `create_service_account()`
+- **Agent entities** — Agent model (nanoid PK), linked to User only by convention (User.username == Agent.id), no FK
+
+### Authorization Gaps (verified against code)
+
+**Critical — no project scoping on core endpoints:**
+
+The `HasProjectMembership` permission class exists but is only applied to project-nested routes. All top-level resource endpoints use the global default (`IsAuthenticated` only):
+
+| Endpoint | Current Permission | Gap |
+|----------|-------------------|-----|
+| `GET /v1/tasks/` | IsAuthenticated | Any authed user sees ALL tasks across ALL projects |
+| `POST /v1/tasks/` | IsAuthenticated | Any authed user can create tasks in ANY project |
+| `PATCH /v1/tasks/{id}/` | IsAuthenticated | Any authed user can edit ANY task |
+| `DELETE /v1/tasks/{id}/` | IsAuthenticated | Any authed user can delete ANY task |
+| All task actions (claim, complete, etc.) | IsAuthenticated | Any authed user can claim/complete ANY task |
+| `GET /v1/workplans/` | IsAuthenticated | Any authed user sees ALL workplans |
+| `GET /v1/projects/` | IsAuthenticated | Any authed user sees ALL projects |
+| `POST /v1/bulk/import` | IsAuthenticated | Any authed user can bulk import into ANY project |
+| `POST /v1/tasks/{id}/reviews/` | IsAuthenticated | Any authed user can review ANY task |
+| `GET /v1/links/` | IsAuthenticated | Any authed user sees ALL links |
+| `GET /v1/events/` | IsAuthenticated | Any authed user sees ALL events |
+
+Code comment in ProjectMembership model: *"Advisory until Phase 6"* — but Phase 6 (HasProjectMembership) was only applied to project-nested routes, not the core resource endpoints.
+
+**Medium — no validation on identity-adjacent operations:**
+
+| Endpoint | Issue |
+|----------|-------|
+| `POST /v1/sessions/` | Agents can create session records for ANY user via `user_id` proxy param — no ownership check |
+| `POST /v1/locks/` | Any agent can acquire a lock for ANY project — no membership check |
+| `POST /v1/external-identities/` | No validation that `external_id` belongs to the authenticated user |
+| `POST /v1/channel-mappings/` | No validation that `project_id` is a valid existing project |
+
+**Low — design inconsistencies:**
+
+| Issue | Detail |
+|-------|--------|
+| **Staff bypass in HasProjectMembership** | `is_staff` → allow all. Compromised admin has global access. |
+| **Service vs agent auto-detection** | `get_or_create_profile()` can't distinguish service from agent (both have unusable password). Only explicit `create_service_account()` sets type="service". |
+| **Tokens don't expire** | DRF TokenAuthentication has no TTL. Tokens valid forever. |
+| **No audit trail** | No `updated_by` fields on any model. Can't trace who modified what. |
+| **Missing UserProfile** | Users created via management commands or before UserProfile existed may lack profiles. `get_or_create_profile()` handles this lazily but not all code paths call it. |
+
+### Impact on v2 Design
+
+These authorization gaps affect the v2 design in two ways:
+
+1. **The `permissions` object in v2 responses** (Section 1.3 of design doc) requires proper authorization enforcement. If the server doesn't enforce project membership, the permissions object would always say `can_edit: true` — meaningless.
+
+2. **The SDK's typed exceptions** (`PermissionDenied`, `ProjectAccessDenied`) require the server to actually return 403 responses. Currently it doesn't — everything is 200 because there's no permission check.
+
+**Recommendation:** Authorization enforcement should be part of Phase 0 alongside the identity field migration. The v2 `permissions` object depends on authorization being real, not advisory.
+
 ### Impact on v2 Design
 
 The v2 design doc's ActorRef pattern is **correct in concept but premature in implementation**. The ActorRef discriminated union (`AgentActor | UserActor`) works perfectly once identity fields are proper User FKs. The design doc should be updated to:

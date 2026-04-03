@@ -1669,13 +1669,15 @@ console.log(VERSION);  // "0.1.0"
 
 Each phase must pass all tests before the next begins.
 
-### Phase 0: Identity Field Migration (PREREQUISITE)
+### Phase 0: Identity + Authorization Fix (PREREQUISITE)
 
-**Scope:** Formalize Agent ↔ User relationship, convert all identity CharFields to User ForeignKeys. This is a v1 model change — prerequisite for v2 ActorRef to work correctly.
+**Scope:** Formalize Agent ↔ User relationship, convert identity CharFields to User ForeignKeys, enforce project membership on all endpoints. This is a v1 model and permissions change — prerequisite for v2 ActorRef and `permissions` object to work correctly.
 
-**Why this must come first:** The v2 ActorRef pattern requires identity fields to be proper entity references, not arbitrary strings. The current CharField identity fields (`claimed_by`, `created_by`, `owner`, `reviewer_id`, `actor_id`) store inconsistent values (nanoids, usernames, free text) that cannot be reliably resolved. See analysis doc "Critical Finding: Identity Fields Are Unstructured."
+**Why this must come first:**
+- The v2 ActorRef pattern requires identity fields to be proper entity references, not arbitrary strings. See analysis doc "Critical Finding: Identity Fields Are Unstructured."
+- The v2 `permissions` object requires real authorization enforcement. Currently, `HasProjectMembership` is only on nested routes — top-level task/workplan/project endpoints allow any authenticated user to access everything. The permissions object would be meaningless without enforcement.
 
-**Deliverables:**
+**Deliverables — Identity:**
 - `Agent.user` — OneToOneField FK to Django User (formalizes the implicit username=agent.id link)
 - All identity fields converted from CharField to FK User:
   - Task: `claimed_by`, `assigned_to`, `created_by`
@@ -1695,6 +1697,23 @@ Each phase must pass all tests before the next begins.
 - All views updated to set FK from `request.user` instead of string values
 - All existing v1 tests updated and passing
 - v1 serializers updated (CharField → PrimaryKeyRelatedField, backward-compatible on write)
+
+**Deliverables — Authorization:**
+- `HasProjectMembership` enforced on ALL project-scoped endpoints (not just nested routes):
+  - TaskViewSet (all actions including claim, complete, fail, review)
+  - WorkplanViewSet
+  - MilestoneViewSet
+  - LinkViewSet (filter by project scope)
+  - TaskEventViewSet (filter by project scope)
+  - ReviewViewSet
+  - NoteViewSet
+  - BulkImportView
+- Project list endpoint: filter to user's projects only (non-staff)
+- Lock acquisition: validate project membership before granting lock
+- Session write: validate the proxied `user_id` is the authenticated user or staff
+- Review submission: validate reviewer is project member
+- `created_by` auto-populated from `request.user` on all creation endpoints (not client-provided)
+- `owner` auto-populated from `request.user` on project/workplan creation (not client-provided)
 
 ### Phase 1: v2 Serializers and API
 
