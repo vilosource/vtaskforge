@@ -2,10 +2,17 @@ from django.db.models import Count
 
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from core.authorization import (
+    ProjectScopedPermission,
+    RoleBasedPermission,
+    require_project_membership,
+    scope_queryset_to_user_projects,
+)
 from core.pagination import VTFCursorPagination
 from tasks.models import Task
 from .models import Milestone, Workplan
@@ -15,16 +22,22 @@ from .serializers import MilestoneSerializer, WorkplanSerializer
 class WorkplanViewSet(ModelViewSet):
     queryset = Workplan.objects.select_related("owner", "created_by").all()
     serializer_class = WorkplanSerializer
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        queryset = scope_queryset_to_user_projects(queryset, self.request.user, Workplan)
         project_id = self.request.query_params.get('project')
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         return queryset
 
     def perform_create(self, serializer):
+        project = serializer.validated_data.get("project")
+        if project:
+            pid = project.id if hasattr(project, "id") else project
+            require_project_membership(self.request.user, pid)
         kwargs = {}
         if self.request.user.is_authenticated:
             kwargs["owner"] = self.request.user
@@ -135,9 +148,18 @@ class WorkplanMilestonesView(APIView):
 class MilestoneViewSet(ModelViewSet):
     queryset = Milestone.objects.select_related("created_by").all()
     serializer_class = MilestoneSerializer
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        queryset = scope_queryset_to_user_projects(queryset, self.request.user, Milestone)
+        return queryset
+
     def perform_create(self, serializer):
+        workplan = serializer.validated_data.get("workplan")
+        if workplan:
+            require_project_membership(self.request.user, workplan.project_id)
         kwargs = {}
         if self.request.user.is_authenticated:
             kwargs["created_by"] = self.request.user

@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 
-from core.mixins import NanoIDMixin, TimestampMixin
+from core.mixins import NanoIDMixin, ProjectScopedModel, TimestampMixin
 
 DECISION_CHOICES = [
     ("approved", "Approved"),
@@ -15,7 +15,8 @@ REVIEWER_TYPE_CHOICES = [
 ]
 
 
-class Review(NanoIDMixin, TimestampMixin):
+class Review(ProjectScopedModel, NanoIDMixin, TimestampMixin):
+    project_filter_path = "task__project_id"
     task = models.ForeignKey(
         "tasks.Task",
         on_delete=models.CASCADE,
@@ -35,6 +36,9 @@ class Review(NanoIDMixin, TimestampMixin):
 
     class Meta:
         ordering = ["created_at"]
+
+    def get_project_id(self) -> str | None:
+        return self.task.project_id if self.task_id else None
 
     def __str__(self):
         reviewer_name = self.reviewer.username if self.reviewer else "unknown"

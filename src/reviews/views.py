@@ -2,6 +2,8 @@ from rest_framework import mixins, status
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from core.authorization import ProjectScopedPermission, RoleBasedPermission
+from rest_framework.permissions import IsAuthenticated
 from tasks.exceptions import InvalidTransition
 from tasks.models import Task
 from tasks.views import invalid_transition_response
@@ -13,6 +15,7 @@ from .services import ReviewError, submit_review
 
 class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
     serializer_class = ReviewSerializer
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
 
     def get_task(self):
         task_id = self.kwargs["task_id"]

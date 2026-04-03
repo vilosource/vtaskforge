@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 
-from core.mixins import NanoIDMixin, TimestampMixin
+from core.mixins import NanoIDMixin, ProjectScopedModel, TimestampMixin
 
 LINK_TYPE_CHOICES = [
     ("depends_on", "Depends On"),
@@ -22,7 +22,8 @@ SOURCE_TYPE_CHOICES = [
 ]
 
 
-class Link(NanoIDMixin, TimestampMixin):
+class Link(ProjectScopedModel, NanoIDMixin, TimestampMixin):
+    project_filter_path = "project_id"
     LINK_TYPE_CHOICES = LINK_TYPE_CHOICES
     SOURCE_TYPE_CHOICES = SOURCE_TYPE_CHOICES
 
@@ -46,6 +47,9 @@ class Link(NanoIDMixin, TimestampMixin):
             models.Index(fields=["source_type", "source_id"]),
             models.Index(fields=["target_type", "target_id"]),
         ]
+
+    def get_project_id(self) -> str | None:
+        return self.project_id
 
     def __str__(self):
         return f"{self.source_type}:{self.source_id} --[{self.link_type}]--> {self.target_type}:{self.target_id}"

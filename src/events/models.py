@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 
-from core.mixins import NanoIDMixin
+from core.mixins import NanoIDMixin, ProjectScopedModel
 
 EVENT_TYPE_CHOICES = [
     ("status_changed", "Status Changed"),
@@ -17,7 +17,8 @@ EVENT_TYPE_CHOICES = [
 ]
 
 
-class TaskEvent(NanoIDMixin):
+class TaskEvent(ProjectScopedModel, NanoIDMixin):
+    project_filter_path = "task__project_id"
     task = models.ForeignKey(
         "tasks.Task",
         on_delete=models.CASCADE,
@@ -37,6 +38,9 @@ class TaskEvent(NanoIDMixin):
 
     class Meta:
         ordering = ["-timestamp"]
+
+    def get_project_id(self) -> str | None:
+        return self.task.project_id if self.task_id else None
 
     def __str__(self):
         return f"{self.event_type} on {self.task_id} at {self.timestamp}"

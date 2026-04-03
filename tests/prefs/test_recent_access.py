@@ -156,8 +156,10 @@ class TestRecentAccessAPI:
 @pytest.mark.django_db
 class TestTrackAccessMixin:
     def test_task_detail_records_access(self):
+        from prefs.models import ProjectMembership
         user = User.objects.create_user("mix1", password="pass")
         project = ProjectFactory()
+        ProjectMembership.objects.create(user=user, project_id=project.id, role="member")
         workplan = WorkplanFactory(project=project, status="active")
         task = TaskFactory(project=project, workplan=workplan, status="todo")
 
@@ -173,8 +175,10 @@ class TestTrackAccessMixin:
         assert accesses[0].resource_title == task.title
 
     def test_project_detail_records_access(self):
+        from prefs.models import ProjectMembership
         user = User.objects.create_user("mix2", password="pass")
         project = ProjectFactory()
+        ProjectMembership.objects.create(user=user, project_id=project.id, role="member")
 
         client = APIClient()
         client.force_authenticate(user=user)
@@ -186,10 +190,12 @@ class TestTrackAccessMixin:
         assert accesses[0].resource_type == "project"
 
     def test_agent_detail_does_not_record(self):
+        from prefs.models import ProjectMembership
         agent_user = User.objects.create_user("agent-mix")
         from rest_framework.authtoken.models import Token
         token = Token.objects.create(user=agent_user)
         project = ProjectFactory()
+        ProjectMembership.objects.create(user=agent_user, project_id=project.id, role="member")
         task = TaskFactory(project=project, status="todo")
 
         client = APIClient()

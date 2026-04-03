@@ -1,10 +1,11 @@
 from django.contrib.auth.models import User
 from django.db import models
 
-from core.mixins import NanoIDMixin, TimestampMixin
+from core.mixins import NanoIDMixin, ProjectScopedModel, TimestampMixin
 
 
-class Project(NanoIDMixin, TimestampMixin):
+class Project(ProjectScopedModel, NanoIDMixin, TimestampMixin):
+    project_filter_path = "id"
     STATUS_CHOICES = [
         ("active", "Active"),
         ("archived", "Archived"),
@@ -31,6 +32,9 @@ class Project(NanoIDMixin, TimestampMixin):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def get_project_id(self) -> str | None:
+        return self.id
 
     def __str__(self):
         return self.name

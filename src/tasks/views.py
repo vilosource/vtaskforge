@@ -2,13 +2,22 @@ from datetime import timedelta
 
 from django.utils import timezone
 from rest_framework import mixins, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
+from core.authorization import (
+    ProjectScopedPermission,
+    RoleBasedPermission,
+    require_project_membership,
+    scope_queryset_to_user_projects,
+)
 from prefs.mixins import TrackAccessMixin
+from prefs.models import ProjectMembership
 from core.pagination import VTFCursorPagination, VTFNoteCursorPagination
 from projects.models import Project
 from workplans.models import Milestone
@@ -66,6 +75,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
     access_resource_type = "task"
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_serializer_class(self):
@@ -86,6 +96,11 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             "project", "milestone", "workplan",
             "assigned_to", "claimed_by", "created_by",
         ).all()
+        # For list views, scope queryset to user's projects.
+        # Detail/action views skip scoping so object-level permissions
+        # return 403 (not 404) for non-members.
+        if self.action == "list":
+            qs = scope_queryset_to_user_projects(qs, self.request.user, Task)
         params = self.request.query_params
 
         task_status = params.get("status")
@@ -135,6 +150,16 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         return super().update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
+        project_id = serializer.validated_data.get("project")
+        if project_id:
+            pid = project_id.id if hasattr(project_id, "id") else project_id
+            require_project_membership(self.request.user, pid)
+            # Check role — viewers cannot create
+            membership = ProjectMembership.objects.filter(
+                user=self.request.user, project_id=pid
+            ).first()
+            if membership and membership.role == "viewer":
+                raise PermissionDenied("Viewers cannot create tasks.")
         serializer.save(created_by=self.request.user)
 
     # -------------------------------------------------------------------------
@@ -194,6 +219,15 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             if exc.details:
                 body["error"]["details"] = exc.details
             return Response(body, status=exc.status_code)
+
+        # Auto-create project membership for agent on claim
+        if task.project_id:
+            agent = Agent.objects.select_related("user").get(pk=agent_id)
+            ProjectMembership.objects.get_or_create(
+                user=agent.user,
+                project_id=task.project_id,
+                defaults={"role": "member"},
+            )
 
         serializer = self.get_serializer(task)
         return Response(serializer.data)
@@ -499,6 +533,7 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
 class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
     serializer_class = NoteSerializer
     pagination_class = VTFNoteCursorPagination
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
 
     def get_task(self):
         task_id = self.kwargs["task_id"]

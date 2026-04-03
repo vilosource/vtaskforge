@@ -2,6 +2,8 @@ from rest_framework import mixins, status
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from core.authorization import ProjectScopedPermission, scope_queryset_to_user_projects
+from rest_framework.permissions import IsAuthenticated
 from core.pagination import VTFEventCursorPagination
 from tasks.models import Task
 
@@ -19,6 +21,7 @@ class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
 
     serializer_class = TaskEventSerializer
     pagination_class = VTFEventCursorPagination
+    permission_classes = [IsAuthenticated, ProjectScopedPermission]
 
     def get_queryset(self):
         # If nested under a task, filter by task_id from URL kwargs
@@ -28,6 +31,7 @@ class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
 
         # Top-level: apply optional query filters
         qs = TaskEvent.objects.all()
+        qs = scope_queryset_to_user_projects(qs, self.request.user, TaskEvent)
         params = self.request.query_params
 
         task = params.get("task")

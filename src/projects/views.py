@@ -9,6 +9,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from core.authorization import (
+    ProjectScopedPermission,
+    RoleBasedPermission,
+    scope_queryset_to_user_projects,
+)
 from core.pagination import VTFCursorPagination
 from workplans.models import Workplan
 from workplans.serializers import WorkplanSerializer
@@ -24,7 +29,13 @@ class ProjectViewSet(TrackAccessMixin, ModelViewSet):
     access_resource_type = "project"
     queryset = Project.objects.select_related("owner", "created_by").all()
     serializer_class = ProjectSerializer
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        qs = scope_queryset_to_user_projects(qs, self.request.user, Project)
+        return qs
 
     def perform_create(self, serializer):
         kwargs = {}

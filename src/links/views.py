@@ -1,7 +1,14 @@
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from core.authorization import (
+    ProjectScopedPermission,
+    RoleBasedPermission,
+    require_project_membership,
+    scope_queryset_to_user_projects,
+)
 from .models import Link
 from .serializers import LinkSerializer
 
@@ -9,6 +16,7 @@ from .serializers import LinkSerializer
 class LinkViewSet(ModelViewSet):
     queryset = Link.objects.select_related("project", "created_by").all()
     serializer_class = LinkSerializer
+    permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "delete", "head", "options"]
 
     def perform_create(self, serializer):
@@ -21,6 +29,7 @@ class LinkViewSet(ModelViewSet):
         source_id = serializer.validated_data.get("source_id")
         project = self._resolve_project(source_type, source_id)
         if project:
+            require_project_membership(self.request.user, project.id)
             kwargs["project"] = project
 
         serializer.save(**kwargs)
@@ -45,6 +54,7 @@ class LinkViewSet(ModelViewSet):
 
     def get_queryset(self):
         queryset = Link.objects.select_related("project", "created_by").all()
+        queryset = scope_queryset_to_user_projects(queryset, self.request.user, Link)
         source_id = self.request.query_params.get("source_id")
         target_id = self.request.query_params.get("target_id")
         source_type = self.request.query_params.get("source_type")

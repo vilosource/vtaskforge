@@ -10,6 +10,15 @@ def generate_nanoid():
     return generate(size=21)
 
 
+class ProjectScopedModel:
+    """Protocol for models that belong to a project."""
+
+    project_filter_path: str = "project_id"
+
+    def get_project_id(self) -> str | None:
+        raise NotImplementedError
+
+
 class NanoIDMixin(models.Model):
     id = models.CharField(
         max_length=21,

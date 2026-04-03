@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 
-from core.mixins import NanoIDMixin, TimestampMixin
+from core.mixins import NanoIDMixin, ProjectScopedModel, TimestampMixin
 
 TASK_STATUS_CHOICES = [
     ("draft", "Draft"),
@@ -18,7 +18,8 @@ TASK_STATUS_CHOICES = [
 ]
 
 
-class Task(NanoIDMixin, TimestampMixin):
+class Task(ProjectScopedModel, NanoIDMixin, TimestampMixin):
+    project_filter_path = "project_id"
     STATUS_CHOICES = TASK_STATUS_CHOICES
 
     title = models.CharField(max_length=500)
@@ -81,11 +82,15 @@ class Task(NanoIDMixin, TimestampMixin):
     class Meta:
         ordering = ["created_at"]
 
+    def get_project_id(self) -> str | None:
+        return self.project_id
+
     def __str__(self):
         return self.title
 
 
-class Note(NanoIDMixin):
+class Note(ProjectScopedModel, NanoIDMixin):
+    project_filter_path = "task__project_id"
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="notes")
     text = models.TextField()
     actor = models.ForeignKey(
@@ -96,6 +101,9 @@ class Note(NanoIDMixin):
 
     class Meta:
         ordering = ["created_at"]
+
+    def get_project_id(self) -> str | None:
+        return self.task.project_id if self.task_id else None
 
     def __str__(self):
         return self.text[:50]

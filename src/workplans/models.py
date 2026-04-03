@@ -1,10 +1,11 @@
 from django.contrib.auth.models import User
 from django.db import models
 
-from core.mixins import NanoIDMixin, TimestampMixin
+from core.mixins import NanoIDMixin, ProjectScopedModel, TimestampMixin
 
 
-class Workplan(NanoIDMixin, TimestampMixin):
+class Workplan(ProjectScopedModel, NanoIDMixin, TimestampMixin):
+    project_filter_path = "project_id"
     STATUS_CHOICES = [
         ("active", "Active"),
         ("completed", "Completed"),
@@ -39,6 +40,9 @@ class Workplan(NanoIDMixin, TimestampMixin):
     class Meta:
         ordering = ["-created_at"]
 
+    def get_project_id(self) -> str | None:
+        return self.project_id
+
     def __str__(self):
         return self.name
 
@@ -50,7 +54,8 @@ MILESTONE_STATUS_CHOICES = [
 ]
 
 
-class Milestone(NanoIDMixin, TimestampMixin):
+class Milestone(ProjectScopedModel, NanoIDMixin, TimestampMixin):
+    project_filter_path = "workplan__project_id"
     STATUS_CHOICES = MILESTONE_STATUS_CHOICES
 
     name = models.CharField(max_length=255)
@@ -75,6 +80,9 @@ class Milestone(NanoIDMixin, TimestampMixin):
 
     class Meta:
         ordering = ["order", "created_at"]
+
+    def get_project_id(self) -> str | None:
+        return self.workplan.project_id if self.workplan_id else None
 
     def __str__(self):
         return self.name
