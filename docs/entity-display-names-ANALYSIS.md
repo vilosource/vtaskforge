@@ -2776,6 +2776,171 @@ These authorization gaps affect the v2 design in two ways:
 
 **Recommendation:** Authorization enforcement should be part of Phase 0 alongside the identity field migration. The v2 `permissions` object depends on authorization being real, not advisory.
 
+### Authorization Design Challenges (Phase 0 scope)
+
+Enforcing project membership is not a simple permission class addition. There are structural challenges that must be understood before implementation.
+
+#### Challenge 1: Resource → Project Path Varies
+
+Each resource traces back to a project through a different path:
+
+| Resource | Path to Project | Complexity |
+|----------|----------------|------------|
+| Task | `task.project_id` (direct FK) | Simple |
+| Workplan | `workplan.project_id` (direct FK) | Simple |
+| Milestone | `milestone.workplan.project_id` (FK chain) | Needs `select_related('workplan')` |
+| Review | `review.task.project_id` (FK chain) | Needs `select_related('task')` |
+| Note | `note.task.project_id` (FK chain) | Needs `select_related('task')` |
+| TaskEvent | `event.task.project_id` (FK chain) | Needs `select_related('task')` |
+| Link | Polymorphic: `source_id` → Task/Milestone/Workplan → project | Requires type-aware resolution |
+| Agent | **No project relationship** — agents work across projects | Cross-project by design |
+
+A single `HasProjectMembership` class that checks `view.kwargs.get("project_id")` cannot handle this — most endpoints don't have `project_id` in the URL.
+
+#### Challenge 2: List Endpoints Need Queryset Filtering
+
+The current `HasProjectMembership` checks one project_id from the URL. But list endpoints return resources across ALL projects:
+
+```python
+# Current: GET /v1/tasks/ returns ALL tasks
+qs = Task.objects.all()
+
+# Required: GET /v1/tasks/ returns only tasks in user's projects
+user_project_ids = ProjectMembership.objects.filter(
+    user=request.user
+).values_list('project_id', flat=True)
+qs = Task.objects.filter(project_id__in=user_project_ids)
+```
+
+This is **queryset scoping**, not a permission check. It must be applied to every list endpoint.
+
+For indirect resources (milestones, reviews, notes, events), the filter chains through FKs:
+
+```python
+# Milestones: filter via workplan → project
+qs = Milestone.objects.filter(workplan__project_id__in=user_project_ids)
+
+# Reviews: filter via task → project
+qs = Review.objects.filter(task__project_id__in=user_project_ids)
+```
+
+#### Challenge 3: Retrieve/Mutate Needs Object-Level Permission
+
+Retrieving a specific task (`GET /v1/tasks/{id}/`) needs to check if the task's project is in the user's memberships. This is `has_object_permission`, not `has_permission`:
+
+```python
+class ProjectScopedPermission(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        # Get project_id from the object (varies by model)
+        project_id = self.get_project_id(obj)
+        if not project_id:
+            return True
+        return ProjectMembership.objects.filter(
+            user=request.user, project_id=project_id
+        ).exists()
+
+    def get_project_id(self, obj):
+        if hasattr(obj, 'project_id'):
+            return obj.project_id  # Task, Workplan
+        if hasattr(obj, 'workplan'):
+            return obj.workplan.project_id  # Milestone
+        if hasattr(obj, 'task'):
+            return obj.task.project_id  # Review, Note, Event
+        return None
+```
+
+#### Challenge 4: Create Needs Target-Project Validation
+
+When creating a task (`POST /v1/tasks/`), the project_id is in the request body, not the URL. The permission check must validate membership against the body's project field:
+
+```python
+# POST /v1/tasks/ with body {"project": "xY9...", "title": "..."}
+# Must check: is request.user a member of project "xY9..."?
+```
+
+This requires a custom permission or validation in `perform_create()`.
+
+#### Challenge 5: Agents Are Cross-Project
+
+Agents work across projects — the vafi controller claims tasks in whatever project has work. But agents should still only access projects where they (their User) have membership.
+
+Current flow:
+1. vafi controller registers agent → gets Agent + User + token
+2. Controller polls `GET /v1/tasks/claimable/` → needs to see tasks across allowed projects
+3. Controller claims task → needs membership in that task's project
+
+**Implication:** Agent Users need ProjectMembership records for their assigned projects. The `create_service_account` or agent registration flow should include project assignment.
+
+#### Challenge 6: Links Are Polymorphic
+
+Links connect any entity type to any other. A link's project scope depends on its `source_type`:
+- source_type="task" → resolve Task.project_id
+- source_type="milestone" → resolve Milestone.workplan.project_id
+- source_type="workplan" → resolve Workplan.project_id
+
+External targets (Jira, commit) have no project — they inherit scope from the source.
+
+Filtering links by project requires a subquery:
+
+```python
+# Links where the source entity belongs to user's projects
+task_ids = Task.objects.filter(project_id__in=user_project_ids).values('id')
+milestone_ids = Milestone.objects.filter(workplan__project_id__in=user_project_ids).values('id')
+workplan_ids = Workplan.objects.filter(project_id__in=user_project_ids).values('id')
+
+qs = Link.objects.filter(
+    Q(source_type="task", source_id__in=task_ids) |
+    Q(source_type="milestone", source_id__in=milestone_ids) |
+    Q(source_type="workplan", source_id__in=workplan_ids)
+)
+```
+
+This is expensive. An alternative: add `project_id` directly to the Link model as a denormalized field (set on creation from the source entity's project). This simplifies scoping to `Link.objects.filter(project_id__in=user_project_ids)`.
+
+#### Challenge 7: Role-Based Permissions
+
+Currently `ProjectMembership.role` has three values: owner, member, viewer. But no endpoint checks the role — only membership existence. For the v2 `permissions` object to be meaningful, we need role enforcement:
+
+| Operation | Required Role |
+|-----------|--------------|
+| Read (list, retrieve) | viewer, member, owner |
+| Create task/workplan | member, owner |
+| Edit task/workplan | member, owner |
+| State transitions (claim, complete) | member, owner |
+| Delete task/workplan | owner |
+| Manage members | owner (or staff) |
+| Archive project | owner (or staff) |
+
+#### Proposed Authorization Architecture
+
+**Two-layer approach:**
+
+1. **Queryset scoping** — Every list endpoint filters to user's projects. Applied via a mixin or middleware.
+2. **Object permission** — Every retrieve/mutate checks the specific object's project membership. Applied via DRF's `has_object_permission`.
+
+```python
+class ProjectScopedMixin:
+    """Mixin for ViewSets that filters querysets to user's projects."""
+
+    def get_user_project_ids(self):
+        if self.request.user.is_staff:
+            return None  # staff sees all
+        return list(
+            ProjectMembership.objects.filter(user=self.request.user)
+            .values_list('project_id', flat=True)
+        )
+
+    def scope_queryset(self, qs):
+        project_ids = self.get_user_project_ids()
+        if project_ids is None:
+            return qs  # staff
+        return qs.filter(project_id__in=project_ids)  # override per-model if needed
+```
+
+**Performance:** The `user_project_ids` query is small (users have few memberships). It can be cached on the request object for the duration of the request.
+
 ### Impact on v2 Design
 
 The v2 design doc's ActorRef pattern is **correct in concept but premature in implementation**. The ActorRef discriminated union (`AgentActor | UserActor`) works perfectly once identity fields are proper User FKs. The design doc should be updated to:
