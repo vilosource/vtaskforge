@@ -123,20 +123,37 @@ def test_all_tools_registered():
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
     expected = {
+        # Read tools
         "vtf_board_overview",
         "vtf_get_context",
+        "vtf_task_detail",
+        "vtf_search_tasks",
+        "vtf_workplan_tree",
+        # Identity tools
+        "vtf_whoami",
         "vtf_list_members",
         "vtf_manage_channel_mapping",
         "vtf_manage_lock",
-        "vtf_manage_milestone",
+        "vtf_resolve_channel",
+        # Legacy monolithic tools (to be removed in cleanup step)
         "vtf_manage_task",
         "vtf_manage_workplan",
+        "vtf_manage_milestone",
+        # Planning
         "vtf_plan_work",
-        "vtf_resolve_channel",
-        "vtf_search_tasks",
-        "vtf_task_detail",
-        "vtf_whoami",
-        "vtf_workplan_tree",
+        # Decomposed task tools (Phase 4c)
+        "vtf_create_task",
+        "vtf_update_task",
+        "vtf_submit_task",
+        "vtf_block_task",
+        "vtf_unblock_task",
+        "vtf_defer_task",
+        "vtf_cancel_task",
+        "vtf_delete_task",
+        "vtf_recover_task",
+        "vtf_assign_task",
+        "vtf_unassign_task",
+        "vtf_add_note",
     }
     assert expected == set(tool_names), f"Tool mismatch. Registered: {tool_names}"
 
@@ -154,7 +171,8 @@ def test_auto_discovery_skips_private_modules():
 
     # But public modules are the ones auto-discovered
     public = {name for name in all_modules if not name.startswith("_")}
-    expected = {"board", "search", "detail", "manage", "workplan", "structure", "milestone", "context", "planning", "identity"}
+    expected = {"board", "search", "detail", "manage", "workplan", "structure", "milestone", "context", "planning", "identity",
+                "task_create", "task_update", "task_transitions", "task_assign", "task_notes"}
     assert expected == public, f"Module mismatch. Public: {public}"
 
 
