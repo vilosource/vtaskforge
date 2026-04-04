@@ -2,7 +2,7 @@ import pytest
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock
 from vtf.cli import cli
-from vtf.client import VTFAPIError
+from vtf_sdk.exceptions import VtfError
 from vtf.config import Config
 from vtf.commands.workplan import milestone
 
@@ -85,7 +85,7 @@ def test_workplan_create_with_description(runner, mock_client):
 
 
 def test_workplan_create_api_error(runner, mock_client):
-    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Name is required"}})
+    mock_client.post.side_effect = VtfError("UNKNOWN", 400, {"error": {"message": "Name is required"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["workplan", "create", "--name", "Fail", "--project", "proj-fail"])
     assert result.exit_code == 1
@@ -137,7 +137,7 @@ def test_workplan_list_with_status_filter(runner, mock_client):
 
 
 def test_workplan_list_api_error(runner, mock_client):
-    mock_client.get.side_effect = VTFAPIError(500, {"error": {"message": "Server error"}})
+    mock_client.get.side_effect = VtfError("UNKNOWN", 500, {"error": {"message": "Server error"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["workplan", "list"])
     assert result.exit_code == 1
@@ -168,7 +168,7 @@ def test_workplan_show_success(runner, mock_client):
 
 
 def test_workplan_show_not_found(runner, mock_client):
-    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.get.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["workplan", "show", "nonexistent"])
     assert result.exit_code == 1
@@ -202,7 +202,7 @@ def test_workplan_archive_success(runner, mock_client):
 
 
 def test_workplan_archive_not_found(runner, mock_client):
-    mock_client.post.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.post.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["workplan", "archive", "missing-id"])
     assert result.exit_code == 1
@@ -220,7 +220,7 @@ def test_workplan_complete_success(runner, mock_client):
 
 
 def test_workplan_complete_api_error(runner, mock_client):
-    mock_client.post.side_effect = VTFAPIError(422, {"error": {"message": "Already completed"}})
+    mock_client.post.side_effect = VtfError("UNKNOWN", 422, {"error": {"message": "Already completed"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["workplan", "complete", "wp-done"])
     assert result.exit_code == 1
@@ -259,7 +259,7 @@ def test_workplan_stats_no_by_status(runner, mock_client):
 
 
 def test_workplan_stats_api_error(runner, mock_client):
-    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.get.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["workplan", "stats", "nonexistent"])
     assert result.exit_code == 1
@@ -295,7 +295,7 @@ def test_milestone_stats_no_by_status(runner, mock_client):
 
 
 def test_milestone_stats_api_error(runner, mock_client):
-    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.get.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["milestone", "stats", "nonexistent"])
     assert result.exit_code == 1
@@ -366,7 +366,7 @@ def test_milestone_create_missing_workplan(runner, mock_client):
 
 
 def test_milestone_create_api_error(runner, mock_client):
-    mock_client.post.side_effect = VTFAPIError(400, {"error": {"message": "Bad request"}})
+    mock_client.post.side_effect = VtfError("UNKNOWN", 400, {"error": {"message": "Bad request"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["milestone", "create", "--name", "Fail", "--workplan", "wp-abc"])
     assert result.exit_code == 1
@@ -405,7 +405,7 @@ def test_milestone_list_missing_workplan(runner, mock_client):
 
 
 def test_milestone_list_api_error(runner, mock_client):
-    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.get.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["milestone", "list", "--workplan", "wp-missing"])
     assert result.exit_code == 1
@@ -434,7 +434,7 @@ def test_milestone_show_success(runner, mock_client):
 
 
 def test_milestone_show_not_found(runner, mock_client):
-    mock_client.get.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.get.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["milestone", "show", "nonexistent"])
     assert result.exit_code == 1
@@ -497,7 +497,7 @@ def test_milestone_update_no_fields(runner, mock_client):
 
 
 def test_milestone_update_api_error(runner, mock_client):
-    mock_client.patch.side_effect = VTFAPIError(404, {"error": {"message": "Not found"}})
+    mock_client.patch.side_effect = VtfError("UNKNOWN", 404, {"error": {"message": "Not found"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["milestone", "update", "missing", "--name", "Fail"])
     assert result.exit_code == 1

@@ -3,7 +3,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock
 from vtf.cli import cli
-from vtf.client import VTFAPIError
+from vtf_sdk.exceptions import VtfError
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "sample-milestone"
@@ -152,7 +152,7 @@ def test_dry_run_shows_task_count(runner, mock_client):
 # --- error handling ---
 
 def test_import_api_error_prints_message_and_exits_1(runner, mock_client):
-    mock_client.post.side_effect = VTFAPIError(500, {"error": {"message": "Server error"}})
+    mock_client.post.side_effect = VtfError("UNKNOWN", 500, {"error": {"message": "Server error"}})
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["import", str(FIXTURES_DIR)])
     assert result.exit_code == 1

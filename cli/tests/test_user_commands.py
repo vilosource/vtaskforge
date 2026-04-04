@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from click.testing import CliRunner
 from vtf.cli import cli
-from vtf.client import VTFAPIError
+from vtf_sdk.exceptions import VtfError
 
 
 @pytest.fixture
@@ -88,7 +88,7 @@ class TestUserShow:
         assert "owner" in result.output
 
     def test_not_found(self, runner, mock_client):
-        mock_client.get.side_effect = VTFAPIError(404, {"detail": "Not found."})
+        mock_client.get.side_effect = VtfError("UNKNOWN", 404, {"detail": "Not found."})
         with patch("vtf.cli.get_client", return_value=mock_client):
             result = runner.invoke(cli, ["user", "show", "999"])
         assert result.exit_code == 1
@@ -130,7 +130,7 @@ class TestMemberAdd:
         assert "viewer" in result.output
 
     def test_duplicate_returns_error(self, runner, mock_client):
-        mock_client.post.side_effect = VTFAPIError(409, {"detail": "Already a member."})
+        mock_client.post.side_effect = VtfError("UNKNOWN", 409, {"detail": "Already a member."})
         with patch("vtf.cli.get_client", return_value=mock_client):
             result = runner.invoke(cli, ["member", "add", "proj1", "charlie"])
         assert result.exit_code == 1
@@ -190,7 +190,7 @@ class TestLockRelease:
         assert "Released" in result.output
 
     def test_not_found(self, runner, mock_client):
-        mock_client.delete.side_effect = VTFAPIError(404, {"detail": "Not found."})
+        mock_client.delete.side_effect = VtfError("UNKNOWN", 404, {"detail": "Not found."})
         with patch("vtf.cli.get_client", return_value=mock_client):
             result = runner.invoke(cli, ["lock", "release", "999"])
         assert result.exit_code == 1
@@ -258,7 +258,7 @@ class TestServiceAccountCreate:
         assert "abc123def456" in result.output
 
     def test_duplicate_returns_error(self, runner, mock_client):
-        mock_client.post.side_effect = VTFAPIError(400, {"detail": "Already exists."})
+        mock_client.post.side_effect = VtfError("UNKNOWN", 400, {"detail": "Already exists."})
         with patch("vtf.cli.get_client", return_value=mock_client):
             result = runner.invoke(cli, ["service-account", "create", "ci-bot"])
         assert result.exit_code == 1
