@@ -7,11 +7,13 @@ from rest_framework.permissions import IsAuthenticated
 from core.pagination import VTFEventCursorPagination
 from tasks.models import Task
 
+from core.versioning import VersionedSerializerMixin
 from .models import TaskEvent
 from .serializers import TaskEventSerializer
+from .serializers_v2 import TaskEventV2Serializer
 
 
-class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
+class TaskEventViewSet(VersionedSerializerMixin, mixins.ListModelMixin, GenericViewSet):
     """Read-only viewset for TaskEvents.
 
     Supports two access patterns:
@@ -20,6 +22,7 @@ class TaskEventViewSet(mixins.ListModelMixin, GenericViewSet):
     """
 
     serializer_class = TaskEventSerializer
+    serializer_class_v2 = TaskEventV2Serializer
     pagination_class = VTFEventCursorPagination
     permission_classes = [IsAuthenticated, ProjectScopedPermission]
 

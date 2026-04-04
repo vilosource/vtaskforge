@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from agents.models import Agent
+from core.versioning import VersionedSerializerMixin
 from core.authorization import (
     ProjectScopedPermission,
     RoleBasedPermission,
@@ -27,6 +28,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
+from .serializers_v2 import NoteV2Serializer
 from .services import claim_task, ClaimError, find_claimable_tasks, resolve_dependencies
 from .state_machine import get_valid_transitions, perform_transition, NON_TERMINAL_STATUSES, TERMINAL_STATUSES
 
@@ -530,8 +532,9 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         return Response(serializer.data)
 
 
-class NoteViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
+class NoteViewSet(VersionedSerializerMixin, mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
     serializer_class = NoteSerializer
+    serializer_class_v2 = NoteV2Serializer
     pagination_class = VTFNoteCursorPagination
     permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
 

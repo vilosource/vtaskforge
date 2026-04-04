@@ -8,13 +8,16 @@ from tasks.exceptions import InvalidTransition
 from tasks.models import Task
 from tasks.views import invalid_transition_response
 
+from core.versioning import VersionedSerializerMixin
 from .models import Review
 from .serializers import ReviewSerializer
+from .serializers_v2 import ReviewV2Serializer
 from .services import ReviewError, submit_review
 
 
-class ReviewViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
+class ReviewViewSet(VersionedSerializerMixin, mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
     serializer_class = ReviewSerializer
+    serializer_class_v2 = ReviewV2Serializer
     permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
 
     def get_task(self):

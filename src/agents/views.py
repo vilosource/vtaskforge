@@ -10,13 +10,16 @@ from core.pagination import VTFAgentCursorPagination, VTFCursorPagination
 from tasks.models import Task
 from tasks.serializers import TaskSerializer
 
+from core.versioning import VersionedSerializerMixin
 from .models import Agent
 from .serializers import AgentSerializer
+from .serializers_v2 import AgentV2Serializer
 
 
-class AgentViewSet(ModelViewSet):
+class AgentViewSet(VersionedSerializerMixin, ModelViewSet):
     queryset = Agent.objects.all()
     serializer_class = AgentSerializer
+    serializer_class_v2 = AgentV2Serializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     pagination_class = VTFAgentCursorPagination
 
