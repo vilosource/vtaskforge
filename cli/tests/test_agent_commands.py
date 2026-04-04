@@ -61,7 +61,8 @@ def test_agent_status_success(runner, mock_client):
 
 def test_agent_register_success(runner):
     mock_reg_client = MagicMock()
-    mock_reg_client.agents.register.return_value = make_agent(id="new-agent", name="my-agent")
+    agent = make_agent(id="new-agent", name="my-agent")
+    mock_reg_client.agents.register.return_value = (agent, {"id": "new-agent", "token": "tok-123"})
     with patch("vtf.commands.agent.VtfClient", return_value=mock_reg_client):
         result = runner.invoke(cli, ["agent", "register", "--name", "my-agent"])
     assert result.exit_code == 0

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 from .async_transport import AsyncTransport
-from .entities import Agent, Link, Milestone, Note, Project, Review, Task, Workplan
+from .entities import Agent, Note, Project, Review, Task
 from .managers import _parse_paged
 from .pagination import PagedResult
 
@@ -58,6 +58,31 @@ class AsyncTaskManager(_AsyncBaseManager):
         data = await self._transport.post(f"/v2/tasks/{id}/complete/")
         return Task.model_validate(data)
 
+    async def fail(self, id: str) -> Task:
+        data = await self._transport.post(f"/v2/tasks/{id}/fail/")
+        return Task.model_validate(data)
+
+    async def heartbeat(self, id: str) -> None:
+        await self._transport.post(f"/v2/tasks/{id}/heartbeat/")
+
+    async def update(self, id: str, **kwargs) -> Task:
+        data = await self._transport.patch(f"/v2/tasks/{id}/", json=kwargs)
+        return Task.model_validate(data)
+
+    async def add_note(self, task_id: str, *, text: str) -> Note:
+        data = await self._transport.post(f"/v2/tasks/{task_id}/notes/", json={"text": text})
+        return Note.model_validate(data)
+
+    async def list_notes(self, task_id: str) -> PagedResult[Note]:
+        data = await self._transport.get(f"/v2/tasks/{task_id}/notes/")
+        return _parse_paged(data, Note)
+
+    async def submit_review(self, task_id: str, *, decision: str, reason: str,
+                            reviewer_id: str = "", reviewer_type: str = "agent") -> Review:
+        payload = {"decision": decision, "reason": reason, "reviewer_type": reviewer_type}
+        data = await self._transport.post(f"/v2/tasks/{task_id}/reviews/", json=payload)
+        return Review.model_validate(data)
+
 
 class AsyncProjectManager(_AsyncBaseManager):
 
@@ -68,6 +93,36 @@ class AsyncProjectManager(_AsyncBaseManager):
     async def list(self, *, page_size: int = 50) -> PagedResult[Project]:
         data = await self._transport.get("/v2/projects/", params={"page_size": page_size})
         return _parse_paged(data, Project)
+
+
+class AsyncAgentManager(_AsyncBaseManager):
+
+    async def get(self, id: str) -> Agent:
+        data = await self._transport.get(f"/v2/agents/{id}/")
+        return Agent.model_validate(data)
+
+    async def list(self, *, page_size: int = 50) -> PagedResult[Agent]:
+        data = await self._transport.get("/v2/agents/", params={"page_size": page_size})
+        return _parse_paged(data, Agent)
+
+    async def register(self, *, name: str, tags: list[str] | None = None,
+                       pod_name: str | None = None) -> tuple[Agent, dict]:
+        """Register agent. Returns (Agent, raw_response_dict) — raw dict includes token."""
+        payload: dict = {"name": name}
+        if tags:
+            payload["tags"] = tags
+        if pod_name:
+            payload["pod_name"] = pod_name
+        data = await self._transport.post("/v2/agents/", json=payload)
+        return Agent.model_validate(data), data
+
+    async def update(self, id: str, **kwargs) -> Agent:
+        data = await self._transport.patch(f"/v2/agents/{id}/", json=kwargs)
+        return Agent.model_validate(data)
+
+    async def update_status(self, id: str, *, status: str) -> Agent:
+        data = await self._transport.patch(f"/v2/agents/{id}/", json={"status": status})
+        return Agent.model_validate(data)
 
 
 class AsyncVtfClient:
@@ -87,6 +142,7 @@ class AsyncVtfClient:
         )
         self.tasks = AsyncTaskManager(self._transport)
         self.projects = AsyncProjectManager(self._transport)
+        self.agents = AsyncAgentManager(self._transport)
 
     async def close(self):
         await self._transport.close()

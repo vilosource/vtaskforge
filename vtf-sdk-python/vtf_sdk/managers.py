@@ -264,15 +264,23 @@ class AgentManager(_BaseManager):
         data = self._transport.get("/v2/agents/", params={"page_size": page_size})
         return _parse_paged(data, Agent)
 
-    def register(self, *, name: str, tags: list[str] | None = None) -> Agent:
+    def register(self, *, name: str, tags: list[str] | None = None,
+                 pod_name: str | None = None) -> tuple[Agent, dict]:
+        """Register agent. Returns (Agent, raw_response_dict) — raw dict includes token."""
         payload: dict = {"name": name}
         if tags:
             payload["tags"] = tags
+        if pod_name:
+            payload["pod_name"] = pod_name
         data = self._transport.post("/v2/agents/", json=payload)
-        return Agent.model_validate(data)
+        return Agent.model_validate(data), data
 
     def update_status(self, id: str, *, status: str) -> Agent:
         data = self._transport.patch(f"/v2/agents/{id}/", json={"status": status})
+        return Agent.model_validate(data)
+
+    def update(self, id: str, **kwargs) -> Agent:
+        data = self._transport.patch(f"/v2/agents/{id}/", json=kwargs)
         return Agent.model_validate(data)
 
 

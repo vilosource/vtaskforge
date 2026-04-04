@@ -20,10 +20,14 @@ def register(name, tags):
     client = VtfClient(url=cfg.api_url, token="")
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
     try:
-        a = client.agents.register(name=name, tags=tag_list)
-        # The registration response may include a token in the raw response
-        # For now, use the agent ID
-        click.echo(f"Registered agent {a.id}: {a.name}")
+        a, raw = client.agents.register(name=name, tags=tag_list)
+        token = raw.get("token")
+        if token:
+            cfg.set("token", token)
+            click.echo(f"Registered agent {a.id}: {a.name}")
+            click.echo("Token saved to config.")
+        else:
+            click.echo(f"Registered agent {a.id}: {a.name}")
     except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)

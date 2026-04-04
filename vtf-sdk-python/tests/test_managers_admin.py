@@ -30,7 +30,7 @@ class TestAgentGaps:
                         "created_at": "2026-04-04T00:00:00Z", "updated_at": "2026-04-04T00:00:00Z",
                         "current_task": None, "tasks_completed": 0, "tasks_failed": 0}
         router.post("/v2/agents/").respond(201, json=reg_response)
-        agent = vtf.agents.register(name="my-agent", tags=["executor"])
+        agent, raw = vtf.agents.register(name="my-agent", tags=["executor"])
         assert agent.id == "new-agent"
         assert agent.name == "my-agent"
 
