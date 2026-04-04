@@ -42,6 +42,16 @@ class AsyncTaskManager(_AsyncBaseManager):
                 yield Task.model_validate(item)
             url = data.get("next")
 
+    async def claimable(self, *, tags: list[str] | None = None,
+                        project_id: str | None = None) -> PagedResult[Task]:
+        params: dict = {}
+        if tags:
+            params["tags"] = ",".join(tags)
+        if project_id:
+            params["project"] = project_id
+        data = await self._transport.get("/v2/tasks/claimable/", params=params or None)
+        return _parse_paged(data, Task)
+
     async def create(self, *, title: str, project: str, **kwargs) -> Task:
         data = await self._transport.post("/v2/tasks/", json={"title": title, "project": project, **kwargs})
         return Task.model_validate(data)
