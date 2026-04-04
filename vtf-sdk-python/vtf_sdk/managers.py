@@ -204,6 +204,17 @@ class WorkplanManager(_BaseManager):
         data = self._transport.post("/v2/workplans/", json=payload)
         return Workplan.model_validate(data)
 
+    def archive(self, id: str) -> Workplan:
+        data = self._transport.post(f"/v2/workplans/{id}/archive/")
+        return Workplan.model_validate(data)
+
+    def complete(self, id: str) -> Workplan:
+        data = self._transport.post(f"/v2/workplans/{id}/complete/")
+        return Workplan.model_validate(data)
+
+    def stats(self, id: str) -> dict:
+        return self._transport.get(f"/v2/workplans/{id}/stats/")
+
 
 class MilestoneManager(_BaseManager):
 
@@ -217,6 +228,18 @@ class MilestoneManager(_BaseManager):
             params["workplan"] = workplan_id
         data = self._transport.get("/v2/milestones/", params=params)
         return _parse_paged(data, Milestone)
+
+    def create(self, *, name: str, workplan: str, **kwargs) -> Milestone:
+        payload = {"name": name, "workplan": workplan, **kwargs}
+        data = self._transport.post("/v2/milestones/", json=payload)
+        return Milestone.model_validate(data)
+
+    def update(self, id: str, **kwargs) -> Milestone:
+        data = self._transport.patch(f"/v2/milestones/{id}/", json=kwargs)
+        return Milestone.model_validate(data)
+
+    def stats(self, id: str) -> dict:
+        return self._transport.get(f"/v2/milestones/{id}/stats/")
 
 
 class AgentManager(_BaseManager):
