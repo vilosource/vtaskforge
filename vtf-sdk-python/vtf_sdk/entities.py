@@ -152,7 +152,7 @@ class Agent(VtfModel):
     status: str = ""
     effective_status: str = ""
     last_heartbeat: datetime | None = None
-    pod_name: str = ""
+    pod_name: str | None = None
     registered_at: datetime | None = None
     current_task: TaskRef | None = None
     tasks_completed: int = 0
