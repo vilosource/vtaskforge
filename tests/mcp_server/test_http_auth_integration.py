@@ -163,7 +163,7 @@ def test_http_auth_valid_token_lists_tools(mcp_http_auth_server):
                     tools_result = await session.list_tools()
                     tool_names = sorted(t.name for t in tools_result.tools)
 
-                    assert len(tool_names) == 26
+                    assert len(tool_names) == 35
                     assert "vtf_board_overview" in tool_names
 
     asyncio.run(run())
