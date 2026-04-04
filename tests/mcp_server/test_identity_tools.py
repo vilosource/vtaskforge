@@ -71,7 +71,8 @@ class TestWhoami:
         result = json.loads(vtf_whoami())
         projects = result["data"]["projects"]
         assert len(projects) == 1
-        assert projects[0]["project_id"] == "proj1"
+        # v2 format: project is a nested ref object
+        assert projects[0]["project"]["id"] == "proj1"
         assert projects[0]["role"] == "member"
 
     def test_no_user_context_returns_error(self):

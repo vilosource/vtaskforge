@@ -129,22 +129,17 @@ def vtf_plan_work(
         # Submit (draft → todo)
         try:
             perform_transition(task, "todo")
-            created_tasks.append({
-                "id": task.id,
-                "title": task.title,
-                "status": task.status,
-            })
+            from mcp_server.serialization import serialize_task
+            created_tasks.append(serialize_task(task))
         except (InvalidTransition, GuardViolation) as e:
             errors.append({
-                "title": title,
+                "task": serialize_task(task),
                 "error": str(e),
-                "task_id": task.id,
-                "status": task.status,
             })
 
+    from mcp_server.serialization import serialize_workplan
     data = {
-        "workplan_id": workplan.id,
-        "workplan_name": workplan.name,
+        "workplan": serialize_workplan(workplan),
         "tasks": created_tasks,
         "errors": errors,
     }

@@ -136,7 +136,7 @@ class TestVtfPlanWork:
 
         assert result["success"] is True
         data = result["data"]
-        assert "workplan_id" in data
+        assert "workplan" in data  # v2: serialized workplan object, not bare ID
         assert len(data["tasks"]) == 2
         assert all(t["status"] == "todo" for t in data["tasks"])
 

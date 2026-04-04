@@ -27,8 +27,9 @@ def vtf_add_note(task_id: str, text: str) -> dict:
     user = get_current_user()
     note = Note.objects.create(task=task, text=text, actor=user)
 
+    from mcp_server.serialization import serialize_note
     return {
-        "data": {"note": {"id": str(note.id), "text": note.text}},
+        "data": {"note": serialize_note(note)},
         "message": f"Added note to task '{task.title}'.",
         "available_actions": ["vtf_task_detail"],
     }
