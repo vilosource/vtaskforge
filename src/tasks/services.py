@@ -270,6 +270,42 @@ def get_available_actions(task) -> list:
     return list(VALID_TRANSITIONS.get(task.status, []))
 
 
+def get_task_context_v2(task_id: str) -> dict:
+    """Get complete task context using v2 serializers.
+
+    Returns task data formatted by TaskDetailV2Serializer (same shape as
+    the v2 REST API), plus computed fields: dependencies and available actions.
+    """
+    from mcp_server.serialization import serialize_task_detail
+
+    task = (
+        Task.objects
+        .select_related("project", "workplan", "milestone",
+                        "assigned_to", "claimed_by", "created_by")
+        .prefetch_related("reviews", "events", "notes")
+        .get(pk=task_id)
+    )
+
+    task_data = serialize_task_detail(task, expand=["reviews", "events"])
+
+    # Notes — serialized via the task data (from expand), but also as separate list
+    notes = [
+        {"id": str(n.id), "text": n.text, "actor": str(n.actor) if n.actor else None,
+         "created_at": n.created_at.isoformat()}
+        for n in task.notes.all()
+    ]
+
+    return {
+        "task": task_data,
+        "spec": task.spec,
+        "dependencies": resolve_dependencies(task_id),
+        "reviews": task_data.get("reviews", []),
+        "events": task_data.get("events", []),
+        "notes": notes,
+        "actions": get_available_actions(task),
+    }
+
+
 def get_task_context(task_id: str) -> dict:
     """Return full task context for MCP responses.
 

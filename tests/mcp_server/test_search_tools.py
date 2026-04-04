@@ -198,5 +198,5 @@ def test_search_includes_available_actions_per_task():
 
     assert result["success"] is True
     for task in result["data"]["tasks"]:
-        assert "available_actions" in task
-        assert isinstance(task["available_actions"], list)
+        # v2 format: permissions object present (may be None without auth context in tests)
+        assert "permissions" in task

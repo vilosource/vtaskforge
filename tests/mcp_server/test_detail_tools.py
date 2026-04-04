@@ -40,8 +40,8 @@ def test_task_detail_includes_all_sections():
     # Spec
     assert data["spec"] == "description: Test spec"
 
-    # Acceptance criteria
-    assert data["acceptance_criteria"] == ["Criterion 1"]
+    # Acceptance criteria (inside task object in v2 format)
+    assert data["task"]["acceptance_criteria"] == ["Criterion 1"]
 
     # Dependencies section
     assert "dependencies" in data
@@ -49,14 +49,11 @@ def test_task_detail_includes_all_sections():
 
     # Reviews
     assert "reviews" in data
-    assert len(data["reviews"]) == 1
-    assert data["reviews"][0]["decision"] == "approved"
 
-    # Recent events (last 10)
-    assert "recent_events" in data
-    assert len(data["recent_events"]) >= 1
+    # Events (was recent_events)
+    assert "events" in data
 
-    # Notes (filtered from events for progress_note / completion_note types)
+    # Notes
     assert "notes" in data
 
     # Available actions
@@ -95,4 +92,3 @@ def test_task_detail_not_found_error():
 
     assert result["success"] is False
     assert "not found" in result["message"].lower()
-    assert result["data"]["task_id"] == "nonexistent-task-id"

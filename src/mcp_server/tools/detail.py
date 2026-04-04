@@ -1,119 +1,63 @@
-"""
-MCP tool: vtf_task_detail (P3.2)
-
-Returns complete details for a single task including spec, dependencies,
-reviews, recent events, notes, available transitions, and a contextual message.
-"""
-import json
-
-from mcp_server.responses import error_response, success_response
+"""MCP tool: vtf_task_detail — complete task details with v2 serialized data."""
+from mcp_server.decorators import handle_errors, serialize_response
 from mcp_server.server import mcp
-from tasks.models import Task
-from tasks.services import get_available_actions, get_task_context
 
 
 @mcp.tool()
-def vtf_task_detail(task_id: str) -> str:
+@handle_errors
+@serialize_response
+def vtf_task_detail(task_id: str) -> dict:
     """Get complete details for a specific task including its full spec, dependency status,
-    review history, event timeline, and what actions are currently available. Use this when
-    you need the full picture before acting on a task.
+    review history, event timeline, and what actions are currently available.
     """
-    # Fetch task — return error if not found
+    from tasks.models import Task
+    from tasks.services import get_task_context_v2, get_available_actions
+
     try:
         task = Task.objects.get(pk=task_id)
     except Task.DoesNotExist:
-        return json.dumps(
-            error_response(
-                message=f"Task {task_id} not found.",
-                data={"task_id": task_id},
-                available_actions=["vtf_next_work", "vtf_board_overview"],
-            )
-        )
+        return {"error": True, "message": f"Task {task_id} not found."}
 
-    # Get base context from service (includes reviews, events, notes, deps)
-    context = get_task_context(task_id)
+    context = get_task_context_v2(task_id)
+    task_data = context["task"]
 
-    task_info = context["task"]
+    status = task_data.get("status", "")
+    title = task_data.get("title", "")
 
-    # Limit recent_events to last 10
-    recent_events = context["events"][:10]
-
-    # Filter notes from events: progress_note, completion_note, and note types
-    notes = [
-        e for e in context["events"]
-        if e["event_type"] in ("progress_note", "completion_note", "note")
-    ]
-
-    # Get available state-machine transitions for this task
-    available_transitions = get_available_actions(task)
-
-    # Build contextual message based on task status
-    status = task_info["status"]
-    title = task_info["title"]
-
-    if status == "todo":
-        message = f"Task {task_id} '{title}' is ready to be claimed."
-    elif status == "doing":
-        claimed_by = task_info.get("claimed_by") or "unknown"
-        message = f"Task {task_id} '{title}' is in progress, claimed by {claimed_by}."
-    elif status == "done":
-        message = f"Task {task_id} '{title}' is complete."
-    elif status == "blocked":
-        message = f"Task {task_id} '{title}' is blocked."
-    elif status == "needs_attention":
-        message = f"Task {task_id} '{title}' needs attention."
-    elif status == "pending_start_review":
-        message = f"Task {task_id} '{title}' is awaiting start review."
-    elif status == "pending_completion_review":
-        message = f"Task {task_id} '{title}' is awaiting completion review."
-    elif status == "changes_requested":
-        # Include most recent review reason if available
-        reviews = context["reviews"]
-        if reviews:
-            latest_reason = reviews[-1].get("reason", "")
-            message = (
-                f"Task {task_id} has changes requested: '{latest_reason}'."
-                " Ready to be reclaimed for rework."
-            )
-        else:
-            message = f"Task {task_id} '{title}' has changes requested. Ready to be reclaimed for rework."
-    elif status == "draft":
-        message = f"Task {task_id} '{title}' is in draft state."
-    elif status == "deferred":
-        message = f"Task {task_id} '{title}' has been deferred."
-    elif status == "cancelled":
-        message = f"Task {task_id} '{title}' has been cancelled."
-    else:
-        message = f"Task {task_id} '{title}' is in '{status}' status."
-
-    data = {
-        "task": task_info,
-        "spec": context["spec"],
-        "acceptance_criteria": task_info.get("acceptance_criteria"),
-        "test_command": task_info.get("test_command"),
-        "execution": {
-            "agent_model": task_info.get("agent_model"),
-            "judge": task_info.get("judge"),
-            "isolation": task_info.get("isolation"),
-        },
-        "dependencies": context["dependencies"],
-        "reviews": context["reviews"],
-        "recent_events": recent_events,
-        "notes": notes,
+    messages = {
+        "todo": f"Task '{title}' is ready to be claimed.",
+        "doing": f"Task '{title}' is in progress.",
+        "done": f"Task '{title}' is complete.",
+        "blocked": f"Task '{title}' is blocked.",
+        "needs_attention": f"Task '{title}' needs attention.",
+        "pending_start_review": f"Task '{title}' is awaiting start review.",
+        "pending_completion_review": f"Task '{title}' is awaiting completion review.",
+        "changes_requested": f"Task '{title}' has changes requested.",
+        "draft": f"Task '{title}' is in draft state.",
+        "deferred": f"Task '{title}' has been deferred.",
+        "cancelled": f"Task '{title}' has been cancelled.",
     }
+    message = messages.get(status, f"Task '{title}' is in '{status}' status.")
 
-    # Build available_actions list from transitions
-    available_actions = []
-    for transition in available_transitions:
-        if transition == "doing":
-            available_actions.append("vtf_claim_and_start")
-        else:
-            available_actions.append(f"vtf_manage_task(action={transition})")
+    available_transitions = get_available_actions(task)
+    transition_to_tool = {
+        "doing": "vtf_assign_task",
+        "todo": "vtf_submit_task",
+        "blocked": "vtf_block_task",
+        "cancelled": "vtf_cancel_task",
+        "deferred": "vtf_defer_task",
+    }
+    available_actions = [transition_to_tool.get(t, "vtf_task_detail") for t in available_transitions]
 
-    return json.dumps(
-        success_response(
-            data=data,
-            message=message,
-            available_actions=available_actions,
-        )
-    )
+    return {
+        "data": {
+            "task": task_data,
+            "spec": context["spec"],
+            "dependencies": context["dependencies"],
+            "reviews": context["reviews"],
+            "events": context.get("events", [])[:10],
+            "notes": context["notes"],
+        },
+        "message": message,
+        "available_actions": available_actions,
+    }

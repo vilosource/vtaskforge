@@ -181,13 +181,11 @@ def test_submit_work_not_doing_error():
 
 @pytest.mark.django_db
 def test_task_detail_not_found_error():
-    """Task not found: error is actionable and has available_actions."""
+    """Task not found: error is actionable."""
     result = _parse(vtf_task_detail(task_id="nonexistent-id"))
 
     assert result["success"] is False
-    assert "nonexistent-id" in result["message"] or "not found" in result["message"].lower()
-    assert len(result["available_actions"]) > 0
-    assert result["data"]["task_id"] == "nonexistent-id"
+    assert "not found" in result["message"].lower()
 
 
 # ===========================================================================

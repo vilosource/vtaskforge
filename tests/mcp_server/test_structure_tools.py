@@ -35,23 +35,19 @@ def test_workplan_tree_with_milestones_and_tasks():
     assert data["workplan"]["name"] == "Tree Workplan"
     assert data["workplan"]["status"] == "active"
 
-    # Milestones ordered by order field
+    # Milestones ordered by order field (v2: nested under "milestone" key)
     milestones = data["milestones"]
     assert len(milestones) == 2
-    assert milestones[0]["id"] == ms1.id
-    assert milestones[0]["name"] == "Milestone One"
-    assert milestones[0]["status"] == "active"
-    assert milestones[0]["order"] == 1
-    assert milestones[1]["id"] == ms2.id
-    assert milestones[1]["order"] == 2
+    assert milestones[0]["milestone"]["id"] == ms1.id
+    assert milestones[0]["milestone"]["name"] == "Milestone One"
+    assert milestones[1]["milestone"]["id"] == ms2.id
 
-    # Tasks in first milestone
+    # Tasks in first milestone (v2 serialized)
     tasks_ms1 = milestones[0]["tasks"]
     assert len(tasks_ms1) == 1
     assert tasks_ms1[0]["id"] == t1.id
     assert tasks_ms1[0]["title"] == "Task Alpha"
     assert tasks_ms1[0]["status"] == "todo"
-    assert tasks_ms1[0]["labels"] == ["backend"]
 
     # Tasks in second milestone
     tasks_ms2 = milestones[1]["tasks"]

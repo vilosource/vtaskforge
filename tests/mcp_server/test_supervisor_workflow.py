@@ -76,9 +76,9 @@ def test_supervisor_board_to_review_workflow():
         f"Task {task.id} should appear in search results"
     )
 
-    # Each task in results should have available_actions
+    # Each task in results should have permissions (v2 format)
     for t in search_data["tasks"]:
-        assert "available_actions" in t
+        assert "permissions" in t
 
     # ------------------------------------------------------------------
     # Step 3: vtf_task_detail — supervisor gets full context before reviewing
@@ -94,7 +94,7 @@ def test_supervisor_board_to_review_workflow():
     assert "spec" in detail_data
     assert "dependencies" in detail_data
     assert "reviews" in detail_data
-    assert "recent_events" in detail_data
+    assert "events" in detail_data
 
     # Message should indicate the task is awaiting completion review
     assert "pending_completion_review" in detail_result["message"].lower() or \

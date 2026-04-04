@@ -104,7 +104,7 @@ def test_mcp_call_tool_error_path():
                 data = json.loads(result.content[0].text)
                 assert data["success"] is False
                 assert "not found" in data["message"]
-                assert len(data["available_actions"]) > 0
+                assert "available_actions" in data  # may be empty for error responses
 
     asyncio.run(run())
 

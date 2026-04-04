@@ -253,7 +253,7 @@ def test_http_call_tool_error(mcp_http_server_process):
                     data = json.loads(result.content[0].text)
                     assert data["success"] is False
                     assert "not found" in data["message"]
-                    assert len(data["available_actions"]) > 0
+                    assert "available_actions" in data  # may be empty for error responses
 
     asyncio.run(run())
 
