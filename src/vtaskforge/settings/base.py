@@ -128,6 +128,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.VTFCursorPagination',
     'PAGE_SIZE': 50,
+    'DEFAULT_VERSIONING_CLASS': 'rest_framework.versioning.URLPathVersioning',
+    'ALLOWED_VERSIONS': ['v1', 'v2'],
+    'DEFAULT_VERSION': 'v1',
 }
 
 # Agent fleet
