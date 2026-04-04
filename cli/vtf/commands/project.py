@@ -1,5 +1,5 @@
 import click
-from vtf.client import VTFAPIError, unwrap_list
+from vtf_sdk.exceptions import VtfError
 
 
 @click.group()
@@ -14,18 +14,18 @@ def list_projects(ctx):
     """List projects."""
     client = ctx.obj["client"]
     try:
-        results = unwrap_list(client.get("/v1/projects/"))
-    except VTFAPIError as e:
+        result = client.projects.list()
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No projects found.")
         return
     click.echo(f"{'ID':<25} {'Name':<35} {'Status':<15}")
     click.echo("-" * 75)
-    for p in results:
-        name = p['name'][:33] + '..' if len(p['name']) > 35 else p['name']
-        click.echo(f"{p['id']:<25} {name:<35} {p['status']:<15}")
+    for p in result.items:
+        name = p.name[:33] + '..' if len(p.name) > 35 else p.name
+        click.echo(f"{p.id:<25} {name:<35} {p.status:<15}")
 
 
 @project.command()
@@ -36,15 +36,15 @@ def list_projects(ctx):
 def create(ctx, name, repo, tags):
     """Create a new project."""
     client = ctx.obj["client"]
-    data = {"name": name}
+    kwargs = {}
     if repo:
-        data["repo_url"] = repo
+        kwargs["repo_url"] = repo
     if tags:
-        data["tags"] = [t.strip() for t in tags.split(",")]
+        kwargs["tags"] = [t.strip() for t in tags.split(",")]
     try:
-        result = client.post("/v1/projects/", data)
-        click.echo(f"Created project {result['id']}: {result['name']}")
-    except VTFAPIError as e:
+        p = client.projects.create(name=name, **kwargs)
+        click.echo(f"Created project {p.id}: {p.name}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -56,15 +56,15 @@ def show(ctx, id):
     """Show project details."""
     client = ctx.obj["client"]
     try:
-        p = client.get(f"/v1/projects/{id}/")
-        click.echo(f"ID:          {p['id']}")
-        click.echo(f"Name:        {p['name']}")
-        click.echo(f"Status:      {p['status']}")
-        click.echo(f"Description: {p.get('description', '')}")
-        click.echo(f"Repo URL:    {p.get('repo_url', '')}")
-        click.echo(f"Branch:      {p.get('default_branch', 'main')}")
-        click.echo(f"Tags:        {', '.join(p.get('tags', []))}")
-        click.echo(f"Created:     {p['created_at']}")
-    except VTFAPIError as e:
+        p = client.projects.get(id)
+        click.echo(f"ID:          {p.id}")
+        click.echo(f"Name:        {p.name}")
+        click.echo(f"Status:      {p.status}")
+        click.echo(f"Description: {p.description}")
+        click.echo(f"Repo URL:    {p.repo_url}")
+        click.echo(f"Branch:      {p.default_branch or 'main'}")
+        click.echo(f"Tags:        {', '.join(p.tags)}")
+        click.echo(f"Created:     {p.created_at}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)

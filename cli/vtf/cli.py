@@ -1,5 +1,6 @@
 import click
-from vtf.client import VTFClient, VTFAPIError
+from vtf_sdk.client import VtfClient
+from vtf_sdk.exceptions import VtfError
 from vtf.config import Config
 from vtf.commands.workplan import workplan, milestone
 from vtf.commands.task import task
@@ -11,7 +12,7 @@ from vtf.commands.user import user, member, lock, channel_mapping, service_accou
 
 def get_client():
     cfg = Config()
-    return VTFClient(cfg.api_url, cfg.token)
+    return VtfClient(url=cfg.api_url, token=cfg.token or "")
 
 
 @click.group()
@@ -30,7 +31,7 @@ def health(ctx):
     try:
         data = client.health()
         click.echo(f"API is healthy: {data}")
-    except VTFAPIError as e:
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     except Exception as e:

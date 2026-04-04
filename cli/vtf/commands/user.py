@@ -8,7 +8,7 @@ vtf service-account create
 """
 
 import click
-from vtf.client import VTFClient, VTFAPIError, unwrap_list
+from vtf_sdk.exceptions import VtfError
 
 
 # ---------------------------------------------------------------------------
@@ -29,22 +29,17 @@ def user():
 def user_list(ctx, user_type, search):
     """List all users."""
     client = ctx.obj["client"]
-    params = {}
-    if user_type:
-        params["user_type"] = user_type
-    if search:
-        params["search"] = search
     try:
-        results = unwrap_list(client.get("/v1/users/", params=params or None))
-    except VTFAPIError as e:
+        result = client.users.list(user_type=user_type, search=search)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No users found.")
         return
     click.echo(f"{'ID':<6} {'Username':<20} {'Type':<10} {'Staff':<7} {'Last Login'}")
     click.echo("-" * 65)
-    for u in results:
+    for u in result.items:
         last_login = u.get("last_login") or "--"
         staff = "Yes" if u.get("is_staff") else "No"
         click.echo(f"{u['id']:<6} {u['username']:<20} {u.get('user_type', '--'):<10} {staff:<7} {last_login}")
@@ -57,8 +52,8 @@ def user_show(ctx, id):
     """Show user details."""
     client = ctx.obj["client"]
     try:
-        u = client.get(f"/v1/users/{id}/")
-    except VTFAPIError as e:
+        u = client.users.get(int(id))
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Username:  {u['username']}")
@@ -71,7 +66,9 @@ def user_show(ctx, id):
     if memberships:
         click.echo(f"\nProjects:")
         for m in memberships:
-            click.echo(f"  {m.get('project_id', '--'):<20} {m['role']}")
+            proj = m.get("project", {})
+            proj_display = proj.get("name", proj.get("id", "--")) if isinstance(proj, dict) else str(proj)
+            click.echo(f"  {proj_display:<20} {m['role']}")
 
 
 # ---------------------------------------------------------------------------
@@ -92,17 +89,20 @@ def member_list(ctx, project_id):
     """List members of a project."""
     client = ctx.obj["client"]
     try:
-        results = unwrap_list(client.get(f"/v1/projects/{project_id}/members/"))
-    except VTFAPIError as e:
+        result = client.members.list(project_id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No members found.")
         return
-    click.echo(f"{'ID':<6} {'Username':<20} {'Role':<10} {'Since'}")
+    click.echo(f"{'ID':<6} {'User':<20} {'Role':<10} {'Since'}")
     click.echo("-" * 55)
-    for m in results:
-        click.echo(f"{m['id']:<6} {m['username']:<20} {m['role']:<10} {m.get('created_at', '--')}")
+    for m in result.items:
+        user_display = m.get("user", {})
+        if isinstance(user_display, dict):
+            user_display = user_display.get("username", str(user_display.get("id", "--")))
+        click.echo(f"{m['id']:<6} {str(user_display):<20} {m['role']:<10} {m.get('created_at', '--')}")
 
 
 @member.command("add")
@@ -114,11 +114,14 @@ def member_add(ctx, project_id, username, role):
     """Add a user to a project."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/projects/{project_id}/members/", {"username": username, "role": role})
-    except VTFAPIError as e:
+        result = client.members.add(project_id, username=username, role=role)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Added {result['username']} as {result['role']} to {project_id}")
+    user_display = result.get("user", {})
+    if isinstance(user_display, dict):
+        user_display = user_display.get("username", username)
+    click.echo(f"Added {user_display} as {result.get('role', role)} to {project_id}")
 
 
 @member.command("set-role")
@@ -130,11 +133,11 @@ def member_set_role(ctx, project_id, membership_id, role):
     """Change a member's role."""
     client = ctx.obj["client"]
     try:
-        result = client.patch(f"/v1/projects/{project_id}/members/{membership_id}/", {"role": role})
-    except VTFAPIError as e:
+        result = client.members.set_role(project_id, int(membership_id), role=role)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Updated {result['username']} to {result['role']}")
+    click.echo(f"Updated role to {result.get('role', role)}")
 
 
 @member.command("remove")
@@ -145,8 +148,8 @@ def member_remove(ctx, project_id, membership_id):
     """Remove a member from a project."""
     client = ctx.obj["client"]
     try:
-        client.delete(f"/v1/projects/{project_id}/members/{membership_id}/")
-    except VTFAPIError as e:
+        client.members.remove(project_id, int(membership_id))
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Removed membership {membership_id} from {project_id}")
@@ -169,21 +172,25 @@ def lock():
 def lock_list(ctx, project_id):
     """List active agent locks."""
     client = ctx.obj["client"]
-    params = {"project_id": project_id} if project_id else None
     try:
-        results = unwrap_list(client.get("/v1/locks/", params=params))
-    except VTFAPIError as e:
+        result = client.locks.list(project_id=project_id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No active locks.")
         return
     click.echo(f"{'ID':<6} {'Project':<20} {'Role':<15} {'Held by':<15} {'Since'}")
     click.echo("-" * 75)
-    for lk in results:
+    for lk in result.items:
+        proj = lk.get("project", {})
+        proj_display = proj.get("id", "--") if isinstance(proj, dict) else str(proj)
+        user_display = lk.get("user", {})
+        if isinstance(user_display, dict):
+            user_display = user_display.get("username", str(user_display.get("id", "--")))
         click.echo(
-            f"{lk['id']:<6} {lk['project_id']:<20} {lk['role']:<15} "
-            f"{lk['user']:<15} {lk.get('created_at', '--')}"
+            f"{lk['id']:<6} {str(proj_display):<20} {lk['role']:<15} "
+            f"{str(user_display):<15} {lk.get('created_at', '--')}"
         )
 
 
@@ -194,8 +201,8 @@ def lock_release(ctx, lock_id):
     """Release an agent lock."""
     client = ctx.obj["client"]
     try:
-        client.delete(f"/v1/locks/{lock_id}/")
-    except VTFAPIError as e:
+        client.locks.release(int(lock_id))
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Released lock {lock_id}")
@@ -218,21 +225,22 @@ def channel_mapping():
 def channel_mapping_list(ctx, provider):
     """List channel mappings."""
     client = ctx.obj["client"]
-    params = {"provider": provider} if provider else None
     try:
-        results = unwrap_list(client.get("/v1/channel-mappings/", params=params))
-    except VTFAPIError as e:
+        result = client.channel_mappings.list(provider=provider)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No channel mappings.")
         return
     click.echo(f"{'ID':<6} {'Provider':<10} {'Channel':<20} {'Name':<15} {'Project'}")
     click.echo("-" * 65)
-    for m in results:
+    for m in result.items:
+        proj = m.get("project", {})
+        proj_display = proj.get("id", "--") if isinstance(proj, dict) else str(proj)
         click.echo(
             f"{m['id']:<6} {m['provider']:<10} {m['channel_id']:<20} "
-            f"{m.get('channel_name', ''):<15} {m['project_id']}"
+            f"{m.get('channel_name', ''):<15} {proj_display}"
         )
 
 
@@ -245,15 +253,15 @@ def channel_mapping_list(ctx, provider):
 def channel_mapping_create(ctx, provider, channel_id, project_id, channel_name):
     """Create a channel mapping."""
     client = ctx.obj["client"]
-    data = {"provider": provider, "channel_id": channel_id, "project_id": project_id}
-    if channel_name:
-        data["channel_name"] = channel_name
     try:
-        result = client.post("/v1/channel-mappings/", data)
-    except VTFAPIError as e:
+        client.channel_mappings.create(
+            provider=provider, channel_id=channel_id,
+            project_id=project_id, channel_name=channel_name,
+        )
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Created mapping: {provider}:{channel_id} -> {result['project_id']}")
+    click.echo(f"Created mapping: {provider}:{channel_id} -> {project_id}")
 
 
 @channel_mapping.command("delete")
@@ -263,8 +271,8 @@ def channel_mapping_delete(ctx, id):
     """Delete a channel mapping."""
     client = ctx.obj["client"]
     try:
-        client.delete(f"/v1/channel-mappings/{id}/")
-    except VTFAPIError as e:
+        client.channel_mappings.delete(int(id))
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Deleted mapping {id}")
@@ -288,8 +296,8 @@ def service_account_create(ctx, name):
     """Create a service account and return its token."""
     client = ctx.obj["client"]
     try:
-        result = client.post("/v1/service-accounts/", {"name": name})
-    except VTFAPIError as e:
+        result = client.service_accounts.create(name=name)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Created service account: {result['username']}")

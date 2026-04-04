@@ -1,7 +1,7 @@
 import yaml
 import click
 from pathlib import Path
-from vtf.client import VTFAPIError
+from vtf_sdk.exceptions import VtfError
 
 
 @click.command("import")
@@ -135,9 +135,9 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
     elif workplan:
         # Infer project from the workplan
         try:
-            wp_data = client.get(f"/v1/workplans/{workplan}/")
-            payload["project_id"] = wp_data["project"]
-        except (VTFAPIError, KeyError):
+            wp = client.workplans.get(workplan)
+            payload["project_id"] = wp.project.id if wp.project else None
+        except (VtfError, KeyError, AttributeError):
             click.echo(f"Warning: could not look up project for workplan {workplan}, creating new project", err=True)
             payload["project"] = {
                 "name": milestone_name,
@@ -168,7 +168,7 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
         return
 
     try:
-        result = client.post("/v1/bulk/import", payload)
+        result = client.bulk.do_import(payload=payload)
         ref_map = result.get("ref_map", {})
         click.echo("Import successful!")
         click.echo(f"Workplan:  {ref_map.get('workplan', 'N/A')}")
@@ -179,6 +179,6 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
             ref = task_refs[task_id]
             created_id = ref_map.get(ref, "N/A")
             click.echo(f"  {task_id} ({spec['name']}): {created_id}")
-    except VTFAPIError as e:
+    except VtfError as e:
         click.echo(f"Import failed: {e}", err=True)
         raise SystemExit(1)

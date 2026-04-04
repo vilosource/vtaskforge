@@ -1,5 +1,5 @@
 import click
-from vtf.client import VTFAPIError
+from vtf_sdk.exceptions import VtfError
 from vtf.config import Config
 
 
@@ -19,24 +19,17 @@ def create(ctx, name, description, tags, project):
     """Create a new workplan."""
     client = ctx.obj["client"]
     cfg = Config()
-
-    data = {"name": name, "description": description}
-
-    # Set project (required)
-    if project:
-        data["project"] = project
-    elif cfg.project:
-        data["project"] = cfg.project
-    else:
+    proj = project or cfg.project
+    if not proj:
         click.echo("Error: project is required. Use --project or set default with 'vtf config set project <id>'", err=True)
         raise SystemExit(1)
-
+    kwargs = {"description": description}
     if tags:
-        data["tags"] = [t.strip() for t in tags.split(",")]
+        kwargs["tags"] = [t.strip() for t in tags.split(",")]
     try:
-        result = client.post("/v1/workplans/", data)
-        click.echo(f"Created workplan {result['id']}: {result['name']}")
-    except VTFAPIError as e:
+        wp = client.workplans.create(name=name, project=proj, **kwargs)
+        click.echo(f"Created workplan {wp.id}: {wp.name}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -49,24 +42,17 @@ def list_workplans(ctx, status, project):
     """List workplans."""
     client = ctx.obj["client"]
     cfg = Config()
-    params = {}
-    if status:
-        params["status"] = status
-    if project:
-        params["project"] = project
-    elif cfg.project:
-        params["project"] = cfg.project
+    proj = project or cfg.project
     try:
-        from vtf.client import unwrap_list
-        results = unwrap_list(client.get("/v1/workplans/", params=params if params else None))
-        if not results:
+        result = client.workplans.list(project_id=proj)
+        if not result.items:
             click.echo("No workplans found.")
             return
         click.echo(f"{'ID':<36} {'Name':<30} {'Status':<12}")
         click.echo("-" * 80)
-        for wp in results:
-            click.echo(f"{wp['id']:<36} {wp['name']:<30} {wp['status']:<12}")
-    except VTFAPIError as e:
+        for wp in result.items:
+            click.echo(f"{wp.id:<36} {wp.name:<30} {wp.status:<12}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -78,14 +64,14 @@ def show(ctx, id):
     """Show workplan details."""
     client = ctx.obj["client"]
     try:
-        wp = client.get(f"/v1/workplans/{id}/")
-        click.echo(f"ID:          {wp['id']}")
-        click.echo(f"Name:        {wp['name']}")
-        click.echo(f"Status:      {wp['status']}")
-        click.echo(f"Description: {wp.get('description', '')}")
-        click.echo(f"Tags:        {', '.join(wp.get('tags', []))}")
-        click.echo(f"Created:     {wp['created_at']}")
-    except VTFAPIError as e:
+        wp = client.workplans.get(id)
+        click.echo(f"ID:          {wp.id}")
+        click.echo(f"Name:        {wp.name}")
+        click.echo(f"Status:      {wp.status}")
+        click.echo(f"Description: {wp.description}")
+        click.echo(f"Tags:        {', '.join(wp.tags)}")
+        click.echo(f"Created:     {wp.created_at}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -97,9 +83,9 @@ def archive(ctx, id):
     """Archive a workplan."""
     client = ctx.obj["client"]
     try:
-        client.post(f"/v1/workplans/{id}/archive/")
+        client.workplans.archive(id)
         click.echo(f"Archived workplan {id}")
-    except VTFAPIError as e:
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -111,9 +97,9 @@ def complete(ctx, id):
     """Complete a workplan."""
     client = ctx.obj["client"]
     try:
-        client.post(f"/v1/workplans/{id}/complete/")
+        client.workplans.complete(id)
         click.echo(f"Completed workplan {id}")
-    except VTFAPIError as e:
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -125,8 +111,8 @@ def stats(ctx, id):
     """Display workplan progress stats."""
     client = ctx.obj["client"]
     try:
-        data = client.get(f"/v1/workplans/{id}/stats/")
-    except VTFAPIError as e:
+        data = client.workplans.stats(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Total tasks: {data['total_tasks']}")
@@ -150,15 +136,15 @@ def milestone():
 def create(ctx, name, workplan, description, sort_order):
     """Create a new milestone."""
     client = ctx.obj["client"]
-    data = {"name": name, "workplan": workplan}
+    kwargs = {}
     if description is not None:
-        data["description"] = description
+        kwargs["description"] = description
     if sort_order is not None:
-        data["order"] = sort_order
+        kwargs["order"] = sort_order
     try:
-        result = client.post("/v1/milestones/", data)
-        click.echo(f"Created milestone {result['id']}: {result['name']}")
-    except VTFAPIError as e:
+        ms = client.milestones.create(name=name, workplan=workplan, **kwargs)
+        click.echo(f"Created milestone {ms.id}: {ms.name}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -170,16 +156,15 @@ def list_milestones(ctx, workplan):
     """List milestones for a workplan."""
     client = ctx.obj["client"]
     try:
-        from vtf.client import unwrap_list
-        results = unwrap_list(client.get(f"/v1/workplans/{workplan}/milestones/"))
-        if not results:
+        result = client.milestones.list(workplan_id=workplan)
+        if not result.items:
             click.echo("No milestones found.")
             return
         click.echo(f"{'ID':<36} {'Order':<6} {'Name':<30}")
         click.echo("-" * 74)
-        for ms in results:
-            click.echo(f"{ms['id']:<36} {ms.get('order', '')!s:<6} {ms['name']:<30}")
-    except VTFAPIError as e:
+        for ms in result.items:
+            click.echo(f"{ms.id:<36} {str(ms.order):<6} {ms.name:<30}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -191,15 +176,15 @@ def show(ctx, id):
     """Show milestone details."""
     client = ctx.obj["client"]
     try:
-        ms = client.get(f"/v1/milestones/{id}/")
-        click.echo(f"ID:          {ms['id']}")
-        click.echo(f"Name:        {ms['name']}")
-        click.echo(f"Status:      {ms.get('status', '')}")
-        click.echo(f"Description: {ms.get('description', '')}")
-        click.echo(f"Order:       {ms.get('order', '')}")
-        click.echo(f"Workplan:    {ms.get('workplan', '')}")
-        click.echo(f"Created:     {ms.get('created_at', '')}")
-    except VTFAPIError as e:
+        ms = client.milestones.get(id)
+        click.echo(f"ID:          {ms.id}")
+        click.echo(f"Name:        {ms.name}")
+        click.echo(f"Status:      {ms.status}")
+        click.echo(f"Description: {ms.description}")
+        click.echo(f"Order:       {ms.order}")
+        click.echo(f"Workplan:    {ms.workplan}")
+        click.echo(f"Created:     {ms.created_at}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -213,20 +198,20 @@ def show(ctx, id):
 def update(ctx, id, name, description, sort_order):
     """Update a milestone."""
     client = ctx.obj["client"]
-    data = {}
+    kwargs = {}
     if name is not None:
-        data["name"] = name
+        kwargs["name"] = name
     if description is not None:
-        data["description"] = description
+        kwargs["description"] = description
     if sort_order is not None:
-        data["order"] = sort_order
-    if not data:
+        kwargs["order"] = sort_order
+    if not kwargs:
         click.echo("No fields to update. Provide --name, --description, or --sort-order.", err=True)
         raise SystemExit(1)
     try:
-        client.patch(f"/v1/milestones/{id}/", data)
+        client.milestones.update(id, **kwargs)
         click.echo(f"Updated milestone {id}")
-    except VTFAPIError as e:
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -238,8 +223,8 @@ def stats(ctx, id):
     """Display milestone progress stats."""
     client = ctx.obj["client"]
     try:
-        data = client.get(f"/v1/milestones/{id}/stats/")
-    except VTFAPIError as e:
+        data = client.milestones.stats(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Total tasks: {data['total_tasks']}")

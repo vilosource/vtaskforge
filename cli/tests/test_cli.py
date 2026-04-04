@@ -3,7 +3,7 @@ import yaml
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock
 from vtf.cli import cli
-from vtf.client import VTFAPIError
+from vtf_sdk.exceptions import VtfError
 from vtf.config import Config
 
 
@@ -29,11 +29,14 @@ def isolated_config(tmp_path, monkeypatch):
     return tmp_path / "config.yaml"
 
 
-def test_health_success(runner, requests_mock, isolated_config):
-    requests_mock.get("http://localhost:8000/v1/health", json={"status": "ok"})
-    result = runner.invoke(cli, ["health"])
+def test_health_success(runner, isolated_config):
+    with patch("vtf.cli.get_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_client.health.return_value = {"status": "healthy", "checks": {"db": "ok"}}
+        mock_get_client.return_value = mock_client
+        result = runner.invoke(cli, ["health"])
     assert result.exit_code == 0
-    assert "healthy" in result.output.lower() or "ok" in result.output.lower()
+    assert "healthy" in result.output.lower()
 
 
 def test_health_connection_error(runner, isolated_config):
@@ -49,7 +52,7 @@ def test_health_connection_error(runner, isolated_config):
 def test_health_api_error(runner, isolated_config):
     with patch("vtf.cli.get_client") as mock_get_client:
         mock_client = MagicMock()
-        mock_client.health.side_effect = VTFAPIError(500, {"error": {"message": "Server error"}})
+        mock_client.health.side_effect = VtfError("SERVICE_UNAVAILABLE", "Server error")
         mock_get_client.return_value = mock_client
         result = runner.invoke(cli, ["health"])
     assert result.exit_code == 1

@@ -1,6 +1,6 @@
 import json
 import click
-from vtf.client import VTFAPIError, unwrap_list
+from vtf_sdk.exceptions import VtfError
 from vtf.config import Config
 
 
@@ -20,30 +20,30 @@ def list_tasks(ctx, status, workplan, milestone, project):
     """List tasks."""
     client = ctx.obj["client"]
     cfg = Config()
-    params = {}
+    kwargs = {}
     if status:
-        params["status"] = status
+        kwargs["status"] = status
     if workplan:
-        params["workplan"] = workplan
+        kwargs["workplan_id"] = workplan
     if milestone:
-        params["milestone"] = milestone
+        kwargs["milestone_id"] = milestone
     if project:
-        params["project"] = project
+        kwargs["project_id"] = project
     elif cfg.project:
-        params["project"] = cfg.project
+        kwargs["project_id"] = cfg.project
     try:
-        results = unwrap_list(client.get("/v1/tasks/", params=params if params else None))
-    except VTFAPIError as e:
+        result = client.tasks.list(**kwargs)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No tasks found.")
         return
     click.echo(f"{'ID':<25} {'Title':<35} {'Status':<15}")
     click.echo("-" * 75)
-    for t in results:
-        title = t['title'][:33] + '..' if len(t['title']) > 35 else t['title']
-        click.echo(f"{t['id']:<25} {title:<35} {t['status']:<15}")
+    for t in result.items:
+        title = t.title[:33] + '..' if len(t.title) > 35 else t.title
+        click.echo(f"{t.id:<25} {title:<35} {t.status:<15}")
 
 
 @task.command()
@@ -54,38 +54,38 @@ def show(ctx, id, as_json):
     """Show task details."""
     client = ctx.obj["client"]
     try:
-        t = client.get(f"/v1/tasks/{id}/")
-    except VTFAPIError as e:
+        t = client.tasks.get(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
     if as_json:
-        import json
-        click.echo(json.dumps(t, indent=2))
+        click.echo(json.dumps(t.model_dump(mode="json"), indent=2, default=str))
         return
 
-    click.echo(f"ID:          {t['id']}")
-    click.echo(f"Title:       {t['title']}")
-    click.echo(f"Status:      {t['status']}")
-    click.echo(f"Milestone:   {t.get('milestone', '')}")
-    click.echo(f"Workplan:    {t.get('workplan', '')}")
-    click.echo(f"Claimed by:  {t.get('claimed_by', 'none')}")
-    click.echo(f"Requires:    {', '.join(t.get('requires', []))}")
-    if t.get('agent_model'):
-        click.echo(f"Agent model: {t['agent_model']}")
-    if t.get('isolation') and t['isolation'] != 'sequential':
-        click.echo(f"Isolation:   {t['isolation']}")
-    if t.get('judge'):
+    click.echo(f"ID:          {t.id}")
+    click.echo(f"Title:       {t.title}")
+    click.echo(f"Status:      {t.status}")
+    click.echo(f"Milestone:   {t.milestone or ''}")
+    click.echo(f"Workplan:    {t.workplan or ''}")
+    click.echo(f"Claimed by:  {t.claimed_by or 'none'}")
+    requires = ', '.join(str(r) for r in t.requires) if t.requires else ''
+    click.echo(f"Requires:    {requires}")
+    if t.agent_model:
+        click.echo(f"Agent model: {t.agent_model}")
+    if t.isolation and t.isolation != 'sequential':
+        click.echo(f"Isolation:   {t.isolation}")
+    if t.judge:
         click.echo(f"Judge:       Yes")
-    if t.get('test_command'):
-        cmds = t['test_command']
+    if t.test_command:
+        cmds = t.test_command
         if isinstance(cmds, dict):
             for k, v in cmds.items():
                 click.echo(f"Test ({k}):  {v}")
-    if t.get('description'):
-        click.echo(f"\nDescription:\n{t['description']}")
-    if t.get('spec'):
-        click.echo(f"\nSpec: ({len(t['spec'])} chars, use --json for full content)")
+    if t.description:
+        click.echo(f"\nDescription:\n{t.description}")
+    if t.spec:
+        click.echo(f"\nSpec: ({len(t.spec)} chars, use --json for full content)")
 
 
 @task.command()
@@ -95,11 +95,11 @@ def submit(ctx, id):
     """Submit a draft task for execution."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/tasks/{id}/submit/")
-    except VTFAPIError as e:
+        t = client.tasks.submit(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Submitted task {id} -> {result['status']}")
+    click.echo(f"Submitted task {id} -> {t.status}")
 
 
 @task.command()
@@ -110,15 +110,12 @@ def submit(ctx, id):
 def claim(ctx, id, agent, tags):
     """Claim a task for an agent."""
     client = ctx.obj["client"]
-    data = {"agent_id": agent}
-    if tags:
-        data["tags"] = [t.strip() for t in tags.split(",")]
     try:
-        result = client.post(f"/v1/tasks/{id}/claim/", data)
-    except VTFAPIError as e:
+        t = client.tasks.claim(id, agent_id=agent)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Claimed task {id} by {agent} -> {result['status']}")
+    click.echo(f"Claimed task {id} by {agent} -> {t.status}")
 
 
 @task.command()
@@ -128,11 +125,11 @@ def complete(ctx, id):
     """Mark a task as complete."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/tasks/{id}/complete/")
-    except VTFAPIError as e:
+        t = client.tasks.complete(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Completed task {id} -> {result['status']}")
+    click.echo(f"Completed task {id} -> {t.status}")
 
 
 @task.command()
@@ -142,11 +139,11 @@ def fail(ctx, id):
     """Mark a task as failed (needs attention)."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/tasks/{id}/fail/")
-    except VTFAPIError as e:
+        t = client.tasks.fail(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Failed task {id} -> {result['status']}")
+    click.echo(f"Failed task {id} -> {t.status}")
 
 
 @task.command()
@@ -156,15 +153,16 @@ def events(ctx, id):
     """Display event timeline for a task."""
     client = ctx.obj["client"]
     try:
-        results = unwrap_list(client.get(f"/v1/tasks/{id}/events/"))
-    except VTFAPIError as e:
+        result = client.tasks.list_events(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No events found.")
         return
-    for event in results:
-        click.echo(f"  {event['event_type']:20s} | {event.get('triggered_by', ''):15s} | {json.dumps(event.get('data', {}))}")
+    for event in result.items:
+        actor = str(event.actor) if event.actor else event.trigger_source
+        click.echo(f"  {event.event_type:20s} | {actor:15s} | {json.dumps(event.data)}")
 
 
 @task.command()
@@ -175,27 +173,27 @@ def claimable(ctx, tags, project):
     """List tasks claimable by an agent with given tags."""
     client = ctx.obj["client"]
     cfg = Config()
-    params = {}
+    kwargs = {}
     if tags:
-        params["tags"] = tags
+        kwargs["tags"] = [t.strip() for t in tags.split(",")]
     if project:
-        params["project"] = project
+        kwargs["project_id"] = project
     elif cfg.project:
-        params["project"] = cfg.project
+        kwargs["project_id"] = cfg.project
     try:
-        results = unwrap_list(client.get("/v1/tasks/claimable/", params=params if params else None))
-    except VTFAPIError as e:
+        result = client.tasks.claimable(**kwargs)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No claimable tasks.")
         return
     click.echo(f"{'ID':<25} {'Title':<35} {'Requires':<15}")
     click.echo("-" * 75)
-    for t in results:
-        title = t['title'][:33] + '..' if len(t['title']) > 35 else t['title']
-        requires = ', '.join(t.get('requires', []))
-        click.echo(f"{t['id']:<25} {title:<35} {requires:<15}")
+    for t in result.items:
+        title = t.title[:33] + '..' if len(t.title) > 35 else t.title
+        requires = ', '.join(str(r) for r in t.requires) if t.requires else ''
+        click.echo(f"{t.id:<25} {title:<35} {requires:<15}")
 
 
 @task.command()
@@ -211,31 +209,23 @@ def create(ctx, title, project, workplan, milestone, labels, description):
     client = ctx.obj["client"]
     cfg = Config()
 
-    data = {"title": title, "description": description}
-
-    # Set project (required)
-    if project:
-        data["project"] = project
-    elif cfg.project:
-        data["project"] = cfg.project
-    else:
+    proj = project or cfg.project
+    if not proj:
         click.echo("Error: project is required. Use --project or set default with 'vtf config set project <id>'", err=True)
         raise SystemExit(1)
 
-    # Set optional workplan and milestone
+    kwargs = {"description": description}
     if workplan:
-        data["workplan"] = workplan
+        kwargs["workplan"] = workplan
     if milestone:
-        data["milestone"] = milestone
-
-    # Set labels
+        kwargs["milestone"] = milestone
     if labels:
-        data["labels"] = [l.strip() for l in labels.split(",")]
+        kwargs["labels"] = [l.strip() for l in labels.split(",")]
 
     try:
-        result = client.post("/v1/tasks/", data)
-        click.echo(f"Created task {result['id']}: {result['title']}")
-    except VTFAPIError as e:
+        t = client.tasks.create(title=title, project=proj, **kwargs)
+        click.echo(f"Created task {t.id}: {t.title}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
 
@@ -253,18 +243,12 @@ def review(ctx, id, decision, reason, reviewer, reviewer_type):
         click.echo(f"Error: --reason is required when decision is '{decision}'", err=True)
         raise SystemExit(1)
     client = ctx.obj["client"]
-    data = {
-        "decision": decision,
-        "reason": reason,
-        "reviewer_id": reviewer,
-        "reviewer_type": reviewer_type,
-    }
     try:
-        result = client.post(f"/v1/tasks/{id}/reviews/", data)
-    except VTFAPIError as e:
+        r = client.tasks.submit_review(id, decision=decision, reason=reason, reviewer_type=reviewer_type)
+        click.echo(f"Review submitted for task {id}: decision={r.decision}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Review submitted for task {id}: decision={result['decision']}")
 
 
 @task.command()
@@ -275,13 +259,12 @@ def review(ctx, id, decision, reason, reviewer, reviewer_type):
 def reset(ctx, id, target_status, reason):
     """Force-transition a task to any status (admin)."""
     client = ctx.obj["client"]
-    data = {"status": target_status, "reason": reason}
     try:
-        result = client.post(f"/v1/tasks/{id}/reset/", data)
-    except VTFAPIError as e:
+        t = client.tasks.reset(id, status=target_status, reason=reason)
+        click.echo(f"Reset task {id}: {t.status} (reason: {reason})")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Reset task {id}: {result.get('status', target_status)} (reason: {reason})")
 
 
 @task.command()
@@ -291,18 +274,12 @@ def reset(ctx, id, target_status, reason):
 def approve(ctx, id, reason):
     """Approve a task (shortcut for review --decision approved)."""
     client = ctx.obj["client"]
-    data = {
-        "decision": "approved",
-        "reason": reason,
-        "reviewer_id": "cli-user",
-        "reviewer_type": "human",
-    }
     try:
-        result = client.post(f"/v1/tasks/{id}/reviews/", data)
-    except VTFAPIError as e:
+        r = client.tasks.submit_review(id, decision="approved", reason=reason, reviewer_type="human")
+        click.echo(f"Approved task {id}: decision={r.decision}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Approved task {id}: decision={result['decision']}")
 
 
 @task.command()
@@ -312,18 +289,12 @@ def approve(ctx, id, reason):
 def reject(ctx, id, reason):
     """Reject a task (shortcut for review --decision changes_requested)."""
     client = ctx.obj["client"]
-    data = {
-        "decision": "changes_requested",
-        "reason": reason,
-        "reviewer_id": "cli-user",
-        "reviewer_type": "human",
-    }
     try:
-        result = client.post(f"/v1/tasks/{id}/reviews/", data)
-    except VTFAPIError as e:
+        r = client.tasks.submit_review(id, decision="changes_requested", reason=reason, reviewer_type="human")
+        click.echo(f"Rejected task {id}: decision={r.decision}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Rejected task {id}: decision={result['decision']}")
 
 
 @task.command()
@@ -333,13 +304,12 @@ def reject(ctx, id, reason):
 def block(ctx, id, reason):
     """Block a task."""
     client = ctx.obj["client"]
-    data = {"reason": reason} if reason else None
     try:
-        result = client.post(f"/v1/tasks/{id}/block/", data)
-    except VTFAPIError as e:
+        t = client.tasks.block(id, reason=reason)
+        click.echo(f"Blocked task {id} -> {t.status}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Blocked task {id} -> {result['status']}")
 
 
 @task.command()
@@ -349,11 +319,11 @@ def unblock(ctx, id):
     """Unblock a task."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/tasks/{id}/unblock/")
-    except VTFAPIError as e:
+        t = client.tasks.unblock(id)
+        click.echo(f"Unblocked task {id} -> {t.status}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Unblocked task {id} -> {result['status']}")
 
 
 @task.command()
@@ -363,11 +333,11 @@ def defer(ctx, id):
     """Defer a task."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/tasks/{id}/defer/")
-    except VTFAPIError as e:
+        t = client.tasks.defer(id)
+        click.echo(f"Deferred task {id} -> {t.status}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Deferred task {id} -> {result['status']}")
 
 
 @task.command()
@@ -377,11 +347,11 @@ def cancel(ctx, id):
     """Cancel a task."""
     client = ctx.obj["client"]
     try:
-        result = client.post(f"/v1/tasks/{id}/cancel/")
-    except VTFAPIError as e:
+        t = client.tasks.cancel(id)
+        click.echo(f"Cancelled task {id} -> {t.status}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Cancelled task {id} -> {result['status']}")
 
 
 @task.command()
@@ -394,8 +364,8 @@ def delete(ctx, id, yes):
         click.confirm(f"Delete task {id}?", abort=True)
     client = ctx.obj["client"]
     try:
-        client.delete(f"/v1/tasks/{id}/")
-    except VTFAPIError as e:
+        client.tasks.delete(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Deleted task {id}")
@@ -423,55 +393,55 @@ def update(ctx, id, title, description, labels, spec, spec_file, agent_model, ju
            workplan, milestone, acceptance_criteria, requires, test_command,
            needs_review_before_start, needs_review_on_completion):
     """Update task fields."""
-    data = {}
+    kwargs = {}
     if title is not None:
-        data["title"] = title
+        kwargs["title"] = title
     if description is not None:
-        data["description"] = description
+        kwargs["description"] = description
     if labels is not None:
-        data["labels"] = [l.strip() for l in labels.split(",")]
+        kwargs["labels"] = [l.strip() for l in labels.split(",")]
     if spec is not None:
-        data["spec"] = spec
+        kwargs["spec"] = spec
     if spec_file is not None:
         with open(spec_file) as f:
-            data["spec"] = f.read()
+            kwargs["spec"] = f.read()
     if agent_model is not None:
-        data["agent_model"] = agent_model
+        kwargs["agent_model"] = agent_model
     if judge is not None:
-        data["judge"] = judge
+        kwargs["judge"] = judge
     if isolation is not None:
-        data["isolation"] = isolation
+        kwargs["isolation"] = isolation
     if workplan is not None:
-        data["workplan"] = workplan
+        kwargs["workplan"] = workplan
     if milestone is not None:
-        data["milestone"] = milestone
+        kwargs["milestone"] = milestone
     if acceptance_criteria is not None:
         try:
-            data["acceptance_criteria"] = json.loads(acceptance_criteria)
+            kwargs["acceptance_criteria"] = json.loads(acceptance_criteria)
         except json.JSONDecodeError:
             click.echo("Error: --acceptance-criteria has invalid JSON", err=True)
             raise SystemExit(1)
     if requires is not None:
-        data["requires"] = [t.strip() for t in requires.split(",")]
+        kwargs["requires"] = [t.strip() for t in requires.split(",")]
     if test_command is not None:
         try:
-            data["test_command"] = json.loads(test_command)
+            kwargs["test_command"] = json.loads(test_command)
         except json.JSONDecodeError:
             click.echo("Error: --test-command has invalid JSON", err=True)
             raise SystemExit(1)
     if needs_review_before_start is not None:
-        data["needs_review_before_start"] = needs_review_before_start
+        kwargs["needs_review_before_start"] = needs_review_before_start
     if needs_review_on_completion is not None:
-        data["needs_review_on_completion"] = needs_review_on_completion
+        kwargs["needs_review_on_completion"] = needs_review_on_completion
 
-    if not data:
+    if not kwargs:
         click.echo("Error: no fields to update. Use --title, --description, --labels, etc.", err=True)
         raise SystemExit(1)
 
     client = ctx.obj["client"]
     try:
-        client.patch(f"/v1/tasks/{id}/", data)
-    except VTFAPIError as e:
+        client.tasks.update(id, **kwargs)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Updated task {id}")

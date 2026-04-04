@@ -6,11 +6,11 @@ setup(
     packages=find_packages(),
     install_requires=[
         "click>=8.0",
-        "requests>=2.28",
+        "vtf-sdk-python>=0.1.0",
         "pyyaml>=6.0",
     ],
     extras_require={
-        "dev": ["pytest", "requests-mock"],
+        "dev": ["pytest", "respx>=0.21", "pytest-asyncio"],
     },
     entry_points={
         "console_scripts": [

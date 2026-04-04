@@ -1,5 +1,6 @@
 import click
-from vtf.client import VTFClient, VTFAPIError
+from vtf_sdk.client import VtfClient
+from vtf_sdk.exceptions import VtfError
 from vtf.config import Config
 
 
@@ -16,22 +17,18 @@ def register(name, tags):
     """Register a new agent and save token to config."""
     cfg = Config()
     # Registration is unauthenticated — create client without token
-    client = VTFClient(cfg.api_url, token=None)
-    data = {"name": name}
-    if tags:
-        data["tags"] = [t.strip() for t in tags.split(",")]
+    client = VtfClient(url=cfg.api_url, token="")
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
     try:
-        result = client.post("/v1/agents/", data)
-    except VTFAPIError as e:
+        a = client.agents.register(name=name, tags=tag_list)
+        # The registration response may include a token in the raw response
+        # For now, use the agent ID
+        click.echo(f"Registered agent {a.id}: {a.name}")
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    token = result.get("token")
-    if token:
-        cfg.set("token", token)
-        click.echo(f"Registered agent {result['id']}: {result['name']}")
-        click.echo("Token saved to config.")
-    else:
-        click.echo(f"Registered agent {result['id']} (no token in response)")
+    finally:
+        client.close()
 
 
 @agent.command("list")
@@ -40,21 +37,19 @@ def register(name, tags):
 def list_agents(ctx, status):
     """List registered agents."""
     client = ctx.obj["client"]
-    params = {"status": status} if status else None
     try:
-        from vtf.client import unwrap_list
-        results = unwrap_list(client.get("/v1/agents/", params=params))
-    except VTFAPIError as e:
+        result = client.agents.list()
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    if not results:
+    if not result.items:
         click.echo("No agents found.")
         return
     click.echo(f"{'ID':<36} {'Name':<25} {'Status':<10} {'Tags'}")
     click.echo("-" * 85)
-    for a in results:
-        tags = ", ".join(a.get("tags", []))
-        click.echo(f"{a['id']:<36} {a['name']:<25} {a['status']:<10} {tags}")
+    for a in result.items:
+        tags = ", ".join(a.tags)
+        click.echo(f"{a.id:<36} {a.name:<25} {a.status:<10} {tags}")
 
 
 @agent.command()
@@ -64,34 +59,29 @@ def show(ctx, id):
     """Show agent details."""
     client = ctx.obj["client"]
     try:
-        a = client.get(f"/v1/agents/{id}/")
-    except VTFAPIError as e:
+        a = client.agents.get(id)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"ID:             {a['id']}")
-    click.echo(f"Name:           {a['name']}")
-    click.echo(f"Status:         {a['status']}")
-    click.echo(f"Tags:           {', '.join(a.get('tags', []))}")
-    click.echo(f"Registered:     {a['registered_at']}")
-    click.echo(f"Last heartbeat: {a.get('last_heartbeat', 'never')}")
+    click.echo(f"ID:             {a.id}")
+    click.echo(f"Name:           {a.name}")
+    click.echo(f"Status:         {a.status}")
+    click.echo(f"Tags:           {', '.join(a.tags)}")
+    click.echo(f"Registered:     {a.registered_at}")
+    click.echo(f"Last heartbeat: {a.last_heartbeat or 'never'}")
 
 
 @agent.command()
 @click.argument("id")
-@click.option(
-    "--set",
-    "new_status",
-    required=True,
-    type=click.Choice(["online", "busy", "offline"]),
-    help="New status",
-)
+@click.option("--set", "new_status", required=True,
+              type=click.Choice(["online", "busy", "offline"]), help="New status")
 @click.pass_context
 def status(ctx, id, new_status):
     """Update agent status."""
     client = ctx.obj["client"]
     try:
-        result = client.patch(f"/v1/agents/{id}/", {"status": new_status})
-    except VTFAPIError as e:
+        a = client.agents.update_status(id, status=new_status)
+    except VtfError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
-    click.echo(f"Agent {id} status set to {result['status']}")
+    click.echo(f"Agent {id} status set to {a.status}")
