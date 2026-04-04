@@ -75,3 +75,40 @@ def serialize_response(func):
         ))
 
     return wrapper
+
+
+def require_project_access(project_id_param: str = "project_id"):
+    """Decorator that checks project membership before tool execution.
+
+    Extracts project_id from the tool's kwargs using the specified parameter name.
+    Staff users bypass the check. Returns error if user is not a member.
+
+    Args:
+        project_id_param: Name of the kwarg containing the project ID
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            from mcp_server.user_context import get_current_user
+            from mcp_server.project_context import get_default_project
+            from core.authorization import check_project_membership
+
+            user = get_current_user()
+            if not user:
+                return json.dumps(error_response(message="Authentication required."))
+
+            if user.is_staff:
+                return func(*args, **kwargs)
+
+            pid = kwargs.get(project_id_param, "") or get_default_project()
+            if pid and not check_project_membership(user, pid):
+                return json.dumps(error_response(
+                    message=f"You are not a member of project '{pid}'.",
+                ))
+
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

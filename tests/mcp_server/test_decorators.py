@@ -82,6 +82,48 @@ class TestSerializeResponse:
         assert data["success"] is False
 
 
+class TestRequireProjectAccess:
+    """@require_project_access checks membership."""
+
+    @pytest.mark.django_db
+    def test_denies_non_member(self):
+        from mcp_server.decorators import require_project_access
+        from mcp_server.user_context import _current_user
+        from django.contrib.auth.models import User
+        from projects.models import Project
+
+        user = User.objects.create_user("non-member", password="pass")
+        project = Project.objects.create(name="AuthProj", owner=user, created_by=user)
+        # User exists but has no ProjectMembership
+
+        _current_user.set(user)
+
+        @require_project_access()
+        def tool(project_id: str = ""):
+            return "should not reach"
+
+        result = tool(project_id=project.id)
+        data = json.loads(result)
+        assert data["success"] is False
+        assert "not a member" in data["message"]
+
+    @pytest.mark.django_db
+    def test_allows_staff(self):
+        from mcp_server.decorators import require_project_access
+        from mcp_server.user_context import _current_user
+        from django.contrib.auth.models import User
+
+        staff = User.objects.create_user("staff-auth", password="pass", is_staff=True)
+        _current_user.set(staff)
+
+        @require_project_access()
+        def tool(project_id: str = ""):
+            return {"data": {}, "message": "ok"}
+
+        result = tool(project_id="any-project")
+        assert isinstance(result, dict)  # Not wrapped in JSON — passes through
+
+
 class TestSerializeEntity:
     """serialization.py uses v2 serializers for entity data."""
 
