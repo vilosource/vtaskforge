@@ -2,7 +2,30 @@
 
 VersionedSerializerMixin allows the same ViewSet to serve v1 and v2
 serializers based on the URL version prefix (request.version).
+
+URLPrefixVersioning extracts the version from the URL path prefix
+(e.g. /v1/... or /v2/...) without requiring a captured URL kwarg.
 """
+import re
+
+from rest_framework.versioning import BaseVersioning
+
+
+class URLPrefixVersioning(BaseVersioning):
+    """Extract API version from URL path prefix.
+
+    Parses /v1/... or /v2/... from the request path. Does not require
+    a captured URL kwarg, so existing view methods don't need to accept
+    an extra `version` parameter.
+    """
+
+    _version_re = re.compile(r"^/(?P<version>v\d+)/")
+
+    def determine_version(self, request, *args, **kwargs):
+        match = self._version_re.match(request.path)
+        if match:
+            return match.group("version")
+        return self.default_version
 
 
 class VersionedSerializerMixin:

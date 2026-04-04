@@ -21,14 +21,17 @@ from prefs.mixins import TrackAccessMixin
 from prefs.models import ProjectMembership
 from prefs.permissions import HasProjectMembership
 from prefs.views import ProjectMembershipSerializer
+from core.versioning import VersionedSerializerMixin
 from .models import Project
 from .serializers import ProjectSerializer
+from .serializers_v2 import ProjectV2Serializer
 
 
-class ProjectViewSet(TrackAccessMixin, ModelViewSet):
+class ProjectViewSet(VersionedSerializerMixin, TrackAccessMixin, ModelViewSet):
     access_resource_type = "project"
     queryset = Project.objects.select_related("owner", "created_by").all()
     serializer_class = ProjectSerializer
+    serializer_class_v2 = ProjectV2Serializer
     permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 

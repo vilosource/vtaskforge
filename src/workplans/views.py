@@ -15,13 +15,16 @@ from core.authorization import (
 )
 from core.pagination import VTFCursorPagination
 from tasks.models import Task
+from core.versioning import VersionedSerializerMixin
 from .models import Milestone, Workplan
 from .serializers import MilestoneSerializer, WorkplanSerializer
+from .serializers_v2 import MilestoneV2Serializer, WorkplanV2Serializer
 
 
-class WorkplanViewSet(ModelViewSet):
+class WorkplanViewSet(VersionedSerializerMixin, ModelViewSet):
     queryset = Workplan.objects.select_related("owner", "created_by").all()
     serializer_class = WorkplanSerializer
+    serializer_class_v2 = WorkplanV2Serializer
     permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
@@ -145,9 +148,10 @@ class WorkplanMilestonesView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class MilestoneViewSet(ModelViewSet):
+class MilestoneViewSet(VersionedSerializerMixin, ModelViewSet):
     queryset = Milestone.objects.select_related("created_by").all()
     serializer_class = MilestoneSerializer
+    serializer_class_v2 = MilestoneV2Serializer
     permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
