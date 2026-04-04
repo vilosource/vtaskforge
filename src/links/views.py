@@ -9,15 +9,32 @@ from core.authorization import (
     require_project_membership,
     scope_queryset_to_user_projects,
 )
+from core.versioning import VersionedSerializerMixin
 from .models import Link
 from .serializers import LinkSerializer
+from .serializers_v2 import LinkV2Serializer, LinkV2WriteSerializer, build_link_entity_cache
 
 
-class LinkViewSet(ModelViewSet):
+class LinkViewSet(VersionedSerializerMixin, ModelViewSet):
     queryset = Link.objects.select_related("project", "created_by").all()
     serializer_class = LinkSerializer
+    serializer_class_v2 = LinkV2Serializer
+    serializer_classes_v2 = {"create": LinkV2WriteSerializer}
     permission_classes = [IsAuthenticated, ProjectScopedPermission, RoleBasedPermission]
     http_method_names = ["get", "post", "delete", "head", "options"]
+
+    def list(self, request, *args, **kwargs):
+        """Override list to add entity cache for v2 batch prefetch."""
+        if getattr(request, "version", "v1") == "v2":
+            queryset = self.filter_queryset(self.get_queryset())
+            page = self.paginate_queryset(queryset)
+            links = page if page is not None else list(queryset)
+            cache = build_link_entity_cache(links)
+            serializer = self.get_serializer(links, many=True, context={**self.get_serializer_context(), "entity_cache": cache})
+            if page is not None:
+                return self.get_paginated_response(serializer.data)
+            return Response(serializer.data)
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         kwargs = {}
