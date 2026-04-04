@@ -148,10 +148,16 @@ class ProjectWorkplansView(APIView):
 
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(workplans, request)
+        if getattr(request, "version", "v1") == "v2":
+            from workplans.serializers_v2 import WorkplanV2Serializer
+            SerializerClass = WorkplanV2Serializer
+        else:
+            SerializerClass = WorkplanSerializer
+        ctx = {"request": request}
         if page is not None:
-            serializer = WorkplanSerializer(page, many=True)
+            serializer = SerializerClass(page, many=True, context=ctx)
             return paginator.get_paginated_response(serializer.data)
-        serializer = WorkplanSerializer(workplans, many=True)
+        serializer = SerializerClass(workplans, many=True, context=ctx)
         return Response(serializer.data)
 
 

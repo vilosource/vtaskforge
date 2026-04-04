@@ -93,5 +93,9 @@ class AgentViewSet(VersionedSerializerMixin, ModelViewSet):
 
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(qs, request)
-        serializer = TaskSerializer(page, many=True)
+        if getattr(request, "version", "v1") == "v2":
+            from tasks.serializers_v2 import TaskV2Serializer
+            serializer = TaskV2Serializer(page, many=True, context={"request": request})
+        else:
+            serializer = TaskSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)

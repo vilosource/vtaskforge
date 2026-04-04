@@ -260,9 +260,9 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(tasks, request)
         if page is not None:
-            serializer = TaskSerializer(page, many=True)
+            serializer = self.get_serializer(page, many=True)
             return paginator.get_paginated_response(serializer.data)
-        serializer = TaskSerializer(tasks, many=True)
+        serializer = self.get_serializer(tasks, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=["post"])

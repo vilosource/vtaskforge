@@ -119,6 +119,12 @@ class WorkplanMilestonesView(APIView):
         except Workplan.DoesNotExist:
             return None
 
+    def _milestone_serializer(self, request):
+        if getattr(request, "version", "v1") == "v2":
+            from workplans.serializers_v2 import MilestoneV2Serializer
+            return MilestoneV2Serializer
+        return MilestoneSerializer
+
     def get(self, request, workplan_id):
         workplan = self.get_workplan(workplan_id)
         if workplan is None:
@@ -126,10 +132,12 @@ class WorkplanMilestonesView(APIView):
         phases = Milestone.objects.filter(workplan=workplan)
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(phases, request)
+        SerializerClass = self._milestone_serializer(request)
+        ctx = {"request": request}
         if page is not None:
-            serializer = MilestoneSerializer(page, many=True)
+            serializer = SerializerClass(page, many=True, context=ctx)
             return paginator.get_paginated_response(serializer.data)
-        serializer = MilestoneSerializer(phases, many=True)
+        serializer = SerializerClass(phases, many=True, context=ctx)
         return Response(serializer.data)
 
     def post(self, request, workplan_id):
@@ -138,7 +146,8 @@ class WorkplanMilestonesView(APIView):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         data = request.data.copy()
         data["workplan"] = workplan.id
-        serializer = MilestoneSerializer(data=data)
+        SerializerClass = self._milestone_serializer(request)
+        serializer = SerializerClass(data=data, context={"request": request})
         if serializer.is_valid():
             kwargs = {}
             if request.user.is_authenticated:
