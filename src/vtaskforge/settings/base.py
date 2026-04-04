@@ -29,6 +29,7 @@ THIRD_PARTY_APPS = [
     'rest_framework.authtoken',
     'corsheaders',
     'django_celery_beat',
+    'drf_spectacular',
 ]
 
 LOCAL_APPS = [
@@ -47,6 +48,8 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'core.idempotency.IdempotencyMiddleware',
+    'core.location_header.LocationHeaderMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -128,10 +131,20 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.VTFCursorPagination',
     'PAGE_SIZE': 50,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'core.exception_handler.v2_exception_handler',
     'DEFAULT_VERSIONING_CLASS': 'core.versioning.URLPrefixVersioning',
     'ALLOWED_VERSIONS': ['v1', 'v2'],
     'DEFAULT_VERSION': 'v1',
+}
+
+# OpenAPI / drf-spectacular
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'vtaskforge v2 API',
+    'DESCRIPTION': 'Distributed task execution system for LLM agents',
+    'VERSION': '2.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': r'/v2/',
 }
 
 # Agent fleet

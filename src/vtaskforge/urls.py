@@ -106,9 +106,15 @@ def api_logout(request):
     return JsonResponse({'authenticated': False})
 
 
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('auth/console-login/', console_login_redirect, name='console-login'),
+    # OpenAPI schema and docs (v2 only)
+    path('v2/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('v2/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('v2/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
 # Build versioned URL patterns for both v1 and v2
