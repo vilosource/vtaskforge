@@ -128,6 +128,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.VTFCursorPagination',
     'PAGE_SIZE': 50,
+    'EXCEPTION_HANDLER': 'core.exception_handler.v2_exception_handler',
     'DEFAULT_VERSIONING_CLASS': 'rest_framework.versioning.URLPathVersioning',
     'ALLOWED_VERSIONS': ['v1', 'v2'],
     'DEFAULT_VERSION': 'v1',
