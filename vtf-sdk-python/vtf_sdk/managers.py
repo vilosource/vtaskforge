@@ -162,6 +162,18 @@ class TaskManager(_BaseManager):
         data = self._transport.post(f"/v2/tasks/{task_id}/reviews/", json=payload)
         return Review.model_validate(data)
 
+    # --- Events ---
+
+    def list_events(self, task_id: str) -> PagedResult[TaskEvent]:
+        data = self._transport.get(f"/v2/tasks/{task_id}/events/")
+        return _parse_paged(data, TaskEvent)
+
+    # --- Reset ---
+
+    def reset(self, id: str, *, status: str, reason: str) -> Task:
+        data = self._transport.post(f"/v2/tasks/{id}/reset/", json={"status": status, "reason": reason})
+        return Task.model_validate(data)
+
 
 class ProjectManager(_BaseManager):
 
@@ -252,6 +264,17 @@ class AgentManager(_BaseManager):
         data = self._transport.get("/v2/agents/", params={"page_size": page_size})
         return _parse_paged(data, Agent)
 
+    def register(self, *, name: str, tags: list[str] | None = None) -> Agent:
+        payload: dict = {"name": name}
+        if tags:
+            payload["tags"] = tags
+        data = self._transport.post("/v2/agents/", json=payload)
+        return Agent.model_validate(data)
+
+    def update_status(self, id: str, *, status: str) -> Agent:
+        data = self._transport.patch(f"/v2/agents/{id}/", json={"status": status})
+        return Agent.model_validate(data)
+
 
 class LinkManager(_BaseManager):
 
@@ -272,6 +295,101 @@ class LinkManager(_BaseManager):
         }
         data = self._transport.post("/v2/links/", json=payload)
         return Link.model_validate(data)
+
+
+class UserManager(_BaseManager):
+    """Admin user management (staff only)."""
+
+    def list(self, *, user_type: str | None = None, search: str | None = None) -> PagedResult:
+        params: dict = {}
+        if user_type:
+            params["user_type"] = user_type
+        if search:
+            params["search"] = search
+        data = self._transport.get("/v2/users/", params=params or None)
+        return _parse_paged_raw(data)
+
+    def get(self, id: int) -> dict:
+        return self._transport.get(f"/v2/users/{id}/")
+
+
+class MemberManager(_BaseManager):
+    """Project membership management."""
+
+    def list(self, project_id: str) -> PagedResult:
+        data = self._transport.get(f"/v2/projects/{project_id}/members/")
+        return _parse_paged_raw(data)
+
+    def add(self, project_id: str, *, username: str, role: str = "member") -> dict:
+        return self._transport.post(
+            f"/v2/projects/{project_id}/members/",
+            json={"username": username, "role": role},
+        )
+
+    def set_role(self, project_id: str, membership_id: int, *, role: str) -> dict:
+        return self._transport.patch(
+            f"/v2/projects/{project_id}/members/{membership_id}/",
+            json={"role": role},
+        )
+
+    def remove(self, project_id: str, membership_id: int) -> None:
+        self._transport.delete(f"/v2/projects/{project_id}/members/{membership_id}/")
+
+
+class LockManager(_BaseManager):
+    """Lock management."""
+
+    def list(self, *, project_id: str | None = None) -> PagedResult:
+        params = {"project_id": project_id} if project_id else None
+        data = self._transport.get("/v2/locks/", params=params)
+        return _parse_paged_raw(data)
+
+    def release(self, lock_id: int) -> None:
+        self._transport.delete(f"/v2/locks/{lock_id}/")
+
+
+class ChannelMappingManager(_BaseManager):
+    """Channel-to-project mapping management."""
+
+    def list(self, *, provider: str | None = None) -> PagedResult:
+        params = {"provider": provider} if provider else None
+        data = self._transport.get("/v2/channel-mappings/", params=params)
+        return _parse_paged_raw(data)
+
+    def create(self, *, provider: str, channel_id: str, project_id: str,
+               channel_name: str = "") -> dict:
+        return self._transport.post("/v2/channel-mappings/", json={
+            "provider": provider, "channel_id": channel_id,
+            "project_id": project_id, "channel_name": channel_name,
+        })
+
+    def delete(self, id: int) -> None:
+        self._transport.delete(f"/v2/channel-mappings/{id}/")
+
+
+class ServiceAccountManager(_BaseManager):
+    """Service account creation."""
+
+    def create(self, *, name: str) -> dict:
+        return self._transport.post("/v2/service-accounts/", json={"name": name})
+
+
+class BulkManager(_BaseManager):
+    """Bulk import operations."""
+
+    def do_import(self, *, payload: dict) -> dict:
+        return self._transport.post("/v2/bulk/import", json=payload)
+
+
+def _parse_paged_raw(data: dict) -> PagedResult:
+    """Parse paginated response keeping items as raw dicts."""
+    items = data.get("results", [])
+    return PagedResult(
+        items=items,
+        has_more=data.get("next") is not None,
+        next_cursor=data.get("next"),
+        previous_cursor=data.get("previous"),
+    )
 
 
 def _parse_paged(data: dict, model_class) -> PagedResult:

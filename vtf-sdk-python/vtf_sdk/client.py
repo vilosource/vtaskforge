@@ -2,10 +2,16 @@
 from .transport import SyncTransport
 from .managers import (
     AgentManager,
+    BulkManager,
+    ChannelMappingManager,
     LinkManager,
+    LockManager,
+    MemberManager,
     MilestoneManager,
     ProjectManager,
+    ServiceAccountManager,
     TaskManager,
+    UserManager,
     WorkplanManager,
 )
 
@@ -40,6 +46,16 @@ class VtfClient:
         self.milestones = MilestoneManager(self._transport)
         self.agents = AgentManager(self._transport)
         self.links = LinkManager(self._transport)
+        self.users = UserManager(self._transport)
+        self.members = MemberManager(self._transport)
+        self.locks = LockManager(self._transport)
+        self.channel_mappings = ChannelMappingManager(self._transport)
+        self.service_accounts = ServiceAccountManager(self._transport)
+        self.bulk = BulkManager(self._transport)
+
+    def health(self) -> dict:
+        """Check API health."""
+        return self._transport.get("/v2/health")
 
     def close(self):
         self._transport.close()
