@@ -28,7 +28,7 @@ from .exceptions import InvalidTransition
 from .models import Note, Task
 from .review_policy import get_effective_review_flags
 from .serializers import NoteSerializer, TaskDetailSerializer, TaskSerializer
-from .serializers_v2 import NoteV2Serializer
+from .serializers_v2 import NoteV2Serializer, TaskDetailV2Serializer, TaskV2Serializer
 from .services import claim_task, ClaimError, find_claimable_tasks, resolve_dependencies
 from .state_machine import get_valid_transitions, perform_transition, NON_TERMINAL_STATUSES, TERMINAL_STATUSES
 
@@ -81,10 +81,11 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_serializer_class(self):
-        """Use TaskDetailSerializer on retrieve when ?expand= is present."""
+        """Select serializer based on API version and action."""
+        is_v2 = getattr(self.request, "version", "v1") == "v2"
         if self.action == "retrieve" and self.request.query_params.get("expand"):
-            return TaskDetailSerializer
-        return TaskSerializer
+            return TaskDetailV2Serializer if is_v2 else TaskDetailSerializer
+        return TaskV2Serializer if is_v2 else TaskSerializer
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -580,13 +581,15 @@ class MilestoneTasksView(APIView):
         except Milestone.DoesNotExist:
             return None
 
+    def _task_serializer(self, request):
+        return TaskV2Serializer if getattr(request, "version", "v1") == "v2" else TaskSerializer
+
     def get(self, request, milestone_id):
         milestone = self.get_milestone(milestone_id)
         if milestone is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         require_project_membership(request.user, milestone.workplan.project_id)
         tasks = Task.objects.filter(milestone=milestone)
-        # Apply same query filters as the viewset
         task_status = request.query_params.get("status")
         if task_status:
             tasks = tasks.filter(status=task_status)
@@ -595,10 +598,11 @@ class MilestoneTasksView(APIView):
             tasks = tasks.filter(assigned_to__username=assigned_to)
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(tasks, request)
+        SerializerClass = self._task_serializer(request)
         if page is not None:
-            serializer = TaskSerializer(page, many=True)
+            serializer = SerializerClass(page, many=True, context={"request": request})
             return paginator.get_paginated_response(serializer.data)
-        serializer = TaskSerializer(tasks, many=True)
+        serializer = SerializerClass(tasks, many=True, context={"request": request})
         return Response(serializer.data)
 
     def post(self, request, milestone_id):
@@ -610,7 +614,8 @@ class MilestoneTasksView(APIView):
         data["milestone"] = milestone.id
         data["workplan"] = milestone.workplan_id
         data["project"] = milestone.workplan.project_id
-        serializer = TaskSerializer(data=data)
+        SerializerClass = self._task_serializer(request)
+        serializer = SerializerClass(data=data, context={"request": request})
         if serializer.is_valid():
             serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -629,14 +634,15 @@ class ProjectTasksView(APIView):
         except Project.DoesNotExist:
             return None
 
+    def _task_serializer(self, request):
+        return TaskV2Serializer if getattr(request, "version", "v1") == "v2" else TaskSerializer
+
     def get(self, request, project_id):
         project = self.get_project(project_id)
         if project is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         require_project_membership(request.user, project.id)
-        # List backlog tasks (tasks with no workplan)
         tasks = Task.objects.filter(project=project, workplan__isnull=True)
-        # Apply same query filters as the viewset
         task_status = request.query_params.get("status")
         if task_status:
             tasks = tasks.filter(status=task_status)
@@ -654,10 +660,11 @@ class ProjectTasksView(APIView):
                 tasks = tasks.filter(label_queries)
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(tasks, request)
+        SerializerClass = self._task_serializer(request)
         if page is not None:
-            serializer = TaskSerializer(page, many=True)
+            serializer = SerializerClass(page, many=True, context={"request": request})
             return paginator.get_paginated_response(serializer.data)
-        serializer = TaskSerializer(tasks, many=True)
+        serializer = SerializerClass(tasks, many=True, context={"request": request})
         return Response(serializer.data)
 
     def post(self, request, project_id):
@@ -667,10 +674,10 @@ class ProjectTasksView(APIView):
         require_project_membership(request.user, project.id)
         data = request.data.copy()
         data["project"] = project.id
-        # Explicitly set workplan and milestone to None for backlog tasks
         data["workplan"] = None
         data["milestone"] = None
-        serializer = TaskSerializer(data=data)
+        SerializerClass = self._task_serializer(request)
+        serializer = SerializerClass(data=data, context={"request": request})
         if serializer.is_valid():
             serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)

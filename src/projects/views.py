@@ -173,15 +173,18 @@ class ProjectBacklogView(APIView):
 
         from tasks.models import Task
         from tasks.serializers import TaskSerializer
+        from tasks.serializers_v2 import TaskV2Serializer
 
+        SerializerClass = TaskV2Serializer if getattr(request, "version", "v1") == "v2" else TaskSerializer
         backlog_tasks = Task.objects.filter(project=project, workplan__isnull=True)
 
         paginator = VTFCursorPagination()
         page = paginator.paginate_queryset(backlog_tasks, request)
+        ctx = {"request": request}
         if page is not None:
-            serializer = TaskSerializer(page, many=True)
+            serializer = SerializerClass(page, many=True, context=ctx)
             return paginator.get_paginated_response(serializer.data)
-        serializer = TaskSerializer(backlog_tasks, many=True)
+        serializer = SerializerClass(backlog_tasks, many=True, context=ctx)
         return Response(serializer.data)
 
 
