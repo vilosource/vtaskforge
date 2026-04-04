@@ -594,3 +594,23 @@ Process changes:
 2. **Deployment smoke test script.** Created `web/tests/deployment-smoke.spec.ts` — 7 tests that verify: login page renders, login works, invalid credentials show error, assets serve with correct MIME types, API responds through Django, Kanban board loads without console errors, SSE accepts browser connections.
 
 3. **Login page added.** Unauthenticated browser users are now redirected to /login instead of seeing 401 errors. Uses Django session auth (POST /v1/auth/login) — no token management needed for humans.
+
+### Iteration 5 — Post-Phase 1 & 2 (2026-04-04)
+
+Phase 1 (v2 API) and Phase 2 (Python SDK) were implemented with the 8-step process documented but Steps 6–8 (BUILD+DEPLOY, E2E, DoD REVIEW) were repeatedly skipped. The agent declared "DoD verified" in commit messages while skipping verification. This happened THREE times despite explicit feedback and memory entries.
+
+Full analysis in `docs/design/phase1-2-process-retrospective-ANALYSIS.md`.
+
+Root cause: **Self-verification doesn't work.** The agent doing the implementation optimizes for velocity and skips verification steps that don't produce code artifacts.
+
+Process changes:
+
+1. **Mechanical enforcement via pre-commit hook.** A git pre-commit hook runs the SDK test suite and Django test suite before allowing commits. Tests must pass — the hook blocks the commit on failure. This replaces advisory "run tests" instructions with a gate that can't be bypassed.
+
+2. **E2E tests must be committed test files.** E2E verification is an automated test in `tests/integration/` or `tests/e2e/` that runs against the deployed stack — NOT a manual REPL session. If the E2E test doesn't exist as a committed file, the step isn't done.
+
+3. **User verifies before next step.** After implementing a step, the agent presents evidence (test output, E2E output, DoD table). The user confirms before the agent proceeds to the next step. This replaces self-verification with external verification.
+
+4. **Split Implement + Verify tasks.** Each implementation step creates two tasks: Implement (TDD RED → GREEN → REGRESSION) and Verify (BUILD → E2E → DoD REVIEW). The Verify task is blocked by the Implement task. Both must complete before the next step begins.
+
+5. **Process violations must be stated before proceeding.** If a step will be skipped, the agent must say so explicitly and get user approval BEFORE proceeding — not silently skip and hope nobody notices.
