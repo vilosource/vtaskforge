@@ -2,7 +2,7 @@
 import os
 import pytest
 
-VTF_URL = os.environ.get("VTF_URL", "http://localhost:8002")
+VTF_URL = os.environ.get("VTF_URL", "https://vtf.dev.viloforge.com")
 VTF_TOKEN = os.environ.get("VTF_TOKEN", "88dac5ac99f96f3e10c554e0169ec2ff00260652")
 
 

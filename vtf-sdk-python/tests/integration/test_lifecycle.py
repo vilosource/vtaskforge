@@ -73,9 +73,9 @@ class TestFullLifecycle:
             vtf.tasks.get("nonexistent-task-id-99999")
 
     def test_pagination(self, vtf):
-        """DoD #6: list_all iterates."""
-        tasks = list(vtf.tasks.list_all(page_size=2))
-        # Should return at least some tasks (test data exists from prior steps)
-        assert isinstance(tasks, list)
-        if tasks:
-            assert isinstance(tasks[0], Task)
+        """DoD #6: paginated list returns typed results."""
+        result = vtf.tasks.list(page_size=2)
+        assert isinstance(result.items, list)
+        assert len(result.items) <= 2
+        if result.items:
+            assert isinstance(result.items[0], Task)
