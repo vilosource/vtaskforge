@@ -200,7 +200,11 @@ class ProjectMemberView(APIView):
         members = ProjectMembership.objects.select_related("user").filter(
             project_id=project_id
         )
-        serializer = ProjectMembershipSerializer(members, many=True)
+        if getattr(request, "version", "v1") == "v2":
+            from prefs.serializers_v2 import ProjectMembershipV2Serializer
+            serializer = ProjectMembershipV2Serializer(members, many=True)
+        else:
+            serializer = ProjectMembershipSerializer(members, many=True)
         return Response({"results": serializer.data})
 
     def post(self, request, project_id):

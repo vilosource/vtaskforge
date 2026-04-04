@@ -99,10 +99,24 @@ class TokenValidationView(APIView):
     def get(self, request):
         profile = get_or_create_profile(request.user)
         memberships = ProjectMembership.objects.filter(user=request.user)
-        projects = [
-            {"project_id": m.project_id, "role": m.role}
-            for m in memberships
-        ]
+
+        is_v2 = getattr(request, "version", "v1") == "v2"
+        if is_v2:
+            from core.refs import ProjectRefSerializer
+            from projects.models import Project
+            project_ids = [m.project_id for m in memberships]
+            projects_qs = Project.objects.filter(pk__in=project_ids)
+            project_map = {p.id: p for p in projects_qs}
+            projects = [
+                {"project": ProjectRefSerializer(project_map[m.project_id]).data, "role": m.role}
+                for m in memberships if m.project_id in project_map
+            ]
+        else:
+            projects = [
+                {"project_id": m.project_id, "role": m.role}
+                for m in memberships
+            ]
+
         return Response({
             "user_id": request.user.pk,
             "username": request.user.username,
@@ -215,7 +229,11 @@ class LockView(APIView):
     def get(self, request):
         project_id = request.query_params.get("project_id")
         locks = list_locks(project_id=project_id)
-        serializer = AgentLockSerializer(locks, many=True)
+        if getattr(request, "version", "v1") == "v2":
+            from prefs.serializers_v2 import AgentLockV2Serializer
+            serializer = AgentLockV2Serializer(locks, many=True)
+        else:
+            serializer = AgentLockSerializer(locks, many=True)
         return Response({"results": serializer.data})
 
     def post(self, request):
@@ -278,7 +296,11 @@ class ChannelMappingView(APIView):
             qs = qs.filter(provider=provider)
         if channel_id:
             qs = qs.filter(channel_id=channel_id)
-        serializer = ChannelProjectMappingSerializer(qs, many=True)
+        if getattr(request, "version", "v1") == "v2":
+            from prefs.serializers_v2 import ChannelProjectMappingV2Serializer
+            serializer = ChannelProjectMappingV2Serializer(qs, many=True)
+        else:
+            serializer = ChannelProjectMappingSerializer(qs, many=True)
         return Response({"results": serializer.data})
 
     def post(self, request):
@@ -361,7 +383,11 @@ class UserDetailView(APIView):
             user = get_user_detail(pk)
         except User.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        serializer = UserDetailSerializer(user)
+        if getattr(request, "version", "v1") == "v2":
+            from prefs.serializers_v2 import UserDetailV2Serializer
+            serializer = UserDetailV2Serializer(user)
+        else:
+            serializer = UserDetailSerializer(user)
         return Response(serializer.data)
 
     def patch(self, request, pk):
