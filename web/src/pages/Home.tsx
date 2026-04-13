@@ -6,6 +6,7 @@ import { useProjects, type ProjectStats, type ProjectWorkplan } from '../api/pro
 import { useAgents, type Agent } from '../api/agents';
 import { apiGet, apiGetPaginated } from '../api/client';
 import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
+import { useChatWidget } from '../contexts/ChatWidgetContext';
 import { useRecentAccess, type RecentAccessItem } from '../api/profile';
 
 /* ---------- helpers ---------- */
@@ -242,6 +243,7 @@ export function Home() {
   }, [projects]);
 
   const { open: openConsoleWidget } = useConsoleWidget();
+  const { open: openChatWidget } = useChatWidget();
   const greeting = getGreeting();
   const displayName = username || 'there';
   const isLoading = projectsLoading || agentsLoading;
@@ -411,6 +413,16 @@ export function Home() {
           >
             <span className="material-symbols-outlined text-primary text-2xl">terminal</span>
             <span className="text-xs font-bold text-on-surface">Consult Architect</span>
+          </button>
+          <button
+            onClick={() => {
+              const proj = projects.length > 0 ? projects[0].name : 'default';
+              openChatWidget(proj);
+            }}
+            className="bg-surface-container-lowest p-5 rounded-xl shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 flex flex-col items-center gap-3 cursor-pointer border border-outline-variant/20"
+          >
+            <span className="material-symbols-outlined text-primary text-2xl">chat</span>
+            <span className="text-xs font-bold text-on-surface">Chat with Architect</span>
           </button>
         </div>
       </div>

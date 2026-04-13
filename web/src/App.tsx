@@ -3,7 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { ActiveProjectProvider } from './contexts/ActiveProjectContext';
 import { ConsoleWidgetProvider, useConsoleWidget } from './contexts/ConsoleWidgetContext';
+import { ChatWidgetProvider, useChatWidget } from './contexts/ChatWidgetContext';
 import { ConsoleWidget } from './components/ConsoleWidget';
+import { ChatWidget } from './components/ChatWidget';
 import { Home } from './pages/Home';
 import { ProjectList } from './pages/ProjectList';
 import { ProjectDashboard } from './pages/ProjectDashboard';
@@ -113,8 +115,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
-  const { isOpen, layout, dockWidth } = useConsoleWidget();
-  const isDocked = isOpen && layout === 'docked';
+  const { isOpen: consoleOpen, layout: consoleLayout, dockWidth: consoleDockWidth } = useConsoleWidget();
+  const { isOpen: chatOpen, layout: chatLayout, dockWidth: chatDockWidth } = useChatWidget();
+  const consoleDocked = consoleOpen && consoleLayout === 'docked';
+  const chatDocked = chatOpen && chatLayout === 'docked';
+  const totalMarginRight = (consoleDocked ? consoleDockWidth : 0) + (chatDocked ? chatDockWidth : 0);
 
   return (
     <RequireAuth>
@@ -122,7 +127,7 @@ function AppLayout() {
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <main
           className={`flex-1 min-w-0 overflow-x-auto transition-[margin] duration-200 ${sidebarCollapsed ? 'ml-10' : 'ml-64'}`}
-          style={isDocked ? { marginRight: dockWidth } : undefined}
+          style={totalMarginRight > 0 ? { marginRight: totalMarginRight } : undefined}
         >
           <Outlet />
         </main>
@@ -138,6 +143,7 @@ export function App() {
         <AuthProvider>
           <ActiveProjectProvider>
           <ConsoleWidgetProvider>
+          <ChatWidgetProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<AppLayout />}>
@@ -159,6 +165,8 @@ export function App() {
             </Route>
           </Routes>
           <ConsoleWidget />
+          <ChatWidget />
+          </ChatWidgetProvider>
           </ConsoleWidgetProvider>
           </ActiveProjectProvider>
         </AuthProvider>

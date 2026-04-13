@@ -9,6 +9,7 @@ import { TaskListTable, BACKLOG_COLUMNS } from '../components/TaskListTable';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { useSetActiveProject } from '../contexts/ActiveProjectContext';
 import { useConsoleWidget } from '../contexts/ConsoleWidgetContext';
+import { useChatWidget } from '../contexts/ChatWidgetContext';
 
 function WorkplanCard({ workplan, projectId }: {
   workplan: { id: string; name: string; description: string; status: string; total_tasks: number; completed_percentage: number };
@@ -101,6 +102,7 @@ export function ProjectDashboard() {
   const { data: workplans, isLoading: workplansLoading } = useProjectWorkplans(id);
   const { data: backlogData } = useBacklogTasks(id!);
   const { open: openConsoleWidget } = useConsoleWidget();
+  const { open: openChatWidget } = useChatWidget();
   const queryClient = useQueryClient();
 
   const handleSSEEvent = useCallback(
@@ -190,13 +192,22 @@ export function ProjectDashboard() {
           </div>
           <div className="ml-auto flex items-center gap-3">
             {project?.id && (
-              <button
-                onClick={() => openConsoleWidget({ role: 'architect', project: project.id })}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
-              >
-                <span className="material-symbols-outlined text-sm">terminal</span>
-                Plan with Architect
-              </button>
+              <>
+                <button
+                  onClick={() => openConsoleWidget({ role: 'architect', project: project.id })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">terminal</span>
+                  Plan with Architect
+                </button>
+                <button
+                  onClick={() => openChatWidget(project.name || project.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">chat</span>
+                  Chat with Architect
+                </button>
+              </>
             )}
             {project?.repo_url && (
               <a
