@@ -2,22 +2,35 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ChatWidgetProvider, useChatWidget } from '../ChatWidgetContext';
 
-// Mock bridge API
-vi.mock('../../api/bridge', () => ({
-  checkLock: vi.fn(),
-  acquireLock: vi.fn(),
-  releaseLock: vi.fn(),
+// Mock bridge API — import real classifyBridgeError since it's pure logic
+vi.mock('../../api/bridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/bridge')>();
+  return {
+    ...actual,
+    checkLock: vi.fn(),
+    acquireLock: vi.fn(),
+    releaseLock: vi.fn(),
+  };
+});
+
+// Mock stream hook — captures the onEvent callback for testing
+let capturedOnEvent: ((event: import('../../types/chat').BridgeStreamEvent) => void) | null = null;
+
+vi.mock('../../hooks/useBridgeStream', () => ({
+  useBridgeStream: vi.fn((onEvent: (event: import('../../types/chat').BridgeStreamEvent) => void) => {
+    capturedOnEvent = onEvent;
+    return {
+      startStream: vi.fn(),
+      cancelStream: vi.fn(),
+      isStreaming: false,
+      error: null,
+    };
+  }),
 }));
 
-// Mock stream hook
-vi.mock('../../hooks/useBridgeStream', () => ({
-  useBridgeStream: vi.fn(() => ({
-    startStream: vi.fn(),
-    cancelStream: vi.fn(),
-    isStreaming: false,
-    events: [],
-    error: null,
-  })),
+// Mock useAuth
+vi.mock('../../App', () => ({
+  useAuth: vi.fn(() => ({ username: 'admin', authenticated: true, loading: false, isStaff: false, userType: 'human', projects: [] })),
 }));
 
 import { checkLock, acquireLock, releaseLock } from '../../api/bridge';
@@ -36,12 +49,15 @@ describe('ChatWidgetContext', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    mockUseBridgeStream.mockReturnValue({
-      startStream: vi.fn(),
-      cancelStream: vi.fn(),
-      isStreaming: false,
-      events: [],
-      error: null,
+    capturedOnEvent = null;
+    mockUseBridgeStream.mockImplementation((onEvent: (event: import('../../types/chat').BridgeStreamEvent) => void) => {
+      capturedOnEvent = onEvent;
+      return {
+        startStream: vi.fn(),
+        cancelStream: vi.fn(),
+        isStreaming: false,
+        error: null,
+      };
     });
   });
 
@@ -169,6 +185,36 @@ describe('ChatWidgetContext', () => {
     expect(result.current.sessionId).toBe('sess-existing');
   });
 
+  it('open() shows conflict when lock is held by different user', async () => {
+    mockCheckLock.mockResolvedValueOnce([
+      { session_id: 'sess-other', role: 'architect', project: 'proj', user: 'alice' },
+    ]);
+
+    const { result } = renderHook(() => useChatWidget(), { wrapper });
+
+    await act(async () => { result.current.open('proj'); });
+
+    expect(mockAcquireLock).not.toHaveBeenCalled();
+    expect(result.current.lockStatus).toBe('error');
+    expect(result.current.connectionError).not.toBeNull();
+    expect(result.current.connectionError!.type).toBe('conflict');
+    expect(result.current.connectionError!.heldBy).toBe('alice');
+  });
+
+  it('open() reconnects when lock is held by same user', async () => {
+    mockCheckLock.mockResolvedValueOnce([
+      { session_id: 'sess-mine', role: 'architect', project: 'proj', user: 'admin' },
+    ]);
+
+    const { result } = renderHook(() => useChatWidget(), { wrapper });
+
+    await act(async () => { result.current.open('proj'); });
+
+    expect(mockAcquireLock).not.toHaveBeenCalled();
+    expect(result.current.lockStatus).toBe('connected');
+    expect(result.current.sessionId).toBe('sess-mine');
+  });
+
   it('open() sets error on lock failure', async () => {
     mockCheckLock.mockResolvedValueOnce([]);
     mockAcquireLock.mockRejectedValueOnce(new Error('Lock conflict'));
@@ -179,6 +225,8 @@ describe('ChatWidgetContext', () => {
 
     expect(result.current.lockStatus).toBe('error');
     expect(result.current.sessionId).toBeNull();
+    expect(result.current.connectionError).not.toBeNull();
+    expect(result.current.connectionError!.type).toBe('network');
   });
 
   it('close() calls releaseLock when connected', async () => {
@@ -202,12 +250,14 @@ describe('ChatWidgetContext', () => {
     mockAcquireLock.mockResolvedValueOnce({ session_id: 'sess-1' });
 
     const mockStartStream = vi.fn();
-    mockUseBridgeStream.mockReturnValue({
-      startStream: mockStartStream,
-      cancelStream: vi.fn(),
-      isStreaming: false,
-      events: [],
-      error: null,
+    mockUseBridgeStream.mockImplementation((onEvent) => {
+      capturedOnEvent = onEvent;
+      return {
+        startStream: mockStartStream,
+        cancelStream: vi.fn(),
+        isStreaming: false,
+        error: null,
+      };
     });
 
     const { result } = renderHook(() => useChatWidget(), { wrapper });
@@ -225,12 +275,14 @@ describe('ChatWidgetContext', () => {
     mockAcquireLock.mockResolvedValueOnce({ session_id: 'sess-1' });
 
     const mockStartStream = vi.fn();
-    mockUseBridgeStream.mockReturnValue({
-      startStream: mockStartStream,
-      cancelStream: vi.fn(),
-      isStreaming: false,
-      events: [],
-      error: null,
+    mockUseBridgeStream.mockImplementation((onEvent) => {
+      capturedOnEvent = onEvent;
+      return {
+        startStream: mockStartStream,
+        cancelStream: vi.fn(),
+        isStreaming: false,
+        error: null,
+      };
     });
 
     const { result } = renderHook(() => useChatWidget(), { wrapper });
@@ -255,30 +307,22 @@ describe('ChatWidgetContext', () => {
     expect(result.current.messages).toEqual([]);
   });
 
-  // ---- Stream event processing ----
+  // ---- Stream event processing (callback-based) ----
 
   it('text_delta events build assistant message', async () => {
     mockCheckLock.mockResolvedValueOnce([]);
     mockAcquireLock.mockResolvedValueOnce({ session_id: 'sess-1' });
 
-    // First render: no events
-    mockUseBridgeStream.mockReturnValue({
-      startStream: vi.fn(),
-      cancelStream: vi.fn(),
-      isStreaming: true,
-      events: [
-        { type: 'text_delta', text: 'Hello ' },
-        { type: 'text_delta', text: 'world' },
-      ],
-      error: null,
-    });
-
     const { result } = renderHook(() => useChatWidget(), { wrapper });
 
     await act(async () => { result.current.open('proj'); });
-    act(() => { result.current.sendMessage('Hi'); });
 
-    // The context should process text_delta events into an assistant message
+    // Simulate stream events via the captured onEvent callback
+    act(() => {
+      capturedOnEvent!({ type: 'text_delta', text: 'Hello ' });
+      capturedOnEvent!({ type: 'text_delta', text: 'world' });
+    });
+
     const assistantMsgs = result.current.messages.filter((m) => m.role === 'assistant');
     expect(assistantMsgs).toHaveLength(1);
     expect(assistantMsgs[0].content).toBe('Hello world');
@@ -288,22 +332,15 @@ describe('ChatWidgetContext', () => {
     mockCheckLock.mockResolvedValueOnce([]);
     mockAcquireLock.mockResolvedValueOnce({ session_id: 'sess-1' });
 
-    mockUseBridgeStream.mockReturnValue({
-      startStream: vi.fn(),
-      cancelStream: vi.fn(),
-      isStreaming: true,
-      events: [
-        { type: 'tool_use', tool: 'bash', status: 'started' },
-        { type: 'text_delta', text: 'Done' },
-        { type: 'tool_use', tool: 'bash', status: 'completed' },
-      ],
-      error: null,
-    });
-
     const { result } = renderHook(() => useChatWidget(), { wrapper });
 
     await act(async () => { result.current.open('proj'); });
-    act(() => { result.current.sendMessage('Run tests'); });
+
+    act(() => {
+      capturedOnEvent!({ type: 'tool_use', tool: 'bash', status: 'started' });
+      capturedOnEvent!({ type: 'text_delta', text: 'Done' });
+      capturedOnEvent!({ type: 'tool_use', tool: 'bash', status: 'completed' });
+    });
 
     const assistantMsgs = result.current.messages.filter((m) => m.role === 'assistant');
     expect(assistantMsgs).toHaveLength(1);

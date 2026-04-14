@@ -1,3 +1,13 @@
+// ---- Connection error types ----
+
+export type ConnectionErrorType = 'conflict' | 'forbidden' | 'rate_limited' | 'unavailable' | 'expired' | 'network';
+
+export interface ConnectionError {
+  type: ConnectionErrorType;
+  message: string;
+  heldBy?: string;
+}
+
 // ---- Value types ----
 
 export interface ToolUse {
@@ -28,6 +38,7 @@ export interface ChatWidgetState {
   project: string | null;
   sessionId: string | null;
   lockStatus: LockStatus;
+  connectionError: ConnectionError | null;
   messages: ChatMessage[];
   isStreaming: boolean;
 }
@@ -42,7 +53,7 @@ export interface BridgeLock {
   session_id: string;
   role: string;
   project: string;
-  user?: string;
+  user: string;
 }
 
 // ---- Stream event discriminated union ----

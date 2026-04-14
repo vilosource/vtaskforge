@@ -3,11 +3,12 @@ import TextareaAutosize from 'react-textarea-autosize';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onStop?: () => void;
   disabled: boolean;
   isStreaming: boolean;
 }
 
-export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, isStreaming }: ChatInputProps) {
   const [value, setValue] = useState('');
 
   const canSend = value.trim().length > 0 && !disabled && !isStreaming;
@@ -42,14 +43,24 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
         maxRows={6}
         className="flex-1 resize-none rounded-md bg-surface-container-low px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40"
       />
-      <button
-        data-testid="chat-send"
-        onClick={handleSend}
-        disabled={!canSend}
-        className="rounded-full bg-primary px-3 py-2 text-sm font-medium text-on-primary disabled:opacity-40"
-      >
-        {isStreaming ? 'Stop' : 'Send'}
-      </button>
+      {isStreaming ? (
+        <button
+          data-testid="chat-stop"
+          onClick={onStop}
+          className="rounded-full bg-error px-3 py-2 text-sm font-medium text-on-error"
+        >
+          Stop
+        </button>
+      ) : (
+        <button
+          data-testid="chat-send"
+          onClick={handleSend}
+          disabled={!canSend}
+          className="rounded-full bg-primary px-3 py-2 text-sm font-medium text-on-primary disabled:opacity-40"
+        >
+          Send
+        </button>
+      )}
     </div>
   );
 }

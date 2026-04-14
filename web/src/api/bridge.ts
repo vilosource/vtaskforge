@@ -1,7 +1,5 @@
-import type { BridgeLock, BridgeLockResponse } from '../types/chat';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const BRIDGE_URL = ((globalThis as any).__BRIDGE_URL as string) || 'https://bridge.dev.viloforge.com';
+import type { BridgeLock, BridgeLockResponse, ConnectionError } from '../types/chat';
+import { BRIDGE_URL } from '../utils/bridgeConfig';
 
 export class BridgeApiError extends Error {
   status: number;
@@ -79,6 +77,44 @@ export async function releaseLock(project: string, role: string): Promise<void> 
     body: JSON.stringify({ project, role }),
   });
   return handleResponse<void>(res);
+}
+
+function extractDetail(data: unknown): string {
+  if (data && typeof data === 'object' && 'detail' in data) {
+    return String((data as { detail: string }).detail);
+  }
+  return '';
+}
+
+function extractHeldBy(detail: string): string | undefined {
+  const match = detail.match(/^Lock held by (.+)$/);
+  return match ? match[1] : undefined;
+}
+
+export function classifyBridgeError(err: unknown): ConnectionError {
+  if (err instanceof BridgeApiError) {
+    const detail = extractDetail(err.data);
+    switch (err.status) {
+      case 409:
+        return {
+          type: 'conflict',
+          message: detail || 'Session held by another user.',
+          heldBy: extractHeldBy(detail),
+        };
+      case 403:
+        return { type: 'forbidden', message: detail || 'You do not have access to this project.' };
+      case 429:
+        return { type: 'rate_limited', message: 'Too many requests. Please wait a moment.' };
+      case 503:
+        return { type: 'unavailable', message: detail || 'Bridge service unavailable.' };
+      default:
+        return { type: 'network', message: detail || `Bridge error (${err.status}).` };
+    }
+  }
+  if (err instanceof Error) {
+    return { type: 'network', message: err.message || 'Network error. Check your connection.' };
+  }
+  return { type: 'network', message: 'Connection failed.' };
 }
 
 export async function streamPrompt(

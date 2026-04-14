@@ -62,9 +62,25 @@ describe('ChatInput', () => {
     expect(textarea).toHaveValue('line1\nline2');
   });
 
-  it('send button disabled during streaming', () => {
-    render(<ChatInput onSend={vi.fn()} disabled={false} isStreaming={true} />);
-    expect(screen.getByTestId('chat-send')).toBeDisabled();
+  it('shows Stop button during streaming', () => {
+    render(<ChatInput onSend={vi.fn()} onStop={vi.fn()} disabled={false} isStreaming={true} />);
+    expect(screen.getByTestId('chat-stop')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-stop')).toHaveTextContent('Stop');
+    expect(screen.queryByTestId('chat-send')).not.toBeInTheDocument();
+  });
+
+  it('Stop button is enabled during streaming', () => {
+    render(<ChatInput onSend={vi.fn()} onStop={vi.fn()} disabled={false} isStreaming={true} />);
+    expect(screen.getByTestId('chat-stop')).not.toBeDisabled();
+  });
+
+  it('clicking Stop button calls onStop', async () => {
+    const onStop = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatInput onSend={vi.fn()} onStop={onStop} disabled={false} isStreaming={true} />);
+
+    await user.click(screen.getByTestId('chat-stop'));
+    expect(onStop).toHaveBeenCalledOnce();
   });
 
   it('clicking send button calls onSend', async () => {

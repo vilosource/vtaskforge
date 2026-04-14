@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { checkLock, acquireLock, releaseLock, streamPrompt, BridgeApiError } from './bridge';
+import { checkLock, acquireLock, releaseLock, streamPrompt, BridgeApiError, classifyBridgeError } from './bridge';
 
 function mockResponse(status: number, body: unknown): Response {
   return {
@@ -184,6 +184,59 @@ describe('Bridge API client', () => {
       mockFetch.mockResolvedValueOnce(mockResponse(401, { detail: 'Unauthorized' }));
 
       await expect(streamPrompt('hello', 'proj', 'architect')).rejects.toThrow(BridgeApiError);
+    });
+  });
+
+  describe('classifyBridgeError', () => {
+    it('maps 409 to conflict with heldBy', () => {
+      const err = new BridgeApiError(409, { detail: 'Lock held by alice' });
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('conflict');
+      expect(result.heldBy).toBe('alice');
+      expect(result.message).toContain('alice');
+    });
+
+    it('maps 409 without username pattern', () => {
+      const err = new BridgeApiError(409, { detail: 'Locked role requires a lock.' });
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('conflict');
+      expect(result.heldBy).toBeUndefined();
+    });
+
+    it('maps 403 to forbidden', () => {
+      const err = new BridgeApiError(403, { detail: 'Not a member of this project' });
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('forbidden');
+    });
+
+    it('maps 429 to rate_limited', () => {
+      const err = new BridgeApiError(429, { detail: 'Rate limit exceeded' });
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('rate_limited');
+    });
+
+    it('maps 503 to unavailable', () => {
+      const err = new BridgeApiError(503, { detail: 'Locked session not ready' });
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('unavailable');
+    });
+
+    it('maps generic Error to network', () => {
+      const err = new Error('Failed to fetch');
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('network');
+      expect(result.message).toBe('Failed to fetch');
+    });
+
+    it('maps unknown error to network', () => {
+      const result = classifyBridgeError('something broke');
+      expect(result.type).toBe('network');
+    });
+
+    it('maps unknown HTTP status to network', () => {
+      const err = new BridgeApiError(500, { detail: 'Internal error' });
+      const result = classifyBridgeError(err);
+      expect(result.type).toBe('network');
     });
   });
 

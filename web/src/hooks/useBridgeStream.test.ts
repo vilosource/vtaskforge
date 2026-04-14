@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useBridgeStream } from './useBridgeStream';
+import type { BridgeStreamEvent } from '../types/chat';
 
 // Mock bridge API
 vi.mock('../api/bridge', () => ({
@@ -43,18 +44,19 @@ describe('useBridgeStream', () => {
     vi.restoreAllMocks();
   });
 
-  it('initial state: not streaming, no events, no error', () => {
-    const { result } = renderHook(() => useBridgeStream());
+  it('initial state: not streaming, no error', () => {
+    const onEvent = vi.fn();
+    const { result } = renderHook(() => useBridgeStream(onEvent));
     expect(result.current.isStreaming).toBe(false);
-    expect(result.current.events).toEqual([]);
     expect(result.current.error).toBeNull();
   });
 
   it('startStream calls streamPrompt with correct args', async () => {
     const response = mockStreamResponse([]);
     mockStreamPrompt.mockResolvedValueOnce(response);
+    const onEvent = vi.fn();
 
-    const { result } = renderHook(() => useBridgeStream());
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('hello', 'my-proj', 'architect');
@@ -68,33 +70,32 @@ describe('useBridgeStream', () => {
     );
   });
 
-  it('accumulates events as stream emits lines', async () => {
+  it('calls onEvent for each parsed event', async () => {
     const lines = [
       '{"type":"session_start","session_id":"s1"}',
       '{"type":"text_delta","text":"Hi"}',
       '{"type":"result"}',
     ];
     mockStreamPrompt.mockResolvedValueOnce(mockStreamResponse(lines));
+    const onEvent = vi.fn();
 
-    const { result } = renderHook(() => useBridgeStream());
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('hello', 'proj', 'architect');
     });
 
-    // Wait for stream to complete
     await vi.waitFor(() => {
       expect(result.current.isStreaming).toBe(false);
     });
 
-    expect(result.current.events).toHaveLength(3);
-    expect(result.current.events[0]).toEqual({ type: 'session_start', session_id: 's1' });
-    expect(result.current.events[1]).toEqual({ type: 'text_delta', text: 'Hi' });
-    expect(result.current.events[2]).toEqual({ type: 'result' });
+    expect(onEvent).toHaveBeenCalledTimes(3);
+    expect(onEvent).toHaveBeenNthCalledWith(1, { type: 'session_start', session_id: 's1' });
+    expect(onEvent).toHaveBeenNthCalledWith(2, { type: 'text_delta', text: 'Hi' });
+    expect(onEvent).toHaveBeenNthCalledWith(3, { type: 'result' });
   });
 
   it('isStreaming is true while stream is active', async () => {
-    // Use a stream that won't auto-close so we can check isStreaming
     let resolve: () => void;
     const blockingPromise = new Promise<void>((r) => { resolve = r; });
 
@@ -113,7 +114,8 @@ describe('useBridgeStream', () => {
       body: stream,
     } as unknown as Response);
 
-    const { result } = renderHook(() => useBridgeStream());
+    const onEvent = vi.fn();
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('hello', 'proj', 'architect');
@@ -121,7 +123,6 @@ describe('useBridgeStream', () => {
 
     expect(result.current.isStreaming).toBe(true);
 
-    // Release the stream
     await act(async () => {
       resolve!();
     });
@@ -150,7 +151,8 @@ describe('useBridgeStream', () => {
       body: stream,
     } as unknown as Response);
 
-    const { result } = renderHook(() => useBridgeStream());
+    const onEvent = vi.fn();
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('hello', 'proj', 'architect');
@@ -166,14 +168,14 @@ describe('useBridgeStream', () => {
       expect(result.current.isStreaming).toBe(false);
     });
 
-    // Clean up
     resolve!();
   });
 
   it('sets error when streamPrompt rejects', async () => {
     mockStreamPrompt.mockRejectedValueOnce(new Error('Network error'));
+    const onEvent = vi.fn();
 
-    const { result } = renderHook(() => useBridgeStream());
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('hello', 'proj', 'architect');
@@ -183,15 +185,17 @@ describe('useBridgeStream', () => {
       expect(result.current.error).toBe('Network error');
     });
     expect(result.current.isStreaming).toBe(false);
+    expect(onEvent).not.toHaveBeenCalled();
   });
 
-  it('sets error from bridge error event', async () => {
+  it('passes error events through onEvent', async () => {
     const lines = [
       '{"type":"error","message":"Session expired"}',
     ];
     mockStreamPrompt.mockResolvedValueOnce(mockStreamResponse(lines));
+    const onEvent = vi.fn();
 
-    const { result } = renderHook(() => useBridgeStream());
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('hello', 'proj', 'architect');
@@ -201,22 +205,20 @@ describe('useBridgeStream', () => {
       expect(result.current.isStreaming).toBe(false);
     });
 
-    expect(result.current.events).toHaveLength(1);
-    expect(result.current.events[0]).toEqual({ type: 'error', message: 'Session expired' });
+    expect(onEvent).toHaveBeenCalledWith({ type: 'error', message: 'Session expired' });
   });
 
   it('new startStream cancels previous stream', async () => {
-    // First stream
     const lines1 = ['{"type":"text_delta","text":"first"}'];
     mockStreamPrompt.mockResolvedValueOnce(mockStreamResponse(lines1));
+    const onEvent = vi.fn();
 
-    const { result } = renderHook(() => useBridgeStream());
+    const { result } = renderHook(() => useBridgeStream(onEvent));
 
     await act(async () => {
       result.current.startStream('msg1', 'proj', 'architect');
     });
 
-    // Second stream (should reset events)
     const lines2 = ['{"type":"text_delta","text":"second"}', '{"type":"result"}'];
     mockStreamPrompt.mockResolvedValueOnce(mockStreamResponse(lines2));
 
@@ -228,8 +230,11 @@ describe('useBridgeStream', () => {
       expect(result.current.isStreaming).toBe(false);
     });
 
-    // Should have events from second stream only
-    expect(result.current.events.some((e) => e.type === 'text_delta' && 'text' in e && e.text === 'second')).toBe(true);
+    // Should have called onEvent with second stream's events
+    const textEvents = onEvent.mock.calls
+      .filter((args) => (args[0] as BridgeStreamEvent).type === 'text_delta')
+      .map((args) => ((args[0] as BridgeStreamEvent) as { type: string; text: string }).text);
+    expect(textEvents).toContain('second');
     expect(mockStreamPrompt).toHaveBeenCalledTimes(2);
   });
 });

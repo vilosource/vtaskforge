@@ -17,9 +17,12 @@ export function ChatWidget() {
     size,
     dockWidth,
     lockStatus,
+    connectionError,
     messages,
     isStreaming,
     close,
+    cancelStream,
+    retryConnection,
     releaseAndClose,
     keepAliveAndMinimize,
     minimize,
@@ -163,7 +166,10 @@ export function ChatWidget() {
             messages={messages}
             isStreaming={isStreaming}
             lockStatus={lockStatus}
+            connectionError={connectionError}
             onSendMessage={sendMessage}
+            onStop={cancelStream}
+            onRetry={retryConnection}
           />
         </div>
 
@@ -205,6 +211,7 @@ export function ChatWidget() {
           messages={messages}
           isStreaming={isStreaming}
           lockStatus={lockStatus}
+          connectionError={connectionError}
           onSendMessage={sendMessage}
         />
         {closeDialog}

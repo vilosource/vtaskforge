@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { BridgeStreamEvent } from '../types/chat';
 import { streamPrompt } from '../api/bridge';
 import { parseNDJSONLine } from '../utils/parseNDJSON';
@@ -7,15 +7,22 @@ export interface UseBridgeStreamResult {
   startStream: (message: string, project: string, role: string) => void;
   cancelStream: () => void;
   isStreaming: boolean;
-  events: BridgeStreamEvent[];
   error: string | null;
 }
 
-export function useBridgeStream(): UseBridgeStreamResult {
+export function useBridgeStream(
+  onEvent: (event: BridgeStreamEvent) => void,
+): UseBridgeStreamResult {
   const [isStreaming, setIsStreaming] = useState(false);
-  const [events, setEvents] = useState<BridgeStreamEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const cancelStream = useCallback(() => {
     if (abortRef.current) {
@@ -35,7 +42,6 @@ export function useBridgeStream(): UseBridgeStreamResult {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      setEvents([]);
       setError(null);
       setIsStreaming(true);
 
@@ -55,18 +61,19 @@ export function useBridgeStream(): UseBridgeStreamResult {
             buffer = lines.pop()!; // keep incomplete line
 
             for (const line of lines) {
+              if (!mountedRef.current) return;
               const event = parseNDJSONLine(line);
               if (event) {
-                setEvents((prev) => [...prev, event]);
+                onEventRef.current(event);
               }
             }
           }
 
           // Process remaining buffer
-          if (buffer.trim()) {
+          if (buffer.trim() && mountedRef.current) {
             const event = parseNDJSONLine(buffer);
             if (event) {
-              setEvents((prev) => [...prev, event]);
+              onEventRef.current(event);
             }
           }
         } catch (err: unknown) {
@@ -74,9 +81,11 @@ export function useBridgeStream(): UseBridgeStreamResult {
             // Cancelled — not an error
             return;
           }
-          setError(err instanceof Error ? err.message : 'Stream failed');
+          if (mountedRef.current) {
+            setError(err instanceof Error ? err.message : 'Stream failed');
+          }
         } finally {
-          if (abortRef.current === controller) {
+          if (abortRef.current === controller && mountedRef.current) {
             setIsStreaming(false);
             abortRef.current = null;
           }
@@ -86,5 +95,5 @@ export function useBridgeStream(): UseBridgeStreamResult {
     [],
   );
 
-  return { startStream, cancelStream, isStreaming, events, error };
+  return { startStream, cancelStream, isStreaming, error };
 }

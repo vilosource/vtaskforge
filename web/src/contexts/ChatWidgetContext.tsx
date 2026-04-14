@@ -3,10 +3,14 @@ import type {
   ChatWidgetState,
   ChatWidgetLayout,
   ChatMessage,
+  BridgeStreamEvent,
   ToolUse,
 } from '../types/chat';
-import { checkLock, acquireLock, releaseLock } from '../api/bridge';
+import { BRIDGE_URL } from '../utils/bridgeConfig';
+import { checkLock, acquireLock, releaseLock, classifyBridgeError } from '../api/bridge';
 import { useBridgeStream } from '../hooks/useBridgeStream';
+import { useLockHeartbeat } from '../hooks/useLockHeartbeat';
+import { useAuth } from '../App';
 
 // ---- Context value interface ----
 
@@ -23,6 +27,8 @@ interface ChatWidgetActions {
   setSize: (size: { width: number; height: number }) => void;
   setDockWidth: (width: number) => void;
   sendMessage: (content: string) => void;
+  cancelStream: () => void;
+  retryConnection: () => void;
   clearMessages: () => void;
 }
 
@@ -42,6 +48,7 @@ const DEFAULT_STATE: ChatWidgetState = {
   project: null,
   sessionId: null,
   lockStatus: 'disconnected',
+  connectionError: null,
   messages: [],
   isStreaming: false,
 };
@@ -123,6 +130,8 @@ const ChatWidgetContext = createContext<ChatWidgetContextValue>({
   setSize: () => {},
   setDockWidth: () => {},
   sendMessage: () => {},
+  cancelStream: () => {},
+  retryConnection: () => {},
   clearMessages: () => {},
 });
 
@@ -136,6 +145,8 @@ function nextMsgId(): string {
 // ---- Provider ----
 
 export function ChatWidgetProvider({ children }: { children: React.ReactNode }) {
+  const { username } = useAuth();
+
   const [state, setState] = useState<ChatWidgetState>(() => {
     const persisted = loadPersistedLayout();
     return {
@@ -147,9 +158,92 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
     };
   });
 
-  const stream = useBridgeStream();
+  // Process stream events directly into messages via callback
+  const handleStreamEvent = useCallback((event: BridgeStreamEvent) => {
+    setState((prev) => {
+      let messages = [...prev.messages];
+      let lastAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
+        ? { ...messages[messages.length - 1] }
+        : null;
+
+      switch (event.type) {
+        case 'text_delta': {
+          if (!lastAssistant) {
+            lastAssistant = {
+              id: nextMsgId(),
+              role: 'assistant',
+              content: '',
+              timestamp: Date.now(),
+              toolUses: [],
+            };
+            messages = [...messages, lastAssistant];
+          }
+          lastAssistant = { ...lastAssistant, content: lastAssistant.content + event.text };
+          messages = [...messages.slice(0, -1), lastAssistant];
+          break;
+        }
+        case 'tool_use': {
+          if (!lastAssistant) {
+            lastAssistant = {
+              id: nextMsgId(),
+              role: 'assistant',
+              content: '',
+              timestamp: Date.now(),
+              toolUses: [],
+            };
+            messages = [...messages, lastAssistant];
+          }
+          const toolUse: ToolUse = { tool: event.tool, status: event.status };
+          lastAssistant = {
+            ...lastAssistant,
+            toolUses: [...(lastAssistant.toolUses || []), toolUse],
+          };
+          messages = [...messages.slice(0, -1), lastAssistant];
+          break;
+        }
+        case 'session_start':
+        case 'agent_event':
+        case 'result':
+        case 'error':
+          // These don't modify messages directly
+          break;
+      }
+
+      return { ...prev, messages };
+    });
+  }, []);
+
+  const stream = useBridgeStream(handleStreamEvent);
   const streamRef = useRef(stream);
   streamRef.current = stream;
+
+  // Lock heartbeat — detect expiration and conflict while connected
+  useLockHeartbeat({
+    project: state.project,
+    role: ROLE,
+    sessionId: state.sessionId,
+    enabled: state.lockStatus === 'connected',
+    onExpired: () => {
+      setState((prev) => ({
+        ...prev,
+        lockStatus: 'error',
+        connectionError: { type: 'expired', message: 'Session expired.' },
+        sessionId: null,
+      }));
+    },
+    onConflict: (heldBy: string) => {
+      setState((prev) => ({
+        ...prev,
+        lockStatus: 'error',
+        connectionError: {
+          type: 'conflict',
+          message: `Session taken by ${heldBy}.`,
+          heldBy,
+        },
+        sessionId: null,
+      }));
+    },
+  });
 
   // Persist layout preferences
   useEffect(() => {
@@ -175,9 +269,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
       if (lockStatus === 'connected' && project) {
         const token = localStorage.getItem('vtf_token');
         if (token) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const bridgeUrl = ((globalThis as any).__BRIDGE_URL as string) || 'https://bridge.dev.viloforge.com';
-          fetch(`${bridgeUrl}/v1/lock`, {
+          fetch(`${BRIDGE_URL}/v1/lock`, {
             method: 'DELETE',
             headers: {
               Authorization: `Token ${token}`,
@@ -193,71 +285,6 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
-
-  // Process stream events into messages
-  const lastProcessedIndex = useRef(0);
-
-  useEffect(() => {
-    const { events } = stream;
-    if (events.length <= lastProcessedIndex.current) return;
-
-    const newEvents = events.slice(lastProcessedIndex.current);
-    lastProcessedIndex.current = events.length;
-
-    setState((prev) => {
-      let messages = [...prev.messages];
-      let lastAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
-        ? { ...messages[messages.length - 1] }
-        : null;
-
-      for (const event of newEvents) {
-        switch (event.type) {
-          case 'text_delta': {
-            if (!lastAssistant) {
-              lastAssistant = {
-                id: nextMsgId(),
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                toolUses: [],
-              };
-              messages = [...messages, lastAssistant];
-            }
-            lastAssistant = { ...lastAssistant, content: lastAssistant.content + event.text };
-            messages = [...messages.slice(0, -1), lastAssistant];
-            break;
-          }
-          case 'tool_use': {
-            if (!lastAssistant) {
-              lastAssistant = {
-                id: nextMsgId(),
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                toolUses: [],
-              };
-              messages = [...messages, lastAssistant];
-            }
-            const toolUse: ToolUse = { tool: event.tool, status: event.status };
-            lastAssistant = {
-              ...lastAssistant,
-              toolUses: [...(lastAssistant.toolUses || []), toolUse],
-            };
-            messages = [...messages.slice(0, -1), lastAssistant];
-            break;
-          }
-          case 'session_start':
-          case 'agent_event':
-          case 'result':
-          case 'error':
-            // These don't modify messages directly
-            break;
-        }
-      }
-
-      return { ...prev, messages, isStreaming: stream.isStreaming };
-    });
-  }, [stream.events, stream.isStreaming]);
 
   // Sync isStreaming from stream hook
   useEffect(() => {
@@ -310,13 +337,28 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
   // ---- Session lifecycle ----
 
   const acquireSession = useCallback(async (project: string) => {
-    setState((prev) => ({ ...prev, lockStatus: 'acquiring' }));
+    setState((prev) => ({ ...prev, lockStatus: 'acquiring', connectionError: null }));
 
     try {
       const locks = await checkLock(project, ROLE);
       if (locks.length > 0) {
-        // Reconnect to existing lock — restore messages from localStorage
-        const sessionId = locks[0].session_id;
+        const lock = locks[0];
+        if (lock.user && lock.user !== username) {
+          // Lock held by a different user — do not steal their session
+          setState((prev) => ({
+            ...prev,
+            lockStatus: 'error',
+            connectionError: {
+              type: 'conflict',
+              message: `Session held by ${lock.user}.`,
+              heldBy: lock.user,
+            },
+            sessionId: null,
+          }));
+          return;
+        }
+        // Reconnect to our own lock — restore messages from localStorage
+        const sessionId = lock.session_id;
         const restoredMessages = loadMessages(project, sessionId);
         setState((prev) => ({
           ...prev,
@@ -333,14 +375,16 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
           lockStatus: 'connected',
         }));
       }
-    } catch {
+    } catch (err) {
+      const connectionError = classifyBridgeError(err);
       setState((prev) => ({
         ...prev,
         lockStatus: 'error',
+        connectionError,
         sessionId: null,
       }));
     }
-  }, []);
+  }, [username]);
 
   const open = useCallback((project: string) => {
     setState((prev) => ({ ...prev, isOpen: true, project }));
@@ -360,7 +404,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
     // Clear persisted messages for this session
     clearPersistedMessages(project, sessionId);
     streamRef.current.cancelStream();
-    lastProcessedIndex.current = 0;
+
     setState((prev) => ({
       ...prev,
       isOpen: false,
@@ -399,14 +443,26 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
 
     const { project } = stateRef.current;
     if (project) {
-      lastProcessedIndex.current = 0;
+  
       streamRef.current.startStream(content, project, ROLE);
     }
   }, []);
 
+  const cancelStream = useCallback(() => {
+    streamRef.current.cancelStream();
+    setState((prev) => ({ ...prev, isStreaming: false }));
+  }, []);
+
+  const retryConnection = useCallback(() => {
+    const { project } = stateRef.current;
+    if (project) {
+      acquireSession(project);
+    }
+  }, [acquireSession]);
+
   const clearMessages = useCallback(() => {
     setState((prev) => ({ ...prev, messages: [] }));
-    lastProcessedIndex.current = 0;
+
   }, []);
 
   // ---- Value ----
@@ -425,6 +481,8 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
     setSize,
     setDockWidth,
     sendMessage,
+    cancelStream,
+    retryConnection,
     clearMessages,
   };
 

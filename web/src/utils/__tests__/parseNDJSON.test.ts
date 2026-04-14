@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseNDJSONLine } from '../parseNDJSON';
 
 describe('parseNDJSONLine', () => {
@@ -62,9 +62,21 @@ describe('parseNDJSONLine', () => {
     expect(() => parseNDJSONLine('{not valid json')).toThrow(SyntaxError);
   });
 
-  it('passes through events with unknown type (OCP — extensible)', () => {
+  it('returns null for unknown event types', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const line = '{"type":"future_event","data":"something"}';
     const event = parseNDJSONLine(line);
-    expect(event).toEqual({ type: 'future_event', data: 'something' });
+    expect(event).toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('returns null for events missing type field', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const line = '{"data":"no type here"}';
+    const event = parseNDJSONLine(line);
+    expect(event).toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

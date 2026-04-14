@@ -22,6 +22,7 @@ describe('ChatWindow', () => {
         messages={sampleMessages}
         isStreaming={false}
         lockStatus="connected"
+        connectionError={null}
         onSendMessage={vi.fn()}
       />,
     );
@@ -35,6 +36,7 @@ describe('ChatWindow', () => {
         messages={[]}
         isStreaming={false}
         lockStatus="connected"
+        connectionError={null}
         onSendMessage={vi.fn()}
       />,
     );
@@ -47,6 +49,7 @@ describe('ChatWindow', () => {
         messages={[]}
         isStreaming={false}
         lockStatus="acquiring"
+        connectionError={null}
         onSendMessage={vi.fn()}
       />,
     );
@@ -61,6 +64,7 @@ describe('ChatWindow', () => {
         messages={[]}
         isStreaming={false}
         lockStatus="connected"
+        connectionError={null}
         onSendMessage={onSend}
       />,
     );
@@ -75,6 +79,7 @@ describe('ChatWindow', () => {
         messages={[]}
         isStreaming={false}
         lockStatus="connected"
+        connectionError={null}
         onSendMessage={vi.fn()}
       />,
     );
@@ -87,21 +92,120 @@ describe('ChatWindow', () => {
         messages={[]}
         isStreaming={false}
         lockStatus="acquiring"
+        connectionError={null}
         onSendMessage={vi.fn()}
       />,
     );
     expect(screen.getByText(/connecting/i)).toBeInTheDocument();
   });
 
-  it('shows error indicator when lockStatus is error', () => {
+  it('shows generic error when connectionError is null', () => {
     render(
       <ChatWindow
         messages={[]}
         isStreaming={false}
         lockStatus="error"
+        connectionError={null}
         onSendMessage={vi.fn()}
       />,
     );
     expect(screen.getByText(/Connection failed/i)).toBeInTheDocument();
+  });
+
+  it('shows conflict error with username', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'conflict', message: 'Lock held by alice', heldBy: 'alice' }}
+        onSendMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Session held by alice/i)).toBeInTheDocument();
+  });
+
+  it('shows forbidden error', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'forbidden', message: 'Not a member' }}
+        onSendMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/do not have access/i)).toBeInTheDocument();
+  });
+
+  it('shows rate limited error', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'rate_limited', message: 'Rate limit exceeded' }}
+        onSendMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Too many requests/i)).toBeInTheDocument();
+  });
+
+  it('shows unavailable error', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'unavailable', message: 'Service unavailable' }}
+        onSendMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/unavailable/i)).toBeInTheDocument();
+  });
+
+  it('shows expired error', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'expired', message: 'Session expired' }}
+        onSendMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/expired/i)).toBeInTheDocument();
+  });
+
+  it('shows Retry button when onRetry provided and in error state', () => {
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'network', message: 'Network error' }}
+        onSendMessage={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('chat-retry')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-retry')).toHaveTextContent('Retry');
+  });
+
+  it('clicking Retry calls onRetry', async () => {
+    const onRetry = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ChatWindow
+        messages={[]}
+        isStreaming={false}
+        lockStatus="error"
+        connectionError={{ type: 'network', message: 'Network error' }}
+        onSendMessage={vi.fn()}
+        onRetry={onRetry}
+      />,
+    );
+    await user.click(screen.getByTestId('chat-retry'));
+    expect(onRetry).toHaveBeenCalledOnce();
   });
 });
