@@ -182,37 +182,11 @@ test.describe('Chat Widget — Lock & Messaging', () => {
     await expect(input).toBeDisabled({ timeout: 10000 });
 
     // Connection error message should be shown
-    await expect(page.locator('text=Connection failed')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="chat-error"]')).toBeVisible({ timeout: 5000 });
   });
 });
 
 test.describe('Chat Widget — Error States (mocked bridge)', () => {
-  // Login by acquiring session cookie from the backend directly,
-  // then setting it in the browser context. This bypasses CSRF issues
-  // when running through a vite dev proxy.
-  async function loginForMockedTests(page: Page) {
-    // Try normal login first (works against deployed VTF)
-    try {
-      await page.goto(`${VTF_URL}/login`, { timeout: 5000 });
-      await page.fill('input[name="username"], input[type="text"]', 'admin');
-      await page.fill('input[name="password"], input[type="password"]', 'admin');
-      await page.click('button[type="submit"]');
-      await page.waitForURL('**/', { timeout: 10000 });
-      return;
-    } catch {
-      // If normal login fails (e.g., CSRF through proxy), use token injection
-    }
-
-    // Inject a fake auth state via localStorage — the app considers us logged in
-    // We only need the frontend to render; bridge calls are mocked anyway
-    await page.goto(VTF_URL);
-    await page.evaluate(() => {
-      localStorage.setItem('vtf_token', 'mock-token-for-e2e');
-    });
-    await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-  }
-
   // Helper to mock bridge lock endpoints
   async function mockBridgeLock(
     page: Page,
@@ -242,7 +216,13 @@ test.describe('Chat Widget — Error States (mocked bridge)', () => {
   }
 
   test('shows conflict message when lock is held by another user', async ({ page }) => {
-    await loginForMockedTests(page);
+    await login(page);
+    // Ensure a token exists for bridge API client (session login doesn't set one)
+    await page.evaluate(() => {
+      if (!localStorage.getItem('vtf_token')) {
+        localStorage.setItem('vtf_token', 'e2e-mock-token');
+      }
+    });
     await mockBridgeLock(
       page,
       { status: 200, body: [] },
@@ -262,7 +242,12 @@ test.describe('Chat Widget — Error States (mocked bridge)', () => {
   });
 
   test('shows unavailable message on 503', async ({ page }) => {
-    await loginForMockedTests(page);
+    await login(page);
+    await page.evaluate(() => {
+      if (!localStorage.getItem('vtf_token')) {
+        localStorage.setItem('vtf_token', 'e2e-mock-token');
+      }
+    });
     await mockBridgeLock(
       page,
       { status: 200, body: [] },
