@@ -36,8 +36,23 @@ export default function Login() {
       }
 
       if (data.authenticated) {
-        // Clear any stale token — we're using session auth now
-        localStorage.removeItem('vtf_token');
+        // Fetch an API token for the bridge client (needs Authorization header)
+        try {
+          const tokenRes = await fetch('/v1/auth/token/', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+            },
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            localStorage.setItem('vtf_token', tokenData.token);
+          }
+        } catch {
+          // Non-fatal — bridge chat won't work but everything else will
+        }
         // Full reload to re-initialize AuthProvider with session cookie
         window.location.href = '/';
       }

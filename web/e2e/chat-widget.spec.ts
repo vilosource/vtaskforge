@@ -154,6 +154,28 @@ test.describe('Chat Widget — Layout Switching', () => {
   });
 });
 
+test.describe('Chat Widget — Session Auth', () => {
+  test('chat widget does not show "No auth token" after session login', async ({ page }) => {
+    await login(page);
+    await page.goto(VTF_URL);
+
+    await page.locator('button:has-text("Chat with Architect")').click();
+    const widget = page.locator('[data-testid="chat-widget"]');
+    await expect(widget).toBeVisible({ timeout: 5000 });
+
+    // Wait for connection attempt to complete
+    await page.waitForTimeout(3000);
+
+    // Should NOT show "No auth token" — session login should provide a token
+    const errorEl = page.locator('[data-testid="chat-error"]');
+    const hasError = await errorEl.isVisible();
+    if (hasError) {
+      const errorText = await errorEl.textContent();
+      expect(errorText).not.toContain('No auth token');
+    }
+  });
+});
+
 test.describe('Chat Widget — Lock & Messaging', () => {
   test('lock status dot is visible after opening', async ({ page }) => {
     await login(page);

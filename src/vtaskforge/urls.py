@@ -23,6 +23,7 @@ from prefs.views import (
     LockView,
     ServiceAccountView,
     SessionCreateView,
+    SessionTokenView,
     TokenValidationView,
     UserDetailView,
     UserListView,
@@ -123,6 +124,7 @@ for _v in ('v1', 'v2'):
     urlpatterns += [
         path(f'{_v}/auth/login', api_login, name=f'{_v}-api-login'),
         path(f'{_v}/auth/logout', api_logout, name=f'{_v}-api-logout'),
+        path(f'{_v}/auth/token/', SessionTokenView.as_view(), name=f'{_v}-session-token'),
         path(f'{_v}/auth/validate/', TokenValidationView.as_view(), name=f'{_v}-token-validate'),
         path(f'{_v}/auth/code/', ConsoleCodeGenerateView.as_view(), name=f'{_v}-console-code-generate'),
         path(f'{_v}/auth/exchange/', ConsoleCodeExchangeView.as_view(), name=f'{_v}-console-code-exchange'),

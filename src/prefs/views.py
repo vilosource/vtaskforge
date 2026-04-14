@@ -126,6 +126,21 @@ class TokenValidationView(APIView):
         })
 
 
+class SessionTokenView(APIView):
+    """POST /v1/auth/token/ — get or create an API token for the authenticated user.
+
+    Used by the chat widget: the bridge API needs a token in the Authorization
+    header, but browser login uses session cookies. This endpoint bridges the gap.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from rest_framework.authtoken.models import Token
+        token, _created = Token.objects.get_or_create(user=request.user)
+        return Response({"token": token.key})
+
+
 class ExternalIdentityView(APIView):
     """GET/POST /v1/external-identities/ — manage linked external accounts."""
 

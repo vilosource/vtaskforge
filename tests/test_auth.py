@@ -80,3 +80,57 @@ class TestWorkplansRequireAuth:
         client.credentials(HTTP_AUTHORIZATION="Token invalidtoken00000000000000000000000")
         response = client.get("/v1/workplans/")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestSessionTokenEndpoint:
+    """POST /v1/auth/token/ — generate API token for session-authenticated users.
+
+    Required for the chat widget: the bridge API needs a Bearer token,
+    but browser login uses session cookies. This endpoint bridges the gap.
+    """
+
+    def test_unauthenticated_returns_401(self):
+        """Must reject unauthenticated requests."""
+        client = APIClient()
+        response = client.post("/v1/auth/token/")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_session_auth_returns_token(self):
+        """Session-authenticated user gets a valid API token."""
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username="tokenuser", password="pass123")
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post("/v1/auth/token/")
+        assert response.status_code == status.HTTP_200_OK
+        assert "token" in response.data
+        assert len(response.data["token"]) == 40
+
+    def test_returns_same_token_on_repeated_calls(self):
+        """Repeated calls return the same token (idempotent)."""
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username="idempotent", password="pass123")
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        resp1 = client.post("/v1/auth/token/")
+        resp2 = client.post("/v1/auth/token/")
+        assert resp1.data["token"] == resp2.data["token"]
+
+    def test_returned_token_authenticates_api_calls(self):
+        """Token from this endpoint must work for authenticated API calls."""
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username="apicaller", password="pass123")
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post("/v1/auth/token/")
+        token = response.data["token"]
+
+        # Use the token for an API call
+        token_client = APIClient()
+        token_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        list_response = token_client.get("/v1/workplans/")
+        assert list_response.status_code == status.HTTP_200_OK
