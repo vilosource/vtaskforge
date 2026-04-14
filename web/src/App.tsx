@@ -88,6 +88,27 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
               username: data.username || '',
             });
           });
+
+        // Ensure vtf_token exists for bridge chat widget
+        if (!localStorage.getItem('vtf_token')) {
+          const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
+          const csrfToken = csrfMatch ? csrfMatch[1] : '';
+          fetch('/v1/auth/token/', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+            },
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((tokenData) => {
+              if (tokenData?.token) {
+                localStorage.setItem('vtf_token', tokenData.token);
+              }
+            })
+            .catch(() => { /* non-fatal */ });
+        }
       })
       .catch(() => {
         setAuth({ ...AUTH_DEFAULT, loading: false });
