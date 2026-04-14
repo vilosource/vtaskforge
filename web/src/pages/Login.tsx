@@ -36,6 +36,10 @@ export default function Login() {
       }
 
       if (data.authenticated) {
+        // Re-read CSRF token — Django rotates it after login
+        const newCsrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
+        const newCsrfToken = newCsrfMatch ? newCsrfMatch[1] : '';
+
         // Fetch an API token for the bridge client (needs Authorization header)
         try {
           const tokenRes = await fetch('/v1/auth/token/', {
@@ -43,7 +47,7 @@ export default function Login() {
             credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
-              ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+              ...(newCsrfToken ? { 'X-CSRFToken': newCsrfToken } : {}),
             },
           });
           if (tokenRes.ok) {
