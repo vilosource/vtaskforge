@@ -92,3 +92,28 @@ class TestLockAPI:
         assert "user" in data
         assert "created_at" in data
         assert data["user"] == "my-agent"
+
+    def test_patch_lock_updates_session_id(self):
+        client, user = _make_agent_client()
+        lock = AgentLock.objects.create(
+            project_id="proj1", role="architect", user=user, session_id=""
+        )
+
+        response = client.patch(
+            f"/v1/locks/{lock.pk}/",
+            {"session_id": "real-sess-123"},
+            format="json",
+        )
+
+        assert response.status_code == 200
+        lock.refresh_from_db()
+        assert lock.session_id == "real-sess-123"
+
+    def test_patch_lock_returns_404_for_missing(self):
+        client, _ = _make_agent_client()
+        response = client.patch(
+            "/v1/locks/99999/",
+            {"session_id": "x"},
+            format="json",
+        )
+        assert response.status_code == 404

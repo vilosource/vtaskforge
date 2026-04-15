@@ -281,9 +281,21 @@ class LockView(APIView):
 
 
 class LockDetailView(APIView):
-    """DELETE /v1/locks/<pk>/ — release a lock."""
+    """GET/PATCH/DELETE /v1/locks/<pk>/ — read, update, or release a lock."""
 
     permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            lock = AgentLock.objects.get(pk=pk)
+        except AgentLock.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        session_id = request.data.get("session_id")
+        if session_id is not None:
+            lock.session_id = session_id
+            lock.save(update_fields=["session_id"])
+        serializer = AgentLockSerializer(lock)
+        return Response(serializer.data)
 
     def delete(self, request, pk):
         try:
