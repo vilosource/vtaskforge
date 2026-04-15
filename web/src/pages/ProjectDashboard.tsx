@@ -201,7 +201,7 @@ export function ProjectDashboard() {
                   Plan with Architect
                 </button>
                 <button
-                  onClick={() => openChatWidget(project.name || project.id)}
+                  onClick={() => openChatWidget(project.id, project.name)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm">chat</span>

@@ -416,10 +416,16 @@ export function Home() {
           </button>
           <button
             onClick={() => {
-              const proj = projects.length > 0 ? projects[0].name : 'default';
-              openChatWidget(proj);
+              if (projects.length > 0) {
+                openChatWidget(projects[0].id, projects[0].name);
+              }
             }}
-            className="bg-surface-container-lowest p-5 rounded-xl shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 flex flex-col items-center gap-3 cursor-pointer border border-outline-variant/20"
+            disabled={projects.length === 0}
+            className={`bg-surface-container-lowest p-5 rounded-xl shadow-sm transition-all flex flex-col items-center gap-3 border border-outline-variant/20 ${
+              projects.length > 0
+                ? 'hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
+                : 'opacity-50 cursor-not-allowed'
+            }`}
           >
             <span className="material-symbols-outlined text-primary text-2xl">chat</span>
             <span className="text-xs font-bold text-on-surface">Chat with Architect</span>

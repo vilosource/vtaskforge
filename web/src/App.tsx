@@ -32,11 +32,12 @@ interface AuthState {
   isStaff: boolean;
   userType: string;
   projects: { project_id: string; role: string }[];
+  tokenReady: boolean;
 }
 
 const AUTH_DEFAULT: AuthState = {
   authenticated: false, loading: true, username: '',
-  isStaff: false, userType: '', projects: [],
+  isStaff: false, userType: '', projects: [], tokenReady: false,
 };
 
 const AuthContext = createContext<AuthState>(AUTH_DEFAULT);
@@ -52,7 +53,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check if we have a token in localStorage (agent/CLI auth)
     const token = localStorage.getItem('vtf_token');
     if (token) {
-      setAuth({ ...AUTH_DEFAULT, authenticated: true, loading: false, username: 'token-user' });
+      setAuth({ ...AUTH_DEFAULT, authenticated: true, loading: false, username: 'token-user', tokenReady: true });
       return;
     }
 
@@ -71,14 +72,15 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         })
           .then((r) => r.json())
           .then((profile) => {
-            setAuth({
+            setAuth((prev) => ({
               authenticated: true,
               loading: false,
               username: profile.username || data.username || '',
               isStaff: profile.is_staff || false,
               userType: profile.user_type || 'human',
               projects: profile.projects || [],
-            });
+              tokenReady: prev.tokenReady || !!localStorage.getItem('vtf_token'),
+            }));
           })
           .catch(() => {
             // Validate failed but login succeeded — use basic info
@@ -105,9 +107,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
             .then((tokenData) => {
               if (tokenData?.token) {
                 localStorage.setItem('vtf_token', tokenData.token);
+                setAuth((prev) => ({ ...prev, tokenReady: true }));
               }
             })
-            .catch(() => { /* non-fatal */ });
+            .catch((err) => {
+              console.warn('Token provisioning failed:', err);
+            });
         }
       })
       .catch(() => {

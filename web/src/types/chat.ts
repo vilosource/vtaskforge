@@ -29,13 +29,18 @@ export type ChatWidgetLayout = 'floating' | 'docked' | 'minimized';
 
 export type LockStatus = 'disconnected' | 'acquiring' | 'connected' | 'error';
 
+export interface ProjectRef {
+  id: string;
+  name: string;
+}
+
 export interface ChatWidgetState {
   isOpen: boolean;
   layout: ChatWidgetLayout;
   position: { x: number; y: number };
   size: { width: number; height: number };
   dockWidth: number;
-  project: string | null;
+  project: ProjectRef | null;
   sessionId: string | null;
   lockStatus: LockStatus;
   connectionError: ConnectionError | null;

@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   BridgeStreamEvent,
   ToolUse,
+  ProjectRef,
 } from '../types/chat';
 import { BRIDGE_URL } from '../utils/bridgeConfig';
 import { checkLock, acquireLock, releaseLock, classifyBridgeError } from '../api/bridge';
@@ -15,7 +16,7 @@ import { useAuth } from '../App';
 // ---- Context value interface ----
 
 interface ChatWidgetActions {
-  open: (project: string) => void;
+  open: (projectId: string, projectName?: string) => void;
   close: () => void;
   releaseAndClose: () => void;
   keepAliveAndMinimize: () => void;
@@ -219,7 +220,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
 
   // Lock heartbeat — detect expiration and conflict while connected
   useLockHeartbeat({
-    project: state.project,
+    project: state.project?.id ?? null,
     role: ROLE,
     sessionId: state.sessionId,
     enabled: state.lockStatus === 'connected',
@@ -258,7 +259,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
   // Persist messages to localStorage
   useEffect(() => {
     if (state.messages.length > 0) {
-      persistMessages(state.project, state.sessionId, state.messages);
+      persistMessages(state.project?.id ?? null, state.sessionId, state.messages);
     }
   }, [state.messages, state.project, state.sessionId]);
 
@@ -275,7 +276,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
               Authorization: `Token ${token}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ project, role: ROLE }),
+            body: JSON.stringify({ project: project.id, role: ROLE }),
             keepalive: true,
           });
         }
@@ -336,15 +337,23 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
 
   // ---- Session lifecycle ----
 
-  const acquireSession = useCallback(async (project: string) => {
+  const acquireSession = useCallback(async (projectId: string) => {
+    // Ensure auth token exists before making bridge API calls
+    if (!localStorage.getItem('vtf_token')) {
+      setState((prev) => ({
+        ...prev,
+        lockStatus: 'error',
+        connectionError: { type: 'network', message: 'Auth token not ready. Please refresh the page.' },
+      }));
+      return;
+    }
     setState((prev) => ({ ...prev, lockStatus: 'acquiring', connectionError: null }));
 
     try {
-      const locks = await checkLock(project, ROLE);
+      const locks = await checkLock(projectId, ROLE);
       if (locks.length > 0) {
         const lock = locks[0];
         if (lock.user && lock.user !== username) {
-          // Lock held by a different user — do not steal their session
           setState((prev) => ({
             ...prev,
             lockStatus: 'error',
@@ -359,7 +368,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
         }
         // Reconnect to our own lock — restore messages from localStorage
         const sessionId = lock.session_id;
-        const restoredMessages = loadMessages(project, sessionId);
+        const restoredMessages = loadMessages(projectId, sessionId);
         setState((prev) => ({
           ...prev,
           sessionId,
@@ -367,8 +376,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
           messages: restoredMessages,
         }));
       } else {
-        // Acquire new lock
-        const lock = await acquireLock(project, ROLE);
+        const lock = await acquireLock(projectId, ROLE);
         setState((prev) => ({
           ...prev,
           sessionId: lock.session_id,
@@ -386,9 +394,10 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
     }
   }, [username]);
 
-  const open = useCallback((project: string) => {
+  const open = useCallback((projectId: string, projectName?: string) => {
+    const project: ProjectRef = { id: projectId, name: projectName || projectId };
     setState((prev) => ({ ...prev, isOpen: true, project }));
-    acquireSession(project);
+    acquireSession(projectId);
   }, [acquireSession]);
 
   // Release lock, clear everything, close widget
@@ -396,13 +405,13 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
     const { project, lockStatus, sessionId } = stateRef.current;
     if (lockStatus === 'connected' && project) {
       try {
-        await releaseLock(project, ROLE);
+        await releaseLock(project.id, ROLE);
       } catch {
         // Best effort release
       }
     }
     // Clear persisted messages for this session
-    clearPersistedMessages(project, sessionId);
+    clearPersistedMessages(project?.id ?? null, sessionId);
     streamRef.current.cancelStream();
 
     setState((prev) => ({
@@ -443,8 +452,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
 
     const { project } = stateRef.current;
     if (project) {
-  
-      streamRef.current.startStream(content, project, ROLE);
+      streamRef.current.startStream(content, project.id, ROLE);
     }
   }, []);
 
@@ -456,7 +464,7 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
   const retryConnection = useCallback(() => {
     const { project } = stateRef.current;
     if (project) {
-      acquireSession(project);
+      acquireSession(project.id);
     }
   }, [acquireSession]);
 

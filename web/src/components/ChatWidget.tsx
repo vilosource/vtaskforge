@@ -148,7 +148,7 @@ export function ChatWidget() {
         }}
       >
         <ChatTitleBar
-          project={project}
+          project={project.name}
           lockStatus={lockStatus}
           layout={layout}
           onDock={dock}
@@ -199,7 +199,7 @@ export function ChatWidget() {
       >
         <ResizeDivider onResize={handleDockResize} />
         <ChatTitleBar
-          project={project}
+          project={project.name}
           lockStatus={lockStatus}
           layout={layout}
           onDock={dock}
@@ -229,7 +229,7 @@ export function ChatWidget() {
           className="fixed bottom-4 right-4 z-[55] flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-on-primary shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
         >
           <span className="material-symbols-outlined text-lg">chat</span>
-          <span className="text-sm font-medium">Chat &mdash; {project}</span>
+          <span className="text-sm font-medium">Chat &mdash; {project.name}</span>
           <span className={`w-2 h-2 rounded-full ${
             lockStatus === 'connected' ? 'bg-green-300' : 'bg-gray-300'
           }`} />

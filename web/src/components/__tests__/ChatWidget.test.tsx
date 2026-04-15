@@ -38,6 +38,7 @@ function OpenAndRender({ project }: { project: string }) {
 describe('ChatWidget', () => {
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem('vtf_token', 'test-token');
     vi.clearAllMocks();
   });
 
