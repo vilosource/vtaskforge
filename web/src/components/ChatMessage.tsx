@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { ChatMessage as ChatMessageType } from '../types/chat';
 
 interface ChatMessageProps {
@@ -31,7 +33,7 @@ function ChatMessageInner({ message }: ChatMessageProps) {
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                   tu.status === 'completed'
                     ? 'bg-tertiary-container text-on-tertiary-container'
-                    : 'bg-surface-container-high text-on-surface-variant'
+                    : 'bg-surface-container-high text-on-surface-variant animate-pulse'
                 }`}
               >
                 {tu.tool}
@@ -48,7 +50,22 @@ function ChatMessageInner({ message }: ChatMessageProps) {
           </div>
         ) : (
           <div className="text-sm prose prose-sm max-w-none break-words prose-p:my-1 prose-pre:my-2 prose-pre:bg-surface-container-high prose-pre:rounded-lg prose-pre:p-3 prose-code:text-xs prose-headings:text-on-surface">
-            <Markdown remarkPlugins={[remarkGfm]}>
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const codeString = String(children).replace(/\n$/, '');
+                  return match ? (
+                    <SyntaxHighlighter style={oneDark} language={match[1]} PreTag="div">
+                      {codeString}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>{children}</code>
+                  );
+                },
+              }}
+            >
               {message.content}
             </Markdown>
           </div>

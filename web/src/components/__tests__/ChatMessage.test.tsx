@@ -75,4 +75,36 @@ describe('ChatMessage', () => {
     // Should show the raw markdown text, not rendered
     expect(screen.getByText('This is **not bold**')).toBeInTheDocument();
   });
+
+  it('renders fenced code block with syntax highlighter for known language', () => {
+    render(<ChatMessage message={makeMessage({ role: 'assistant', content: '```python\nprint("hello")\n```' })} />);
+    // SyntaxHighlighter renders a <div> with the code inside
+    expect(screen.getByText(/print/)).toBeInTheDocument();
+  });
+
+  it('renders inline code without syntax highlighter', () => {
+    render(<ChatMessage message={makeMessage({ role: 'assistant', content: 'Use `foo()` here' })} />);
+    const code = screen.getByText('foo()');
+    expect(code.tagName).toBe('CODE');
+  });
+
+  it('tool use started badge has animate-pulse class', () => {
+    const msg = makeMessage({
+      role: 'assistant',
+      toolUses: [{ tool: 'bash', status: 'started' }],
+    });
+    render(<ChatMessage message={msg} />);
+    const badge = screen.getByText(/bash/).closest('span');
+    expect(badge?.className).toContain('animate-pulse');
+  });
+
+  it('tool use completed badge does not have animate-pulse class', () => {
+    const msg = makeMessage({
+      role: 'assistant',
+      toolUses: [{ tool: 'bash', status: 'completed' }],
+    });
+    render(<ChatMessage message={msg} />);
+    const badge = screen.getByText(/bash/).closest('span');
+    expect(badge?.className).not.toContain('animate-pulse');
+  });
 });

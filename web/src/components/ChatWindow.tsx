@@ -37,10 +37,25 @@ function errorMessage(connectionError: ConnectionError | null): string {
 
 export function ChatWindow({ messages, isStreaming, lockStatus, connectionError, onSendMessage, onStop, onRetry }: ChatWindowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const isAtBottom = useRef(true);
 
-  // Auto-scroll to bottom on new messages
+  // Track whether user is at the bottom using IntersectionObserver
   useEffect(() => {
-    if (scrollRef.current) {
+    const sentinel = sentinelRef.current;
+    const scrollContainer = scrollRef.current;
+    if (!sentinel || !scrollContainer) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { isAtBottom.current = entry.isIntersecting; },
+      { root: scrollContainer, threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  // Auto-scroll only when user is at the bottom
+  useEffect(() => {
+    if (isAtBottom.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
@@ -97,6 +112,9 @@ export function ChatWindow({ messages, isStreaming, lockStatus, connectionError,
             </div>
           </div>
         )}
+
+        {/* Sentinel for auto-scroll detection */}
+        <div ref={sentinelRef} data-testid="scroll-sentinel" className="h-1" />
       </div>
 
       {/* Input */}
