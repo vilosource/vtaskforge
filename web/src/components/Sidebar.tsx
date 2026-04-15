@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
 
@@ -116,7 +117,51 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           <NavLink item={{ to: '/settings', icon: 'settings', label: 'Settings' }} pathname={pathname} />
           <AdminSection pathname={pathname} />
         </div>
+
+        {/* User + Logout */}
+        <UserFooter />
       </div>
     </aside>
+  );
+}
+
+function UserFooter() {
+  const { username } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  const handleLogout = async () => {
+    setBusy(true);
+    try {
+      const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
+      const csrfToken = csrfMatch ? csrfMatch[1] : '';
+      await fetch('/v1/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+      });
+    } catch {
+      // Best effort
+    }
+    localStorage.removeItem('vtf_token');
+    window.location.href = '/login';
+  };
+
+  return (
+    <div className="pt-4 border-t border-slate-200 flex items-center gap-3 px-2">
+      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-bold">
+        {(username || '?')[0].toUpperCase()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-slate-900 truncate">{username || 'Unknown'}</div>
+      </div>
+      <button
+        onClick={handleLogout}
+        disabled={busy}
+        title="Log out"
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-200 transition-colors"
+      >
+        <span className="material-symbols-outlined text-[20px]">logout</span>
+      </button>
+    </div>
   );
 }

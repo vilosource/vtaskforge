@@ -50,12 +50,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = useState<AuthState>(AUTH_DEFAULT);
 
   useEffect(() => {
-    // Check if we have a token in localStorage (agent/CLI auth)
-    const token = localStorage.getItem('vtf_token');
-    if (token) {
-      setAuth({ ...AUTH_DEFAULT, authenticated: true, loading: false, username: 'token-user', tokenReady: true });
-      return;
-    }
+    // Note if a token already exists (from previous session or CLI auth)
+    const hasToken = !!localStorage.getItem('vtf_token');
 
     // Check session auth via login endpoint first
     fetch('/v1/auth/login', { credentials: 'include' })
@@ -79,7 +75,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
               isStaff: profile.is_staff || false,
               userType: profile.user_type || 'human',
               projects: profile.projects || [],
-              tokenReady: prev.tokenReady || !!localStorage.getItem('vtf_token'),
+              tokenReady: prev.tokenReady || hasToken,
             }));
           })
           .catch(() => {
