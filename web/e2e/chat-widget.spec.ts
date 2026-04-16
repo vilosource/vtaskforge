@@ -365,7 +365,7 @@ test.describe('Chat Widget — R8: Lock Ownership', () => {
           status: 409,
           contentType: 'application/json',
           body: JSON.stringify({
-            detail: 'Locked by alice',
+            detail: 'Lock held by alice',
             locked_by: 'alice',
           }),
         });
