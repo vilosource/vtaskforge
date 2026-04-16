@@ -53,11 +53,12 @@ class SessionRecordSerializer(serializers.ModelSerializer):
 
 class AgentLockSerializer(serializers.ModelSerializer):
     user = serializers.CharField(source="user.username", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
 
     class Meta:
         model = AgentLock
-        fields = ["id", "project_id", "role", "user", "session_id", "created_at", "last_activity"]
-        read_only_fields = ["id", "user", "created_at", "last_activity"]
+        fields = ["id", "project_id", "role", "user", "user_id", "session_id", "created_at", "last_activity"]
+        read_only_fields = ["id", "user", "user_id", "created_at", "last_activity"]
 
 
 class ChannelProjectMappingSerializer(serializers.ModelSerializer):
@@ -260,9 +261,22 @@ class LockView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Proxy mode: agent/staff can create locks on behalf of another user
+        user_id = request.data.get("user_id")
+        if user_id is not None:
+            try:
+                target_user = User.objects.get(pk=user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": f"User {user_id} not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            target_user = request.user
+
         try:
             lock = acquire_lock(
-                request.user,
+                target_user,
                 project_id,
                 role,
                 session_id=request.data.get("session_id", ""),

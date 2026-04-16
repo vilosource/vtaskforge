@@ -92,3 +92,70 @@ class TestLockForceRelease:
         client, _ = _make_agent_client()  # different agent
         response = client.delete(f"/v1/locks/{lock.pk}/")
         assert response.status_code == 404  # not found (not their lock, not staff)
+
+
+@pytest.mark.django_db
+class TestLockUserIdProxy:
+    """R8: Agent/staff can create locks on behalf of another user."""
+
+    def test_agent_creates_lock_with_user_id_proxy(self):
+        """POST /v1/locks/ with user_id creates lock owned by target user."""
+        client, _ = _make_agent_client()
+        target = User.objects.create_user("target-human", password="pass")
+        response = client.post(
+            "/v1/locks/",
+            {"project_id": "proj1", "role": "architect", "user_id": target.pk},
+            format="json",
+        )
+        assert response.status_code == 200
+        lock = AgentLock.objects.get(project_id="proj1", role="architect")
+        assert lock.user == target
+        assert response.data["user"] == "target-human"
+        assert response.data["user_id"] == target.pk
+
+    def test_staff_creates_lock_with_user_id_proxy(self):
+        """Staff can also proxy lock creation."""
+        client, _ = _make_staff_client()
+        target = User.objects.create_user("target-user2", password="pass")
+        response = client.post(
+            "/v1/locks/",
+            {"project_id": "proj1", "role": "architect", "user_id": target.pk},
+            format="json",
+        )
+        assert response.status_code == 200
+        lock = AgentLock.objects.get(project_id="proj1", role="architect")
+        assert lock.user == target
+
+    def test_lock_without_user_id_uses_request_user(self):
+        """Without user_id, lock is created for the authenticated user (existing behavior)."""
+        client, agent_user = _make_agent_client()
+        response = client.post(
+            "/v1/locks/",
+            {"project_id": "proj1", "role": "architect"},
+            format="json",
+        )
+        assert response.status_code == 200
+        lock = AgentLock.objects.get(project_id="proj1", role="architect")
+        assert lock.user == agent_user
+
+    def test_lock_with_invalid_user_id_returns_400(self):
+        """POST with non-existent user_id returns 400."""
+        client, _ = _make_agent_client()
+        response = client.post(
+            "/v1/locks/",
+            {"project_id": "proj1", "role": "architect", "user_id": 99999},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "not found" in response.data["detail"]
+
+    def test_lock_serializer_includes_user_id(self):
+        """AgentLockSerializer returns user_id in response."""
+        client, _ = _make_agent_client()
+        response = client.post(
+            "/v1/locks/",
+            {"project_id": "proj1", "role": "architect"},
+            format="json",
+        )
+        assert response.status_code == 200
+        assert "user_id" in response.data

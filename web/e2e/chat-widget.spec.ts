@@ -287,3 +287,105 @@ test.describe('Chat Widget — Error States (mocked bridge)', () => {
     await expect(error).toContainText('unavailable');
   });
 });
+
+test.describe('Chat Widget — R8: Lock Ownership', () => {
+  test('lock is attributed to logged-in user, not service account', async ({ page }) => {
+    await login(page);
+    await page.evaluate(() => {
+      if (!localStorage.getItem('vtf_token')) {
+        localStorage.setItem('vtf_token', 'e2e-mock-token');
+      }
+    });
+
+    // Intercept the POST /v1/lock request and verify the response shows correct user
+    let lockResponseBody: Record<string, unknown> | null = null;
+
+    // Mock bridge lock acquire — simulate a lock owned by the actual user (admin)
+    await page.route('**/bridge.dev.viloforge.com/v1/locks**', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    });
+    await page.route('**/bridge.dev.viloforge.com/v1/lock', async (route) => {
+      if (route.request().method() === 'POST') {
+        lockResponseBody = {
+          session_id: 'mock-sess-r8',
+          project: 'proj-1',
+          role: 'architect',
+          user: 'admin',
+          user_id: 1,
+        };
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(lockResponseBody),
+        });
+      } else {
+        route.continue();
+      }
+    });
+
+    await page.goto(VTF_URL);
+    await page.locator('button:has-text("Chat with Architect")').click();
+
+    const widget = page.locator('[data-testid="chat-widget"]');
+    await expect(widget).toBeVisible({ timeout: 5000 });
+
+    // Wait for lock acquisition
+    await page.waitForTimeout(2000);
+
+    // Verify the lock response has user=admin, NOT user=vafi-agent
+    expect(lockResponseBody).not.toBeNull();
+    expect(lockResponseBody!['user']).toBe('admin');
+    expect(lockResponseBody!['user_id']).toBe(1);
+    expect(lockResponseBody!['user']).not.toBe('vafi-agent');
+  });
+
+  test('lock conflict shows real username, not service account', async ({ page }) => {
+    await login(page);
+    await page.evaluate(() => {
+      if (!localStorage.getItem('vtf_token')) {
+        localStorage.setItem('vtf_token', 'e2e-mock-token');
+      }
+    });
+
+    // Mock: lock held by a real user "alice", not "vafi-agent"
+    await page.route('**/bridge.dev.viloforge.com/v1/locks**', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    });
+    await page.route('**/bridge.dev.viloforge.com/v1/lock', (route) => {
+      if (route.request().method() === 'POST') {
+        route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: 'Locked by alice',
+            locked_by: 'alice',
+          }),
+        });
+      } else {
+        route.continue();
+      }
+    });
+
+    await page.goto(VTF_URL);
+    await page.locator('button:has-text("Chat with Architect")').click();
+
+    const widget = page.locator('[data-testid="chat-widget"]');
+    await expect(widget).toBeVisible({ timeout: 5000 });
+
+    // Conflict should show real username
+    const error = page.locator('[data-testid="chat-error"]');
+    await expect(error).toBeVisible({ timeout: 10000 });
+    await expect(error).toContainText('alice');
+    // Should NOT mention vafi-agent
+    const errorText = await error.textContent();
+    expect(errorText).not.toContain('vafi-agent');
+  });
+});
