@@ -70,13 +70,11 @@ class TaskV2Serializer(serializers.ModelSerializer):
             data["milestone"] = MilestoneRefSerializer(instance.milestone).data
         else:
             data["milestone"] = None
-        # requires: JSONField list of task IDs → list of TaskRef
-        if instance.requires:
-            from tasks.models import Task as TaskModel
-            required_tasks = TaskModel.objects.filter(pk__in=instance.requires)
-            data["requires"] = [TaskRefSerializer(t).data for t in required_tasks]
-        else:
-            data["requires"] = []
+        # `requires` is a list of agent-tag strings — the claiming agent's
+        # tags must be a superset. Task-to-task dependencies live in the
+        # Link table (link_type=depends_on), not here. See interface
+        # CONTRACT §6 and services.claimable_tasks filter at services.py:144.
+        data["requires"] = list(instance.requires or [])
         return data
 
     def get_permissions(self, obj):

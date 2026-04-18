@@ -39,8 +39,9 @@ def setup(db):
     task_done = Task.objects.create(
         title="DoneTask", project=project, created_by=user, status="done",
     )
-    # Task with requires (JSONField — list of task IDs)
-    task_draft.requires = [task_done.id]
+    # Task with requires (JSONField — list of agent-tag strings that the
+    # claiming executor must carry; tags-requirements, not task dependencies)
+    task_draft.requires = ["executor", "opus"]
     task_draft.save(update_fields=["requires"])
 
     client = APIClient()
@@ -77,15 +78,15 @@ class TestTaskV2:
         assert ms["id"] == milestone.id
         assert ms["status"] == "active"
 
-    def test_v2_task_requires_are_task_refs(self, setup):
-        """DoD #4"""
-        client, _, _, _, _, task, _, task_done, _ = setup
+    def test_v2_task_requires_is_raw_tag_string_list(self, setup):
+        """DoD #4 (updated 2026-04-18): `requires` is a raw list of agent-tag
+        strings, not hydrated task refs. Task-to-task dependencies live in
+        the Link table (link_type=depends_on)."""
+        client, _, _, _, _, task, _, _, _ = setup
         resp = client.get(f"/v2/tasks/{task.id}/")
         reqs = resp.data["requires"]
-        assert len(reqs) == 1
-        assert isinstance(reqs[0], dict)
-        assert reqs[0]["id"] == task_done.id
-        assert reqs[0]["title"] == "DoneTask"
+        assert reqs == ["executor", "opus"]
+        assert all(isinstance(r, str) for r in reqs)
 
     def test_v2_task_claimed_by_actor_ref(self, setup):
         """DoD #5"""

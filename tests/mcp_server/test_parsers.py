@@ -35,12 +35,17 @@ class TestParseBool:
 
     def test_false_values(self):
         from mcp_server.parsers import parse_bool
-        for v in ("false", "False", "FALSE", "0", "no", "No", ""):
+        for v in ("false", "False", "FALSE", "0", "no", "No"):
             assert parse_bool(v) is False
 
     def test_none(self):
         from mcp_server.parsers import parse_bool
         assert parse_bool(None) is None
+
+    def test_empty_string_returns_none(self):
+        """Empty string means 'not provided' — callers distinguish via `is not None`."""
+        from mcp_server.parsers import parse_bool
+        assert parse_bool("") is None
 
     def test_already_bool(self):
         from mcp_server.parsers import parse_bool

@@ -22,6 +22,7 @@ def vtf_create_task(
     workplan_id: str = "",
     acceptance_criteria: str = "",
     requires: str = "",
+    depends_on: str = "",
     needs_review_before_start: str = "",
     needs_review_on_completion: str = "",
     test_command: str = "",
@@ -40,7 +41,13 @@ def vtf_create_task(
         milestone_id: Milestone to assign to
         workplan_id: Workplan to assign to
         acceptance_criteria: JSON array or comma-separated criteria
-        requires: Comma-separated task IDs this task depends on
+        requires: Comma-separated agent tags the claiming executor must
+            carry (e.g. "executor,opus"). Stored on Task.requires; the
+            claim filter checks that the agent's tags are a superset.
+            NOT task dependencies — use `depends_on` for those.
+        depends_on: Comma-separated task IDs this task depends on. Each
+            target must exist. Creates Link rows with link_type=depends_on;
+            the task stays unclaimable until every dependency is `done`.
         needs_review_before_start: Require review before start ("true"/"false")
         needs_review_on_completion: Require review on completion ("true"/"false")
         test_command: Test command as JSON dict or plain string
@@ -114,7 +121,33 @@ def vtf_create_task(
     if user:
         kwargs["created_by"] = user
 
+    # Validate depends_on targets exist before creating the task, so we
+    # don't leave orphan tasks when a caller typos a dependency ID.
+    dep_ids: list[str] = []
+    if depends_on:
+        dep_ids = parse_csv_list(depends_on)
+        existing = set(Task.objects.filter(pk__in=dep_ids).values_list("pk", flat=True))
+        missing = [d for d in dep_ids if d not in existing]
+        if missing:
+            return {
+                "error": True,
+                "message": f"depends_on target(s) not found: {', '.join(missing)}",
+            }
+
     task = Task.objects.create(**kwargs)
+
+    if dep_ids:
+        from links.models import Link
+        link_kwargs = {"created_by": user} if user else {}
+        Link.objects.bulk_create([
+            Link(
+                source_type="task", source_id=task.id,
+                target_type="task", target_id=dep_id,
+                link_type="depends_on", project=project,
+                **link_kwargs,
+            )
+            for dep_id in dep_ids
+        ])
 
     return {
         "data": {"task": serialize_task(task)},

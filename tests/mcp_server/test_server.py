@@ -165,6 +165,8 @@ def test_all_tools_registered():
         "vtf_activate_milestone",
         "vtf_complete_milestone",
         "vtf_delete_milestone",
+        # Link tools
+        "vtf_create_link",
     }
     assert expected == set(tool_names), f"Tool mismatch. Registered: {tool_names}"
 
@@ -184,7 +186,7 @@ def test_auto_discovery_skips_private_modules():
     public = {name for name in all_modules if not name.startswith("_")}
     expected = {"board", "search", "detail", "manage", "workplan", "structure", "milestone", "context", "planning", "identity",
                 "task_create", "task_update", "task_transitions", "task_assign", "task_notes",
-                "workplan_crud", "milestone_crud"}
+                "workplan_crud", "milestone_crud", "link_create"}
     assert expected == public, f"Module mismatch. Public: {public}"
 
 

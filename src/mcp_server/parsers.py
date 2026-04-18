@@ -20,7 +20,7 @@ def parse_bool(value: str | bool | None) -> bool | None:
     Returns None for None input (distinguishes "not provided" from "false").
     Accepts: true/false, yes/no, 1/0, True/False.
     """
-    if value is None:
+    if value is None or value == "":
         return None
     if isinstance(value, bool):
         return value
