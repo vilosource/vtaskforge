@@ -83,6 +83,175 @@ Executor (minutes later):
 
 ## 3. Conceptual model
 
+Four views, each answering a different question a reader brings to this doc:
+
+- **§3.1 System context (C4 L1)** — where does this system sit in the world?
+- **§3.2 Container view (C4 L2)** — what services exist inside, and how do they talk?
+- **§3.3 Components (C4 L3, vtf bootstrap path)** — what are the moving parts of the bootstrap flow?
+- **§3.4 Bootstrap sequence** — how does a single architect-initiated bootstrap actually unfold?
+- **§3.5 Domain entity relationships** — what are the data entities and how are they related?
+
+### 3.1 System context
+
+```mermaid
+C4Context
+    title System Context — Viloforge fleet
+
+    Person(dev, "Developer", "Plans work via architect sessions; reviews fleet runs")
+    Person(admin, "Administrator", "Staff user; manages GitHost + RepoCredential records")
+
+    System_Boundary(fleet, "Viloforge fleet") {
+        System(vtf, "vtaskforge", "Project/repo/credential data model; REST + MCP; task coordination")
+        System(vafi, "vafi", "Autonomous executor + judge; interactive architect sessions via bridge")
+    }
+
+    System_Ext(git_hosts, "Git hosts", "GitHub / GitLab / Bitbucket / self-hosted — REST APIs + git SSH")
+    SystemDb_Ext(k8s_secrets, "k8s Secrets", "Credential material: SSH keys, tokens, app credentials")
+
+    Rel(dev, vafi, "Chat with architect to bootstrap projects and plan tasks")
+    Rel(dev, vtf, "Direct REST / CLI for non-architect workflows")
+    Rel(admin, vtf, "Manage credentials and git host records")
+    Rel(vtf, git_hosts, "Create/delete repos; validate reachability", "REST")
+    Rel(vafi, git_hosts, "Clone, commit, push", "git + SSH/HTTPS")
+    Rel(vtf, k8s_secrets, "Resolve secret_ref for provider API auth", "file mount")
+    Rel(vafi, k8s_secrets, "Resolve secret_ref for git auth", "file mount")
+```
+
+Key context facts the rest of the design depends on:
+
+- **Two systems, one fleet**: vtf owns state; vafi owns execution. Bootstrap is a vtf responsibility (it writes the data model and orchestrates the provider API). Cloning is a vafi responsibility (it runs inside task-executing pods).
+- **Git hosts are external**: we never assume a specific one. `github.com` is where Viloforge lives today, but the design treats it as one of N.
+- **Credential material lives in k8s Secrets**, not in vtf's database. vtf stores *references* (`secret_ref`); both vtf and vafi mount the underlying Secrets in their respective namespaces.
+
+### 3.2 Container view
+
+```mermaid
+C4Container
+    title Container view — Viloforge fleet
+
+    Person(dev, "Developer")
+    Person(admin, "Administrator")
+
+    System_Boundary(fleet, "Viloforge fleet") {
+        Container(vtf_api, "vtf API", "Django/DRF + FastMCP", "REST, MCP, auth middleware, bootstrap service")
+        ContainerDb(vtf_db, "vtf database", "PostgreSQL", "Projects, Repositories, Credentials, GitHosts, tasks")
+
+        Container(bridge, "vafi bridge", "FastAPI", "Architect session lifecycle; impersonation wiring")
+        Container(architect_pod, "vafi architect pod", "k8s pod (pi harness)", "Interactive AI agent; one per user lock")
+        Container(executor_pod, "vafi executor pod", "k8s deployment", "Autonomous claim → clone → run gates")
+        Container(judge_pod, "vafi judge pod", "k8s deployment", "Autonomous review of completed tasks")
+    }
+
+    System_Ext(git_hosts, "Git hosts")
+    SystemDb_Ext(k8s_secrets, "k8s Secrets")
+
+    Rel(dev, bridge, "Start architect session", "WebSocket")
+    Rel(dev, vtf_api, "Web UI / CLI / REST", "HTTPS")
+    Rel(admin, vtf_api, "Credential / host admin", "HTTPS / Django admin")
+
+    Rel(bridge, architect_pod, "Spawn pod; exec pi harness", "k8s API")
+    Rel(architect_pod, vtf_api, "MCP calls w/ On-Behalf-Of impersonation", "HTTPS")
+    Rel(executor_pod, vtf_api, "Poll, claim, complete", "HTTPS")
+    Rel(judge_pod, vtf_api, "Poll reviews, submit verdict", "HTTPS")
+
+    Rel(vtf_api, vtf_db, "Reads + atomic writes", "SQL")
+    Rel(vtf_api, git_hosts, "Create/delete repo; validate reach", "REST via httpx")
+    Rel(executor_pod, git_hosts, "git clone / push", "SSH / HTTPS")
+    Rel(executor_pod, k8s_secrets, "Read SSH key / token", "file mount")
+    Rel(vtf_api, k8s_secrets, "Read provider API credentials", "file mount")
+```
+
+Why the architect path matters for this design: the architect pod is the only container that calls the new bootstrap surface on the user's behalf. The path `user → bridge → architect pod → vtf API` is what requires identity propagation (§8.1). Executor and judge pods continue to act with the fleet's service token — they don't bootstrap projects.
+
+### 3.3 Components (vtf bootstrap flow)
+
+```mermaid
+C4Component
+    title Components inside vtf API — bootstrap flow
+
+    Container_Boundary(vtf_api, "vtf API") {
+        Component(endpoint, "Bootstrap endpoint", "DRF APIView", "POST /v{1,2}/projects/bootstrap/")
+        Component(auth_mw, "Auth middleware", "Django middleware", "Token auth + On-Behalf-Of impersonation")
+        Component(service, "ProjectBootstrapService", "Service layer", "Orchestrates atomic multi-repo bootstrap")
+        Component(rollback, "RollbackStack", "Python class", "LIFO compensation for external side-effects")
+
+        Component(driver_reg, "GitHostDriver registry", "Singleton", "kind → driver class (boot-populated)")
+        Component(github_drv, "GitHubDriver", "GitHostDriver impl", "GitHub REST via httpx")
+        Component(fake_drv, "FakeHostDriver", "GitHostDriver impl", "Tests only")
+
+        Component(host_svc, "GitHostService", "Service layer", "CRUD + base_url allowlist check")
+        Component(cred_svc, "CredentialService", "Service layer", "CRUD + scope + URL-pattern validation")
+        Component(repo_svc, "RepositoryService", "Service layer", "CRUD + primary invariant")
+
+        ComponentDb(db, "ORM layer", "Django models", "Project, Repository, RepoCredential, GitHost")
+    }
+
+    System_Ext(git_host, "Git host (external)")
+
+    Rel(endpoint, auth_mw, "Gated by")
+    Rel(endpoint, service, "Delegates to")
+    Rel(service, driver_reg, "Looks up driver by host.kind")
+    Rel(driver_reg, github_drv, "Returns")
+    Rel(driver_reg, fake_drv, "Returns (tests)")
+    Rel(service, host_svc, "Resolves GitHost instance")
+    Rel(service, cred_svc, "Validates credential + URL pattern")
+    Rel(service, repo_svc, "Creates Repositories atomically")
+    Rel(service, rollback, "Pushes undo actions")
+
+    Rel(github_drv, git_host, "Create/delete", "REST")
+    Rel(host_svc, db, "CRUD")
+    Rel(cred_svc, db, "CRUD")
+    Rel(repo_svc, db, "CRUD + invariant check")
+```
+
+Read this diagram together with §6 (code abstractions): `GitHostDriver` is the pluggable seam (P5), `RepoCredential`/`GitHost`/`Repository` services enforce invariants per aggregate (§5.6), and `RollbackStack` is the saga mechanism for cross-boundary consistency (§11).
+
+### 3.4 Bootstrap sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer
+    participant Bridge as vafi bridge
+    participant Pod as architect pod
+    participant AuthMW as vtf auth middleware
+    participant Service as ProjectBootstrapService
+    participant Driver as GitHubDriver
+    participant GitHost as GitHub API
+    participant DB as Postgres
+
+    User->>Bridge: POST /v1/lock (Token: alice)
+    Bridge->>AuthMW: validate_token(alice)
+    AuthMW-->>Bridge: User(alice, ...)
+    Bridge->>Pod: spawn pod<br/>VF_VTF_TOKEN = vafi-agent<br/>VF_ON_BEHALF_OF = alice
+
+    User->>Pod: "Bootstrap project 'widgets' on GitHub"
+    Pod->>AuthMW: vtf_bootstrap_project(...)<br/>Authorization: Token vafi-agent<br/>On-Behalf-Of: alice
+    AuthMW->>AuthMW: vafi-agent.can_impersonate?<br/>✓ request.user = alice<br/>request.acting_via = vafi-agent
+    AuthMW->>Service: bootstrap(spec, actor=alice)
+
+    Service->>Service: validate — scope, patterns, capabilities, invariants
+    Service->>Driver: create_repo(spec)
+    Driver->>GitHost: POST /user/repos
+    GitHost-->>Driver: 201 Created
+    Driver-->>Service: DriverRepoResult(external_id, ssh_url, ...)
+    Service->>Service: rollback.push(delete_repo)
+
+    Service->>DB: BEGIN
+    Service->>DB: INSERT Project, Repository (primary), Memberships, Workplan
+    Service->>DB: COMMIT
+    Service->>Service: emit ProjectBootstrapped event
+    Service-->>AuthMW: Project
+    AuthMW-->>Pod: 201 + v2 response envelope
+    Pod-->>User: "Created project widgets, repo git@github.com:vilosource/widgets.git"
+```
+
+Note the two identity-bearing fields in step 7: `Authorization: Token vafi-agent` (the transport-level credential) and `On-Behalf-Of: alice` (the delegated identity). The middleware in step 8 substitutes the effective `request.user` only if the transport credential has `can_impersonate`. Every downstream audit event records *both* identities — the human who initiated the action and the service account that carried it.
+
+### 3.5 Domain entity relationships
+
+The persisted data model and the code-layer abstractions that operate on it:
+
 ```
                     ┌──────────────┐
                     │    User      │◄─────────────┐
