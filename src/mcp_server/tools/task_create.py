@@ -1,5 +1,7 @@
 """MCP tool: vtf_create_task — create a new task."""
-from mcp_server.decorators import handle_errors, serialize_response
+from django.db import transaction
+
+from mcp_server.decorators import handle_errors, require_project_access, serialize_response
 from mcp_server.parsers import parse_bool, parse_csv_list, parse_json_or_csv, parse_test_command
 from mcp_server.serialization import serialize_task
 from mcp_server.server import mcp
@@ -8,6 +10,7 @@ from mcp_server.project_context import get_default_project
 
 @mcp.tool()
 @handle_errors
+@require_project_access("project_id")
 @serialize_response
 def vtf_create_task(
     title: str,
@@ -134,20 +137,23 @@ def vtf_create_task(
                 "message": f"depends_on target(s) not found: {', '.join(missing)}",
             }
 
-    task = Task.objects.create(**kwargs)
+    # Create the task and any dependency Link rows atomically — if link
+    # creation fails after the task is persisted, roll the task back too.
+    with transaction.atomic():
+        task = Task.objects.create(**kwargs)
 
-    if dep_ids:
-        from links.models import Link
-        link_kwargs = {"created_by": user} if user else {}
-        Link.objects.bulk_create([
-            Link(
-                source_type="task", source_id=task.id,
-                target_type="task", target_id=dep_id,
-                link_type="depends_on", project=project,
-                **link_kwargs,
-            )
-            for dep_id in dep_ids
-        ])
+        if dep_ids:
+            from links.models import Link
+            link_kwargs = {"created_by": user} if user else {}
+            Link.objects.bulk_create([
+                Link(
+                    source_type="task", source_id=task.id,
+                    target_type="task", target_id=dep_id,
+                    link_type="depends_on", project=project,
+                    **link_kwargs,
+                )
+                for dep_id in dep_ids
+            ])
 
     return {
         "data": {"task": serialize_task(task)},

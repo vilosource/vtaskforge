@@ -70,11 +70,17 @@ class RoleBasedPermission(BasePermission):
             return True
         if membership.role == "viewer":
             return False
-        # member: can create, can update own, cannot delete
+        # member: can create, can update own, cannot delete.
+        # An agent that claimed a task is also considered "own" for the
+        # lifetime of the claim — this is how the vafi controller writes
+        # execution_summary, heartbeats, and other post-execution metadata
+        # back through the generic PATCH path.
         if request.method == "DELETE":
             return False
         if request.method in ("PATCH", "PUT"):
             created_by_id = getattr(obj, "created_by_id", None)
+            claimed_by_id = getattr(obj, "claimed_by_id", None)
             if created_by_id and created_by_id != request.user.id:
-                return False
+                if claimed_by_id != request.user.id:
+                    return False
         return True

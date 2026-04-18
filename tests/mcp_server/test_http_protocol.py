@@ -177,7 +177,7 @@ def test_http_initialize_and_list_tools(mcp_http_server_process):
                     tools_result = await session.list_tools()
                     tool_names = sorted(t.name for t in tools_result.tools)
 
-                    assert len(tool_names) == 36
+                    assert len(tool_names) == 37
                     assert "vtf_board_overview" in tool_names
                     assert "vtf_get_context" in tool_names
                     assert "vtf_manage_milestone" in tool_names

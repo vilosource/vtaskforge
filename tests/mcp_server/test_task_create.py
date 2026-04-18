@@ -1,13 +1,25 @@
 """Tests for the vtf_create_task MCP tool.
 
 Tests call the tool Python function directly (not via MCP protocol).
+A staff user is injected into the MCP user_context so the project-access
+decorator (require_project_access) is satisfied without per-test membership.
 """
 import json
 
 import pytest
 
 from mcp_server.tools.task_create import vtf_create_task
+from mcp_server.user_context import _current_user
 from tests.factories import ProjectFactory, TaskFactory
+
+
+@pytest.fixture(autouse=True)
+def staff_user_context(db):
+    from django.contrib.auth.models import User
+    user = User.objects.create_user("mcp-staff", password="x", is_staff=True)
+    token = _current_user.set(user)
+    yield user
+    _current_user.reset(token)
 
 
 @pytest.mark.django_db

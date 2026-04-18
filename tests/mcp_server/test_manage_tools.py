@@ -557,20 +557,26 @@ def test_create_with_requires_valid():
 
 
 @pytest.mark.django_db
-def test_create_with_requires_invalid():
-    """vtf_manage_task(action=create) returns error when required task IDs don't exist."""
+def test_create_requires_stores_agent_tags_not_task_ids():
+    """`requires` is a list of agent-tag strings (the claim filter subset-matches
+    against agent tags). vtf_manage_task must not treat them as task IDs —
+    this test guards against a prior bug where `requires` values were
+    validated as existing task IDs.
+    """
+    from tasks.models import Task
+
     project = ProjectFactory()
 
     result = json.loads(vtf_manage_task(
         action="create",
-        title="Task with bad deps",
+        title="Tag-gated task",
         project_id=project.id,
-        requires="nonexistent-task-id-1,nonexistent-task-id-2",
+        requires="executor,opus",
     ))
 
-    assert result["success"] is False
-    assert "not found" in result["message"].lower()
-    assert "missing_ids" in result["data"]
+    assert result["success"] is True
+    task = Task.objects.get(pk=result["data"]["task"]["id"])
+    assert task.requires == ["executor", "opus"]
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,6 @@
 """MCP tool: vtf_update_task — update task fields."""
+from django.db import transaction
+
 from mcp_server.decorators import handle_errors, serialize_response
 from mcp_server.parsers import parse_bool, parse_csv_list, parse_json_or_csv, parse_test_command
 from mcp_server.serialization import serialize_task
@@ -21,6 +23,7 @@ def vtf_update_task(
     workplan_id: str = "",
     acceptance_criteria: str = "",
     requires: str = "",
+    depends_on: str = "",
     needs_review_before_start: str = "",
     needs_review_on_completion: str = "",
     test_command: str = "",
@@ -28,6 +31,12 @@ def vtf_update_task(
     """Update fields on an existing task.
 
     Only provided (non-empty) fields are updated. The task must exist.
+
+    `depends_on` uses REPLACE semantics: the comma-separated list of task
+    IDs becomes the task's full set of depends_on Links — existing
+    depends_on links are deleted, then new Link rows are created for each
+    target (targets must exist). Pass an empty string to leave deps
+    untouched. To explicitly clear all deps, see vtf_delete_link.
     """
     from tasks.models import Task
     from workplans.models import Milestone, Workplan
@@ -86,16 +95,53 @@ def vtf_update_task(
         except Milestone.DoesNotExist:
             return {"error": True, "message": f"Milestone '{milestone_id}' not found."}
 
-    if not updates:
+    # Validate depends_on targets exist before touching anything.
+    dep_ids: list[str] = []
+    if depends_on:
+        dep_ids = parse_csv_list(depends_on)
+        existing = set(Task.objects.filter(pk__in=dep_ids).values_list("pk", flat=True))
+        missing = [d for d in dep_ids if d not in existing]
+        if missing:
+            return {
+                "error": True,
+                "message": f"depends_on target(s) not found: {', '.join(missing)}",
+            }
+
+    if not updates and not depends_on:
         return {"error": True, "message": "No fields to update. Provide at least one field."}
 
-    for field, value in updates.items():
-        setattr(task, field, value)
-    task.save(update_fields=list(updates.keys()) + ["updated_at"])
+    with transaction.atomic():
+        if updates:
+            for field, value in updates.items():
+                setattr(task, field, value)
+            task.save(update_fields=list(updates.keys()) + ["updated_at"])
+
+        if depends_on:
+            from links.models import Link
+            # Replace semantics: drop existing depends_on, recreate from list
+            Link.objects.filter(
+                source_type="task", source_id=task.id, link_type="depends_on",
+            ).delete()
+            if dep_ids:
+                from mcp_server.user_context import get_current_user
+                user = get_current_user()
+                link_kwargs = {"created_by": user} if user else {}
+                Link.objects.bulk_create([
+                    Link(
+                        source_type="task", source_id=task.id,
+                        target_type="task", target_id=dep_id,
+                        link_type="depends_on", project=task.project,
+                        **link_kwargs,
+                    )
+                    for dep_id in dep_ids
+                ])
 
     task.refresh_from_db()
+    changed = list(updates.keys())
+    if depends_on:
+        changed.append("depends_on")
     return {
         "data": {"task": serialize_task(task)},
-        "message": f"Updated task '{task.title}' ({task.id}). Changed: {', '.join(updates.keys())}.",
+        "message": f"Updated task '{task.title}' ({task.id}). Changed: {', '.join(changed)}.",
         "available_actions": ["vtf_task_detail", "vtf_submit_task"],
     }

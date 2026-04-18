@@ -264,6 +264,33 @@ class TestRoleBasedPermission:
         response = owner_client.delete(f"/v1/tasks/{task.id}/")
         assert response.status_code in (200, 204)
 
+    def test_claimer_can_patch_task_they_did_not_create(self):
+        """Agent (member role) that claimed a task can PATCH it, even when
+        created_by is a different user. This is how the vafi controller
+        writes execution_summary back after the harness completes.
+        """
+        from tasks.models import Task
+
+        owner, _ = _make_user_client("owner")
+        agent, agent_client = _make_user_client("agent")
+        proj, wp, ms, _ = _make_project_with_task(owner)
+        ProjectMembership.objects.create(user=agent, project_id=proj.id, role="member")
+
+        task = Task.objects.create(
+            title="Owner-created, agent-claimed",
+            project=proj, workplan=wp, milestone=ms,
+            created_by=owner, claimed_by=agent, status="doing",
+        )
+
+        response = agent_client.patch(
+            f"/v1/tasks/{task.id}/",
+            {"execution_summary": {"turns": 3, "cost": 0.01}},
+            format="json",
+        )
+        assert response.status_code == 200, response.content
+        task.refresh_from_db()
+        assert task.execution_summary == {"turns": 3, "cost": 0.01}
+
 
 # ---------------------------------------------------------------------------
 # Create-time validation

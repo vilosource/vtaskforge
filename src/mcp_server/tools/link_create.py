@@ -99,6 +99,16 @@ def vtf_create_link(
         }
 
     user = get_current_user()
+    # Enforce project membership (matches LinkViewSet.perform_create).
+    # Staff users bypass. No user means no token context — reject.
+    from core.authorization import check_project_membership
+    if user is None:
+        return {"error": True, "message": "Authentication required."}
+    if not user.is_staff and not check_project_membership(user, project.id):
+        return {
+            "error": True,
+            "message": f"You are not a member of project '{project.id}'.",
+        }
     link = Link.objects.create(
         source_type=source_type,
         source_id=source_id,

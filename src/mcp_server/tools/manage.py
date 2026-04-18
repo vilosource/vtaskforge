@@ -227,18 +227,11 @@ def _action_create(title, project_id, description, labels, spec,
         except json.JSONDecodeError:
             kwargs["acceptance_criteria"] = [c.strip() for c in acceptance_criteria.split(",") if c.strip()]
 
-    # requires — comma-separated task IDs, validate they exist
+    # requires — comma-separated agent-tag strings (the claiming executor
+    # must carry a superset). Stored as-is on Task.requires; the claim
+    # filter enforces the subset check. See tasks/services.py:144.
     if requires:
-        req_ids = [r.strip() for r in requires.split(",") if r.strip()]
-        existing = set(Task.objects.filter(pk__in=req_ids).values_list("pk", flat=True))
-        missing = set(req_ids) - existing
-        if missing:
-            return json.dumps(error_response(
-                message=f"Required task(s) not found: {', '.join(missing)}",
-                data={"missing_ids": list(missing)},
-                available_actions=["vtf_search_tasks"],
-            ))
-        kwargs["requires"] = req_ids
+        kwargs["requires"] = [r.strip() for r in requires.split(",") if r.strip()]
 
     # needs_review_before_start
     if needs_review_before_start:
@@ -356,18 +349,9 @@ def _action_update(task_id, title, description, labels, spec,
             task.acceptance_criteria = [c.strip() for c in acceptance_criteria.split(",") if c.strip()]
         update_fields.append("acceptance_criteria")
 
-    # requires — comma-separated task IDs, validate they exist
+    # requires — comma-separated agent-tag strings (see note in _create_task)
     if requires:
-        req_ids = [r.strip() for r in requires.split(",") if r.strip()]
-        existing = set(Task.objects.filter(pk__in=req_ids).values_list("pk", flat=True))
-        missing = set(req_ids) - existing
-        if missing:
-            return json.dumps(error_response(
-                message=f"Required task(s) not found: {', '.join(missing)}",
-                data={"missing_ids": list(missing)},
-                available_actions=["vtf_search_tasks"],
-            ))
-        task.requires = req_ids
+        task.requires = [r.strip() for r in requires.split(",") if r.strip()]
         update_fields.append("requires")
 
     # needs_review_before_start
