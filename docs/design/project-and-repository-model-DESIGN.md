@@ -94,6 +94,7 @@ Four views, each answering a different question a reader brings to this doc:
 ### 3.1 System context
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 C4Context
     title System Context — Viloforge fleet
 
@@ -126,6 +127,7 @@ Key context facts the rest of the design depends on:
 ### 3.2 Container view
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 C4Container
     title Container view — Viloforge fleet
 
@@ -166,6 +168,7 @@ Why the architect path matters for this design: the architect pod is the only co
 ### 3.3 Components (vtf bootstrap flow)
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 C4Component
     title Components inside vtf API — bootstrap flow
 
@@ -209,6 +212,7 @@ Read this diagram together with §6 (code abstractions): `GitHostDriver` is the 
 ### 3.4 Bootstrap sequence
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 sequenceDiagram
     autonumber
     actor User as Developer
