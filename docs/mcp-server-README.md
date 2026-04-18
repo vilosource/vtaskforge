@@ -359,6 +359,25 @@ vtf_task_detail(task_id="t-abc123")
 
 ### vtf_manage_task
 
+> **Legacy tool — prefer the decomposed Phase 4c tools for new work.**
+> `vtf_manage_task` remains available for compatibility, but every
+> `action` now has a dedicated tool:
+>
+> | Legacy | Replacement |
+> |--------|-------------|
+> | `action="create"` | `vtf_create_task` (supports `depends_on` for Link-based task dependencies) |
+> | `action="update"` | `vtf_update_task` (supports `depends_on` with REPLACE semantics) |
+> | `action="submit"` | `vtf_submit_task` |
+> | `action="block"` | `vtf_block_task` |
+> | `action="unblock"` | `vtf_unblock_task` |
+> | `action="defer"` | `vtf_defer_task` |
+> | `action="cancel"` | `vtf_cancel_task` |
+> | `action="delete"` | `vtf_delete_task` |
+> | `action="assign"` | `vtf_assign_task` |
+> | `action="unassign"` | `vtf_unassign_task` |
+>
+> See `docs/design/phase4c-mcp-redesign-DESIGN.md` for the rationale.
+
 Unified tool for task creation, updates, and lifecycle transitions. Use the `action` parameter to specify the operation.
 
 **Parameters:**
@@ -403,6 +422,52 @@ vtf_manage_task(action="assign", task_id="t-abc123", assigned_to="executor-1")
 ```
 
 **Invalid transition errors** include the valid transitions from the current status so the agent knows what is possible.
+
+---
+
+### vtf_create_link / vtf_delete_link
+
+Manage cross-entity Links (the row-level table that models task-to-task
+dependencies and other relationships). Use these when wiring
+`depends_on` between existing tasks, or linking tasks to external
+references (commits, docs, jira tickets).
+
+Creation is also available inline on task tools: `vtf_create_task(depends_on="<id>,<id>")`
+and `vtf_update_task(depends_on="<id>,<id>")` both create Link rows
+automatically — use `vtf_create_link` when you need a non-`depends_on`
+type or are linking to a non-task target.
+
+**vtf_create_link parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_type` | string | yes | One of `task`, `workplan`, `milestone` |
+| `source_id` | string | yes | ID of the source entity |
+| `target_type` | string | yes | Entity type — typically `task`; free-form for external refs (`commit`, `doc`, `jira`, `file`) |
+| `target_id` | string | yes | ID or URL of the target |
+| `link_type` | string | yes | One of `depends_on`, `blocks`, `relates_to`, `commit`, `mr`, `area`, `doc`, `file`, `jira` |
+| `metadata` | string | no | Optional JSON object |
+
+**vtf_delete_link parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `link_id` | string | yes | Link id to delete |
+
+Both tools enforce project membership — the caller's user must be a
+member of the source entity's project (staff bypass).
+
+**Examples:**
+```
+# Make t-b depend on t-a
+vtf_create_link(source_type="task", source_id="t-b", target_type="task", target_id="t-a", link_type="depends_on")
+
+# Remove a dependency
+vtf_delete_link(link_id="l-xyz")
+
+# Link a task to a commit for audit trail
+vtf_create_link(source_type="task", source_id="t-a", target_type="commit", target_id="abc1234", link_type="commit")
+```
 
 ---
 
