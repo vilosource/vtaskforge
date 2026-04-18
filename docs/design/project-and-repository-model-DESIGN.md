@@ -172,7 +172,7 @@ A reusable record binding a target host type, an auth material reference, and a 
 | `metadata` | JSONB | yes | Kind-specific fields (`username` for https, `app_id` for github_app, …) — never contains secret material |
 | `capabilities` | set<enum> | no | `{git_auth, provider_api}` — both possible on the same credential |
 | `scope` | enum | no | `global \| project \| staff_only` |
-| `project_id` | FK Project | yes | Required when `scope=project`, null otherwise |
+| `project_id` | FK Project | yes | Required when `scope=project`, null otherwise; `on_delete=CASCADE` when set |
 | `allowed_url_patterns` | JSONB (list of strings) | no | Glob patterns; target URL must match at least one. Empty list = deny-all |
 | `enabled` | bool | no | Soft-disable without deletion |
 | `created_by` | FK User | yes | Audit |
@@ -184,7 +184,8 @@ Invariants:
 - `kind=public` ⇒ `capabilities = {git_auth}` and `secret_ref` is null.
 - `kind=ssh_key` ⇒ `capabilities ⊇ {git_auth}` (SSH keys can't call REST APIs).
 - `allowed_url_patterns` is non-empty.
-- A credential cannot be deleted while referenced by any `Repository` or `GitHost` (`on_delete=PROTECT`). Soft-disable via `enabled=false`.
+- A credential cannot be deleted while referenced by any `Repository` or `GitHost` (`on_delete=PROTECT` on those FKs). Soft-disable via `enabled=false`.
+- When a Project is deleted, its `scope=project` credentials cascade-delete with it (`on_delete=CASCADE`). Rationale: project-scoped credentials have no purpose outside their project; leaving orphans either clutters the credential namespace or risks accidental reuse across unrelated projects.
 
 ### 5.2 `GitHost`
 
@@ -328,9 +329,14 @@ class GitHostDriver(ABC):
     @abstractmethod
     def delete_repo(self, external_id: str) -> None: ...
 
+    @classmethod
     @abstractmethod
-    def validate_reachable(self, url: str) -> bool: ...
+    def validate_reachable(cls, credential: RepoCredential, url: str) -> bool:
+        """Reachability check — usable in import mode where no GitHost exists.
+        Takes the credential directly; no host instance required."""
 ```
+
+`validate_reachable` is a classmethod because import mode has no `GitHost` to bind a driver instance to. The credential alone is sufficient to attempt a network check.
 
 Driver registration at boot (one line per kind):
 
@@ -367,6 +373,22 @@ driver.delete_repo(external_id)
 ### 6.3 `CloneStrategy` (vafi)
 
 The vafi-side sibling abstraction. Takes Repository data (credential kind + secret_ref + clone_options) and materializes a checkout into a workdir.
+
+**The `RepoInfo` DTO** — the contract between vtf (via the clone-info endpoint, §9.5) and vafi's strategy layer. This is the minimum data vafi needs to clone; it intentionally does not include the secret material (which lives in a k8s Secret that vafi mounts locally).
+
+```python
+@dataclass(frozen=True)
+class RepoInfo:
+    id: str                   # Repository.id
+    url: str                  # canonical SSH URL
+    default_branch: str
+    credential_kind: str      # ssh_key | https_token | github_app | public
+    secret_ref: str | None    # k8s-secret:<ns>/<name>[:<key>], or None for public
+    metadata: dict            # kind-specific, non-secret (username, app_id, etc.)
+    clone_options: dict       # depth, submodules, sparse_paths, single_branch, ...
+```
+
+vtf serializes this shape exactly; vafi deserializes and dispatches.
 
 ```python
 # vafi/src/controller/clone_strategies/base.py
@@ -491,7 +513,7 @@ When `VF_ON_BEHALF_OF` is set, adds the header to every MCP HTTP request.
 
 **Audit:** every authenticated write records *both* identities: `TaskEvent.actor = <human>`, `TaskEvent.acting_via = <vafi-agent>`. Audit consumers see who asked and through what channel.
 
-**Granting `can_impersonate`:** done once via migration/data-fixture for the `vafi-agent` user. In the future, per-bridge service accounts get their own impersonation grants.
+**Granting `can_impersonate`:** Django permissions are `ContentType`-linked, so a global capability needs a carrier. A dedicated `Impersonation` Django model (schema-only, no columns beyond `id`) hosts the permission; `vafi-agent` gets the grant via data-migration. Alternative (rejected): BooleanField on User — breaks the Django idiom and doesn't appear in the admin's permission UI. Future per-bridge service accounts receive the grant the same way.
 
 Slice 0 in the delivery plan (§16) implements this. **Bootstrap is blocked on Slice 0.** Without impersonation, every bootstrapped project would have `vafi-agent` as owner — wrong.
 
@@ -511,16 +533,27 @@ The credential-resolution service enforces scope on every reference, including d
 
 Every credential carries `allowed_url_patterns`, non-empty, glob-style. When a Repository is created or its URL is updated, the URL must match at least one of the credential's patterns. Otherwise the operation is rejected.
 
+**URL canonicalization is performed before matching.** All URLs are normalized to SCP-like SSH form (`git@<host>:<path>.git`) at Repository write time. HTTPS URLs (`https://host/path[.git]`) are converted; `ssh://git@host/path` (URI form) is converted to SCP form. Patterns are authored and stored in the same canonical form. This closes the "same repo, two URL shapes" bypass where a pattern `git@github.com:vilosource/*` wouldn't match `https://github.com/vilosource/foo` despite both denoting the same resource.
+
+**Pattern matching library**: `fnmatch.fnmatchcase` (Python stdlib, Unix-shell glob semantics, case-sensitive). `*` matches any sequence except `/` is not special in fnmatch — this is acceptable because we match full canonical URLs, and the `git@host:` prefix forces the boundary. Regex is deliberately avoided — ReDoS risk is real and admins shouldn't be crafting regex for security boundaries.
+
 Example:
 
 ```
 RepoCredential(name="github-viloforge-deploy")
   target_type=github
   scope=global
-  allowed_url_patterns=["git@github.com:vilosource/*", "ssh://git@github.com/vilosource/*"]
+  allowed_url_patterns=["git@github.com:vilosource/*"]
 ```
 
-An authenticated user (even a project member) cannot weaponize this credential against `git@github.com:someone-else/private-repo` because the URL fails the pattern check. The defense is at credential-use time, centrally enforced, and doesn't depend on every caller remembering to check.
+Matches (after canonicalization):
+- `git@github.com:vilosource/widgets.git` ✓
+- `https://github.com/vilosource/widgets` → normalized → `git@github.com:vilosource/widgets.git` ✓
+
+Rejects:
+- `git@github.com:someone-else/private-repo.git` ✗
+
+The defense is at credential-use time, centrally enforced, and doesn't depend on every caller remembering to check.
 
 ### 8.4 What is never returned in API responses
 
@@ -534,7 +567,12 @@ API responses include `name`, `display_name`, `target_type`, `kind`, `capabiliti
 
 `secret_ref` uses the scheme `k8s-secret:<namespace>/<name>[:<key>]`. Both vtf and vafi pods mount the referenced Secret in their respective namespaces. Key material never passes through the vtf HTTP surface.
 
-**Operational constraint (documented):** a Secret referenced by `secret_ref` must exist with matching content in both the vtf and vafi namespaces. This is enforced by cluster-ops tooling, not by vtf.
+**Sync mechanism.** A Secret referenced by `secret_ref` must exist with matching content in both the vtf and vafi namespaces. v1 supports two sync modes, selectable via ops:
+
+- **ExternalSecrets Operator (preferred)**: a single source-of-truth `ExternalSecret` resource in each namespace points at the same upstream (Vault / AWS Secrets Manager / 1Password Connect). Rotation happens once upstream; both namespaces pick up changes without redeploy. Requires ESO installed in the cluster.
+- **Manual sync with checklist (bootstrap mode)**: a documented runbook (`docs/ops/credential-sync.md`, to be written in Slice 2) lists every Secret and its two namespace locations; operators update both when rotating. Acceptable short-term; error-prone long-term.
+
+vtf's credential-write path performs a startup-time sanity probe: on each pod startup, for every enabled credential, vtf attempts to read the referenced Secret in its own namespace. Failures are logged but non-fatal (vafi reads independently). vafi performs the same check on its side. Structured metric `credential_secret_resolution_errors` exposes the status per credential.
 
 **Future hardening (out of scope v1):** replace `secret_ref` with a vtf-managed encrypted store, exposing `GET /v1/credentials/<id>/material/` as an authenticated least-privilege API that vafi calls per-task. Gives audit, rotation, and revocation without restart. Design preserves compatibility — `kind` and `capabilities` don't change.
 
@@ -542,12 +580,14 @@ API responses include `name`, `display_name`, `target_type`, `kind`, `capabiliti
 
 | Threat | Defense |
 |--------|---------|
-| Compromised member token references a global credential to clone arbitrary URL | `allowed_url_patterns` match required |
+| Compromised member token references a global credential to clone arbitrary URL | `allowed_url_patterns` match required (§8.3, with URL canonicalization) |
 | Compromised member token escalates by creating a `staff_only` credential | Scope CRUD restricted to staff |
 | Malicious task spec points the agent at a secondary repo with sensitive contents | Secondary repos also go through Repository model + credential check; agent's on-demand clone helper enforces same checks as primary |
 | Compromised vafi pod exfiltrates all credentials | Today: k8s Secret has everything mounted. Future mitigation (8.5): per-task material fetch |
 | API response accidentally leaks secret_ref | Serializer explicitly omits; contract test asserts it |
 | Architect action attributed to wrong user | On-Behalf-Of impersonation + dual-actor audit |
+| Staff user points `GitHost.base_url` at attacker-controlled host to exfiltrate bot token | `base_url` validated against per-kind allowlist defined in settings (e.g. `VTF_GITHOST_BASE_URL_ALLOWLIST = {"github": ["https://api.github.com", "https://ghes.viloforge.com/api/v3"], "gitlab": ["https://gitlab.com", "https://gitlab.viloforge.com"]}`). Edits to base_url require staff + pass allowlist check; changes emit an audit event. |
+| Feature-flag downgrade (new → dual → off) orphaning Repository data | `off` state is dormant-read only; Repository rows remain; downgrade is safe |
 
 ---
 
@@ -556,8 +596,13 @@ API responses include `name`, `display_name`, `target_type`, `kind`, `capabiliti
 ### 9.1 Bootstrap endpoint
 
 ```
-POST /v1/projects/bootstrap/
+POST /v1/projects/bootstrap/     — returns v1-shape envelope
+POST /v2/projects/bootstrap/     — returns v2-shape envelope (embedded refs, permissions)
 ```
+
+Both paths are supported per vtf's existing dual-versioning convention. `VersionedSerializerMixin` selects the response serializer from URL prefix. Request-body shape is identical across versions.
+
+**Idempotency:** not implemented in v1. A client retrying after a network timeout against `mode: "create"` can produce partial state — the first call may have succeeded at the provider but the response was lost. **Callers must inspect state (via provider introspection or via `GET /v1/projects/?repo_url=<url>`) before retrying.** An `Idempotency-Key` header is deferred to a future hardening pass; the doc will add it alongside telemetry for duplicate-bootstrap attempts once real usage data exists.
 
 **Create mode (single-repo):**
 
@@ -692,10 +737,37 @@ DELETE /v1/hosts/{id}/    — PROTECTED if referenced by Repository.created_via_
 GET /v1/hosts/              → list GitHost instances (authenticated users)
 GET /v1/credentials/        → list credentials in caller's scope
 GET /v1/host-kinds/         → list compiled-in driver kinds (staff; for admin UI)
-GET /v1/credential-kinds/   → list supported credential kinds (open; vafi polls at startup)
+GET /v1/credential-kinds/   → list supported credential kinds (authenticated; vafi polls at startup)
+GET /v1/repository-model/   → current feature-flag state + equivalence-probe result (§13.5)
 ```
 
-### 9.6 API versioning & evolution (P12)
+### 9.6 Clone-info endpoint (vafi-facing)
+
+vafi needs to fetch exactly what it needs to clone — no more. A dedicated endpoint serves this, distinct from the staff-level credential CRUD:
+
+```
+GET /v1/repositories/{id}/clone-info/
+```
+
+**Response (200):**
+
+```json
+{
+  "id": "repo_...",
+  "url": "git@github.com:vilosource/widgets.git",
+  "default_branch": "main",
+  "credential_kind": "ssh_key",
+  "secret_ref": "k8s-secret:vafi-secrets/github-ssh",
+  "metadata": {},
+  "clone_options": {}
+}
+```
+
+**Permissions:** the caller's token must correspond to a user who is a member of the Repository's Project. `vafi-agent` is added to every project that uses the fleet (Slice 1c enforces the invariant). The response deliberately omits credential name, display name, scope, allowed patterns, capabilities — vafi doesn't need those and shouldn't have visibility into the authorization surface.
+
+This endpoint is the vtf → vafi boundary. Adding fields here requires a coordinated vtf+vafi release.
+
+### 9.7 API versioning & evolution (P12)
 
 During the migration overlap, the v2 `Project` response includes both `repo_url` (legacy, computed from the primary Repository) **and** `repositories` (new, full list):
 
@@ -711,6 +783,16 @@ During the migration overlap, the v2 `Project` response includes both `repo_url`
 ```
 
 Old clients read `repo_url`; new clients read `repositories`. `repo_url` removal is gated on the `removed` feature-flag state (§13.1) and is a deprecation announced one release cycle ahead; the v2 response shape does not introduce a breaking change.
+
+---
+
+### 9.8 Repository cardinality limits
+
+A soft limit of **20 Repositories per Project** is enforced at the `ProjectService` layer. Exceeding it returns `REPOSITORY_LIMIT_EXCEEDED` (HTTP 400). The limit is a configuration setting (`VTF_MAX_REPOSITORIES_PER_PROJECT=20`) so it can be raised for specific deployments without a code change.
+
+Rationale: bootstrap is synchronous and makes one provider call per `mode=create` repo. A project with 50 repos takes ≥ 50 seconds; beyond that we're into async-bootstrap territory (a v2 concern). 20 is comfortable for real-world multi-repo projects (backend + frontend + mobile + docs + infra + ~15 microservices) without inviting runaway calls.
+
+No hard DB limit — the check is at service layer so ops can temporarily override for a known-good bulk-import scenario.
 
 ---
 
@@ -730,7 +812,9 @@ Tools follow Phase 4c conventions (`docs/design/phase4c-mcp-redesign-DESIGN.md`)
 
 **Explicitly not exposed via MCP**: credential creation, host creation. These are staff operations; architects reference existing objects by name but cannot mint new credentials.
 
-`vtf_bootstrap_project` signature mirrors the endpoint's JSON shape, flattened to MCP's string-only parameter convention with JSON-encoded sub-objects where needed.
+`vtf_bootstrap_project` signature mirrors the endpoint's JSON shape, flattened to MCP's string-only parameter convention with JSON-encoded sub-objects where needed (e.g. `repositories` is a JSON-array string).
+
+**Error shape** follows the existing MCP convention (`mcp_server/responses.py::error_response`): `{"success": false, "data": {}, "message": "<actionable text>", "available_actions": [...]}`. Every API error code from §9.1 maps to a `message` string with the code embedded (e.g. `"CREDENTIAL_URL_PATTERN_MISMATCH: URL 'git@github.com:foo/bar' does not match any pattern on credential 'github-viloforge-deploy'"`). Structured error details go into `data.error_code` for programmatic handling; humans read `message`.
 
 ---
 
@@ -822,10 +906,16 @@ def _ensure_repo_cloned(self, repo_info, workdir):
 
 ### 12.3 Secondary-repo on-demand clones
 
-Agents may call additional repos into the workdir via a new vafi helper (`/opt/vf-agent/bin/vfctl clone <repo-name>`) that:
-1. Calls vtf `GET /v1/projects/{id}/repositories/?name=<name>` (using the pod's existing VTF token).
-2. Resolves the returned Repository through the same `CloneStrategy` dispatch.
-3. Clones into `workdir/<repo-name>/`.
+Agents may call additional repos into the workdir via a **new vafi helper** (`/opt/vf-agent/bin/vfctl clone <repo-name>`) introduced as part of Slice 1c. This helper does not exist in the current codebase; it's a deliverable of this initiative.
+
+Behavior:
+1. Reads the current task's `project_id` from env (`VF_TASK_PROJECT_ID`, set by the controller at harness invocation time).
+2. Calls vtf `GET /v1/repositories/?project={id}&name={name}` (using the pod's `VF_VTF_TOKEN`).
+3. Calls `GET /v1/repositories/{id}/clone-info/` to get the `RepoInfo` DTO (§6.3).
+4. Dispatches via `CloneStrategy` registry, the same path the executor uses for the primary repo.
+5. Clones into `workdir/<repo-name>/`.
+
+The `<repo-name>` argument is resolved within the current project's scope — no cross-project ambiguity. Agents without a project context (edge case) see a clear error.
 
 The helper is documented in the executor methodology (`methodologies/executor.md`) so agents know how to invoke it from spec-described multi-repo work.
 
@@ -835,7 +925,21 @@ The helper is documented in the executor methodology (`methodologies/executor.md
 
 ### 13.1 Feature flag state machine (P9)
 
-Single flag, shared by vtf and vafi: `VTF_REPOSITORY_MODEL`.
+Single flag, shared by vtf and vafi: `VTF_REPOSITORY_MODEL`. Implemented as a **Django setting read from env var at process start** — not a hot-toggleable DB flag. Rationale: a mid-request flip during `dual → new` could cause torn reads (one transaction reads Repository, a concurrent one reads `repo_url`); settings-based means the entire pod observes one consistent state for its lifetime. The operational cost is a redeploy per transition — acceptable for a migration expected to last weeks, not hours.
+
+Deploy-time values:
+- `VTF_REPOSITORY_MODEL=off` — initial deploy of Slice 1a
+- `VTF_REPOSITORY_MODEL=dual` — after Slice 1a data migration passes equivalence tests
+- `VTF_REPOSITORY_MODEL=new` — after vafi fleet is fully on Repository-aware code
+- `VTF_REPOSITORY_MODEL=removed` — after stop criteria (§13.3) are met
+
+**Kind-enum evolution ordering.** When adding a new credential kind (e.g. `gitea_ssh_key`), the rollout order is strict:
+
+1. Ship vafi with the new `CloneStrategy` registered. The strategy is dormant until a credential of that kind exists.
+2. Ship vtf with the new kind added to `/v1/credential-kinds/` and the `RepoCredential.kind` enum.
+3. Create credentials of the new kind (admin action).
+
+Reversing steps 1 and 2 would cause every vafi pod to fail startup validation (§6.4) — an outage for the entire fleet. The rollout order is included in the release checklist for any PR that adds a kind.
 
 | State | vtf | vafi |
 |-------|-----|------|
@@ -859,6 +963,26 @@ In `dual` state:
 - Writes to `Project.repo_url` also create/update the Project's primary Repository (via post_save signal).
 - Writes to the primary Repository also update `Project.repo_url` (via post_save signal).
 - Reads prefer Repository; fall back to `repo_url` if none exists (defense against a race).
+
+**Signal loop prevention.** Each sync direction guards against re-trigger via a thread-local flag:
+
+```python
+_SYNCING = threading.local()
+
+@receiver(post_save, sender=Project)
+def project_to_repo_sync(sender, instance, update_fields, **kwargs):
+    if getattr(_SYNCING, "active", False):
+        return  # we're inside a syncing operation, skip
+    if update_fields and "repo_url" not in update_fields:
+        return  # unrelated field update
+    _SYNCING.active = True
+    try:
+        _update_primary_repository(instance)
+    finally:
+        _SYNCING.active = False
+```
+
+The reverse direction uses the same `_SYNCING` flag. This is belt-and-suspenders — both the `update_fields` check and the thread-local guard must fail for a loop to occur.
 
 Signals emit `legacy_write` telemetry counters so we can see when legacy writes stop occurring in the wild.
 
@@ -901,17 +1025,43 @@ def seed_repositories(apps, schema_editor):
             continue  # Empty projects stay empty
         if project.repositories.exists():
             continue  # Already migrated
+        inferred_type = _infer_type_from_url(project.repo_url)
         Repository.objects.create(
             project=project,
             name="main",
             role="primary",
-            type=_infer_type_from_url(project.repo_url),
-            url=project.repo_url,
+            type=inferred_type,
+            url=_canonicalize_url(project.repo_url),
             default_branch=project.default_branch or "main",
-            credential_id=legacy_cred.id if _infer_type_from_url(project.repo_url) == "github" else None,
+            credential_id=legacy_cred.id if inferred_type == "github" else None,
             clone_options={},
         )
+
+
+def _infer_type_from_url(url: str) -> str:
+    """Map a repo URL to a RepoCredential.target_type value.
+
+    Matching is strict: unknown hosts raise rather than silently mapping
+    to `raw_git`, because a wrong type disables provider operations
+    (create/delete) for that project and is hard to notice after the fact.
+    """
+    if re.search(r"(?:@|//)github\.com[:/]", url):
+        return "github"
+    if re.search(r"(?:@|//)gitlab\.com[:/]", url):
+        return "gitlab"
+    if re.search(r"(?:@|//)bitbucket\.org[:/]", url):
+        return "bitbucket"
+    # Self-hosted patterns: honor env-var allowlist
+    for kind, hosts in settings.VTF_SELFHOSTED_URL_PATTERNS.items():
+        if any(re.search(p, url) for p in hosts):
+            return kind
+    raise MigrationError(
+        f"Cannot infer type from url {url!r}. "
+        f"Set VTF_SELFHOSTED_URL_PATTERNS or manually seed Repository before running migration."
+    )
 ```
+
+If the migration encounters an unmatched URL, it aborts loudly. Ops has two levers: add the self-hosted pattern to `VTF_SELFHOSTED_URL_PATTERNS`, or hand-seed the Repository row before running the migration. Silently defaulting to `raw_git` was rejected — it degrades to "everything import-only, no provider ops ever" which is hard to notice and harder to undo later.
 
 The migration is idempotent: reruns skip already-migrated projects. Rollback is a single DELETE of rows created during this migration (recorded via a marker on `Repository.created_by_migration`).
 
@@ -1087,13 +1237,15 @@ Each maps to a slice above. Each is sized to fit within a focused PR.
 - `test-equivalence-1` Contract test: `get_repo_info` equivalence across flag states
 
 **Slice 1c**
-- `vtf-api-1` `POST /v1/projects/bootstrap/` (`mode=import` only)
+- `vtf-api-1` `POST /v1/projects/bootstrap/` + `/v2/projects/bootstrap/` (`mode=import` only)
 - `vtf-api-2` Credential CRUD (+ scope enforcement)
-- `vtf-api-3` GitHost CRUD
-- `vtf-api-4` Discovery endpoints (`/hosts/`, `/credentials/`, `/credential-kinds/`, `/host-kinds/`)
+- `vtf-api-3` GitHost CRUD (+ base_url allowlist check)
+- `vtf-api-4` Discovery endpoints (`/hosts/`, `/credentials/`, `/credential-kinds/`, `/host-kinds/`, `/repository-model/`)
+- `vtf-api-5` `GET /v1/repositories/{id}/clone-info/` (vafi-facing)
 - `vtf-mcp-1` `vtf_bootstrap_project` + `vtf_list_hosts` + `vtf_list_credentials` + `vtf_add_repository` + `vtf_list_repositories` + `vtf_set_primary_repository` + `vtf_delete_repository`
 - `vtf-events-1` `ProjectBootstrappedEvent` + audit integration
 - `vtf-tests-1` API test suite covering all error codes from §9.1
+- `vafi-vfctl-1` New `vfctl clone <repo-name>` helper in `vafi/src/vfctl/` — resolves project context from env, calls clone-info endpoint, dispatches via `CloneStrategy`
 
 **Slice 1d**
 - `ops-cutover-1` Telemetry dashboards for §13.3 stop criteria
