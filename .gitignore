@@ -13,3 +13,9 @@ htmlcov/
 # Post-deploy verification artifacts
 web/e2e/verify/auth-state.json
 web/e2e/verify/seed-data.json
+
+# Playwright test output — regenerated on every run
+web/test-results/
+
+# Local dev overrides (Compose convention)
+docker-compose.override.yml
