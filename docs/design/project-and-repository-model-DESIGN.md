@@ -254,49 +254,155 @@ Note the two identity-bearing fields in step 7: `Authorization: Token vafi-agent
 
 ### 3.5 Domain entity relationships
 
-The persisted data model and the code-layer abstractions that operate on it:
+Two views: the persisted data model (§3.5.1) and the code-layer abstractions that operate on it (§3.5.2).
 
+#### 3.5.1 Data model
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+classDiagram
+    direction LR
+
+    class User {
+        +id: nanoid
+        +username: string
+        +is_staff: bool
+    }
+
+    class ProjectMember {
+        +user_id: FK
+        +project_id: FK
+        +role: owner | member | viewer
+    }
+
+    class Project {
+        <<Aggregate Root>>
+        +id: nanoid
+        +name: string
+        +status: active | archived
+    }
+
+    class Repository {
+        +id: nanoid
+        +name: string
+        +role: primary | secondary
+        +type: enum
+        +url: string (canonical SSH)
+        +default_branch: string
+        +clone_options: JSONB
+        +external_id: string?
+        +clone_ready: bool
+    }
+
+    class RepoCredential {
+        <<Aggregate Root>>
+        +id: nanoid
+        +name: string
+        +target_type: enum
+        +kind: enum
+        +secret_ref: string?
+        +capabilities: set
+        +scope: global | project | staff_only
+        +allowed_url_patterns: list~string~
+        +enabled: bool
+    }
+
+    class GitHost {
+        <<Aggregate Root>>
+        +id: nanoid
+        +name: string
+        +kind: enum
+        +base_url: string?
+        +default_owner: string?
+        +capabilities: set
+        +enabled: bool
+    }
+
+    User "1" -- "0..n" ProjectMember : member_of
+    Project "1" *-- "0..n" ProjectMember : has
+    Project "1" *-- "1..n" Repository : contains (exactly 1 primary)
+    Repository "0..n" ..> "0..1" RepoCredential : auth via
+    Repository "0..n" ..> "0..1" GitHost : created via
+    GitHost "1" ..> "1" RepoCredential : uses for provider API
+    RepoCredential "0..n" ..> "0..1" Project : scope=project only
 ```
-                    ┌──────────────┐
-                    │    User      │◄─────────────┐
-                    └──────┬───────┘              │
-                           │                      │ owns / created_by / member_of
-                           │                      │
-                           ▼                      │
-                  ┌────────────────┐              │
-                  │ ProjectMember  │───┐          │
-                  └────────────────┘   │          │
-                                       │ members  │
-                                       ▼          │
-┌────────────────┐              ┌─────────────────┴──┐
-│ RepoCredential │◄───┐         │      Project       │
-│  (target_type, │    │         │  (aggregate root)  │
-│   capabilities,│    │         └─────────┬──────────┘
-│   scope, URLs) │    │                   │
-└────────┬───────┘    │ credential_id     │ 1..n, exactly 1 primary
-         │            │                   ▼
-         │            │           ┌────────────────┐
-         │            └───────────│   Repository   │
-         │                        │ (type, url,    │
-         │                        │  role, clone)  │
-         │                        └────────┬───────┘
-         │                                 │
-         │                                 │ created_via (nullable)
-         │                                 ▼
-         │ credential_id          ┌────────────────┐
-         └───────────────────────►│    GitHost     │
-                                  │ (kind, base_url│
-                                  │  credentials)  │
-                                  └────────────────┘
 
-                (code layer — not persisted)
+#### 3.5.2 Code abstractions
 
-┌───────────────────────┐        ┌───────────────────────┐
-│  GitHostDriver (vtf)  │        │  CloneStrategy (vafi) │
-│  kind registry        │        │  kind registry        │
-│  create/delete/validate│       │  resolve/clone        │
-└───────────────────────┘        └───────────────────────┘
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+classDiagram
+    direction LR
+
+    class GitHostDriver {
+        <<abstract, vtf>>
+        +kind: ClassVar
+        +default_capabilities: ClassVar
+        +validate_spec(spec)
+        +create_repo(spec)
+        +delete_repo(external_id)
+        +validate_reachable(credential, url)$
+    }
+
+    class GitHubDriver {
+        <<vtf, phase 2>>
+    }
+    class GitLabDriver {
+        <<vtf, phase 3>>
+    }
+    class BitbucketDriver {
+        <<vtf, phase 4>>
+    }
+    class FakeHostDriver {
+        <<vtf, tests>>
+    }
+
+    class CloneStrategy {
+        <<abstract, vafi>>
+        +kind: ClassVar
+        +prepare_workdir(repo_info, workdir)
+    }
+
+    class SshKeyStrategy {
+        <<vafi>>
+    }
+    class HttpsTokenStrategy {
+        <<vafi>>
+    }
+    class PublicStrategy {
+        <<vafi>>
+    }
+    class GitHubAppStrategy {
+        <<vafi, future>>
+    }
+
+    class ProjectBootstrapService {
+        <<vtf>>
+        +bootstrap(spec, actor) Project
+    }
+
+    class RollbackStack {
+        <<vtf>>
+        +push(action)
+        +push_manual_marker(note)
+        +run_best_effort()
+    }
+
+    GitHostDriver <|-- GitHubDriver
+    GitHostDriver <|-- GitLabDriver
+    GitHostDriver <|-- BitbucketDriver
+    GitHostDriver <|-- FakeHostDriver
+
+    CloneStrategy <|-- SshKeyStrategy
+    CloneStrategy <|-- HttpsTokenStrategy
+    CloneStrategy <|-- PublicStrategy
+    CloneStrategy <|-- GitHubAppStrategy
+
+    ProjectBootstrapService ..> GitHostDriver : resolves via registry
+    ProjectBootstrapService ..> RollbackStack : delegates saga to
 ```
+
+`GitHostDriver` lives in vtf; `CloneStrategy` lives in vafi. They never share a process. The `kind` enum is the only wire contract between them (§6.4).
 
 Aggregate boundary:
 - **`Project`** is the aggregate root. Invariants (exactly-one primary Repository, membership constraints) are enforced on the aggregate.
