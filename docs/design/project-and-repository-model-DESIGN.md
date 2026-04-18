@@ -93,29 +93,35 @@ Four views, each answering a different question a reader brings to this doc:
 
 ### 3.1 System context
 
+Diagrams in §3.1–§3.3 follow the C4 model (Simon Brown) but are rendered as Mermaid `flowchart`s rather than the native `C4Context`/`C4Container`/`C4Component` syntax. Reason: Mermaid's C4 renderer ignores theme variables, which produces inconsistent backgrounds across light/dark viewers. Flowcharts with `classDef` styling give full theme control — white backgrounds in all viewers — while preserving C4 visual semantics (person/system/external distinctions, boundary grouping).
+
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
-C4Context
-    title System Context — Viloforge fleet
+flowchart TB
+    dev(["👤 <b>Developer</b><br/><i>Plans work via architect sessions<br/>reviews fleet runs</i>"]):::person
+    admin(["👤 <b>Administrator</b><br/><i>Staff; manages GitHost<br/>+ RepoCredential records</i>"]):::person
 
-    Person(dev, "Developer", "Plans work via architect sessions; reviews fleet runs")
-    Person(admin, "Administrator", "Staff user; manages GitHost + RepoCredential records")
+    subgraph fleet["Viloforge fleet"]
+        vtf["<b>vtaskforge</b><br/><small>Project / repo / credential<br/>data model. REST + MCP.<br/>Task coordination.</small>"]:::system
+        vafi["<b>vafi</b><br/><small>Autonomous executor + judge.<br/>Interactive architect sessions<br/>via bridge.</small>"]:::system
+    end
 
-    System_Boundary(fleet, "Viloforge fleet") {
-        System(vtf, "vtaskforge", "Project/repo/credential data model; REST + MCP; task coordination")
-        System(vafi, "vafi", "Autonomous executor + judge; interactive architect sessions via bridge")
-    }
+    hosts["<b>Git hosts</b><br/><small>GitHub / GitLab / Bitbucket<br/>/ self-hosted — REST APIs + git SSH</small>"]:::external
+    secrets[("<b>k8s Secrets</b><br/><small>Credential material:<br/>SSH keys, tokens, app creds</small>")]:::external
 
-    System_Ext(git_hosts, "Git hosts", "GitHub / GitLab / Bitbucket / self-hosted — REST APIs + git SSH")
-    SystemDb_Ext(k8s_secrets, "k8s Secrets", "Credential material: SSH keys, tokens, app credentials")
+    dev ==>|"Chat with architect<br/>to bootstrap + plan tasks"| vafi
+    dev -->|"REST / CLI<br/>non-architect workflows"| vtf
+    admin -->|"Manage credentials<br/>+ git host records"| vtf
+    vtf -->|"Create/delete repos<br/>validate reachability (REST)"| hosts
+    vafi -->|"Clone, commit, push<br/>(git + SSH/HTTPS)"| hosts
+    vtf -.->|"Resolve secret_ref<br/>for provider API"| secrets
+    vafi -.->|"Resolve secret_ref<br/>for git auth"| secrets
 
-    Rel(dev, vafi, "Chat with architect to bootstrap projects and plan tasks")
-    Rel(dev, vtf, "Direct REST / CLI for non-architect workflows")
-    Rel(admin, vtf, "Manage credentials and git host records")
-    Rel(vtf, git_hosts, "Create/delete repos; validate reachability", "REST")
-    Rel(vafi, git_hosts, "Clone, commit, push", "git + SSH/HTTPS")
-    Rel(vtf, k8s_secrets, "Resolve secret_ref for provider API auth", "file mount")
-    Rel(vafi, k8s_secrets, "Resolve secret_ref for git auth", "file mount")
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff,stroke-width:2px
+    classDef system fill:#1168bd,stroke:#0b4884,color:#ffffff,stroke-width:2px
+    classDef external fill:#999999,stroke:#666666,color:#ffffff,stroke-width:2px
+    class fleet plain
+    classDef plain fill:#ffffff,stroke:#444444,stroke-width:1px,stroke-dasharray:5 5
 ```
 
 Key context facts the rest of the design depends on:
@@ -128,39 +134,44 @@ Key context facts the rest of the design depends on:
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
-C4Container
-    title Container view — Viloforge fleet
+flowchart TB
+    dev(["👤 <b>Developer</b>"]):::person
+    admin(["👤 <b>Administrator</b>"]):::person
 
-    Person(dev, "Developer")
-    Person(admin, "Administrator")
+    subgraph fleet["Viloforge fleet"]
+        vtf_api["<b>vtf API</b><br/><small>[Django/DRF + FastMCP]</small><br/>REST, MCP, auth middleware,<br/>bootstrap service"]:::container
+        vtf_db[("<b>vtf database</b><br/><small>[PostgreSQL]</small><br/>Projects, Repositories,<br/>Credentials, GitHosts, tasks")]:::container_db
 
-    System_Boundary(fleet, "Viloforge fleet") {
-        Container(vtf_api, "vtf API", "Django/DRF + FastMCP", "REST, MCP, auth middleware, bootstrap service")
-        ContainerDb(vtf_db, "vtf database", "PostgreSQL", "Projects, Repositories, Credentials, GitHosts, tasks")
+        bridge["<b>vafi bridge</b><br/><small>[FastAPI]</small><br/>Architect session lifecycle<br/>impersonation wiring"]:::container
+        architect_pod["<b>vafi architect pod</b><br/><small>[k8s pod, pi harness]</small><br/>Interactive AI agent<br/>one per user lock"]:::container
+        executor_pod["<b>vafi executor pod</b><br/><small>[k8s deployment]</small><br/>Autonomous claim →<br/>clone → run gates"]:::container
+        judge_pod["<b>vafi judge pod</b><br/><small>[k8s deployment]</small><br/>Autonomous review<br/>of completed tasks"]:::container
+    end
 
-        Container(bridge, "vafi bridge", "FastAPI", "Architect session lifecycle; impersonation wiring")
-        Container(architect_pod, "vafi architect pod", "k8s pod (pi harness)", "Interactive AI agent; one per user lock")
-        Container(executor_pod, "vafi executor pod", "k8s deployment", "Autonomous claim → clone → run gates")
-        Container(judge_pod, "vafi judge pod", "k8s deployment", "Autonomous review of completed tasks")
-    }
+    hosts["<b>Git hosts</b>"]:::external
+    secrets[("<b>k8s Secrets</b>")]:::external
 
-    System_Ext(git_hosts, "Git hosts")
-    SystemDb_Ext(k8s_secrets, "k8s Secrets")
+    dev -->|"Start architect session<br/>(WebSocket)"| bridge
+    dev -->|"Web UI / CLI / REST<br/>(HTTPS)"| vtf_api
+    admin -->|"Credential / host admin<br/>(HTTPS / Django admin)"| vtf_api
 
-    Rel(dev, bridge, "Start architect session", "WebSocket")
-    Rel(dev, vtf_api, "Web UI / CLI / REST", "HTTPS")
-    Rel(admin, vtf_api, "Credential / host admin", "HTTPS / Django admin")
+    bridge -->|"Spawn pod; exec<br/>pi harness (k8s API)"| architect_pod
+    architect_pod ==>|"MCP calls with<br/>On-Behalf-Of impersonation<br/>(HTTPS)"| vtf_api
+    executor_pod -->|"Poll, claim, complete<br/>(HTTPS)"| vtf_api
+    judge_pod -->|"Poll reviews, submit verdict<br/>(HTTPS)"| vtf_api
 
-    Rel(bridge, architect_pod, "Spawn pod; exec pi harness", "k8s API")
-    Rel(architect_pod, vtf_api, "MCP calls w/ On-Behalf-Of impersonation", "HTTPS")
-    Rel(executor_pod, vtf_api, "Poll, claim, complete", "HTTPS")
-    Rel(judge_pod, vtf_api, "Poll reviews, submit verdict", "HTTPS")
+    vtf_api -->|"Reads + atomic writes<br/>(SQL)"| vtf_db
+    vtf_api -->|"Create/delete repo<br/>validate reach (REST via httpx)"| hosts
+    executor_pod -->|"git clone / push<br/>(SSH / HTTPS)"| hosts
+    executor_pod -.->|"Read SSH key / token<br/>(file mount)"| secrets
+    vtf_api -.->|"Read provider API credentials<br/>(file mount)"| secrets
 
-    Rel(vtf_api, vtf_db, "Reads + atomic writes", "SQL")
-    Rel(vtf_api, git_hosts, "Create/delete repo; validate reach", "REST via httpx")
-    Rel(executor_pod, git_hosts, "git clone / push", "SSH / HTTPS")
-    Rel(executor_pod, k8s_secrets, "Read SSH key / token", "file mount")
-    Rel(vtf_api, k8s_secrets, "Read provider API credentials", "file mount")
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff,stroke-width:2px
+    classDef container fill:#438dd5,stroke:#2e6295,color:#ffffff,stroke-width:2px
+    classDef container_db fill:#438dd5,stroke:#2e6295,color:#ffffff,stroke-width:2px
+    classDef external fill:#999999,stroke:#666666,color:#ffffff,stroke-width:2px
+    class fleet plain
+    classDef plain fill:#ffffff,stroke:#444444,stroke-width:1px,stroke-dasharray:5 5
 ```
 
 Why the architect path matters for this design: the architect pod is the only container that calls the new bootstrap surface on the user's behalf. The path `user → bridge → architect pod → vtf API` is what requires identity propagation (§8.1). Executor and judge pods continue to act with the fleet's service token — they don't bootstrap projects.
@@ -169,42 +180,46 @@ Why the architect path matters for this design: the architect pod is the only co
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
-C4Component
-    title Components inside vtf API — bootstrap flow
+flowchart TB
+    subgraph vtf_api["vtf API"]
+        endpoint["<b>Bootstrap endpoint</b><br/><small>[DRF APIView]</small><br/>POST /v{1,2}/projects/bootstrap/"]:::component
+        auth_mw["<b>Auth middleware</b><br/><small>[Django middleware]</small><br/>Token auth +<br/>On-Behalf-Of impersonation"]:::component
+        service["<b>ProjectBootstrapService</b><br/><small>[Service layer]</small><br/>Orchestrates atomic<br/>multi-repo bootstrap"]:::component
+        rollback["<b>RollbackStack</b><br/><small>[Python class]</small><br/>LIFO compensation<br/>for external side-effects"]:::component
 
-    Container_Boundary(vtf_api, "vtf API") {
-        Component(endpoint, "Bootstrap endpoint", "DRF APIView", "POST /v{1,2}/projects/bootstrap/")
-        Component(auth_mw, "Auth middleware", "Django middleware", "Token auth + On-Behalf-Of impersonation")
-        Component(service, "ProjectBootstrapService", "Service layer", "Orchestrates atomic multi-repo bootstrap")
-        Component(rollback, "RollbackStack", "Python class", "LIFO compensation for external side-effects")
+        driver_reg["<b>GitHostDriver registry</b><br/><small>[Singleton]</small><br/>kind → driver class<br/>(boot-populated)"]:::component
+        github_drv["<b>GitHubDriver</b><br/><small>[GitHostDriver impl]</small><br/>GitHub REST via httpx"]:::component
+        fake_drv["<b>FakeHostDriver</b><br/><small>[GitHostDriver impl]</small><br/>Tests only"]:::component
 
-        Component(driver_reg, "GitHostDriver registry", "Singleton", "kind → driver class (boot-populated)")
-        Component(github_drv, "GitHubDriver", "GitHostDriver impl", "GitHub REST via httpx")
-        Component(fake_drv, "FakeHostDriver", "GitHostDriver impl", "Tests only")
+        host_svc["<b>GitHostService</b><br/><small>[Service layer]</small><br/>CRUD + base_url<br/>allowlist check"]:::component
+        cred_svc["<b>CredentialService</b><br/><small>[Service layer]</small><br/>CRUD + scope +<br/>URL-pattern validation"]:::component
+        repo_svc["<b>RepositoryService</b><br/><small>[Service layer]</small><br/>CRUD + primary invariant"]:::component
 
-        Component(host_svc, "GitHostService", "Service layer", "CRUD + base_url allowlist check")
-        Component(cred_svc, "CredentialService", "Service layer", "CRUD + scope + URL-pattern validation")
-        Component(repo_svc, "RepositoryService", "Service layer", "CRUD + primary invariant")
+        db[("<b>ORM layer</b><br/><small>[Django models]</small><br/>Project, Repository,<br/>RepoCredential, GitHost")]:::component_db
+    end
 
-        ComponentDb(db, "ORM layer", "Django models", "Project, Repository, RepoCredential, GitHost")
-    }
+    git_host["<b>Git host</b><br/><small>[external]</small>"]:::external
 
-    System_Ext(git_host, "Git host (external)")
+    endpoint -->|"Gated by"| auth_mw
+    endpoint ==>|"Delegates to"| service
+    service -->|"Looks up driver<br/>by host.kind"| driver_reg
+    driver_reg -->|"Returns"| github_drv
+    driver_reg -.->|"Returns (tests)"| fake_drv
+    service -->|"Resolves<br/>GitHost instance"| host_svc
+    service -->|"Validates credential<br/>+ URL pattern"| cred_svc
+    service -->|"Creates Repositories<br/>atomically"| repo_svc
+    service -->|"Pushes undo actions"| rollback
 
-    Rel(endpoint, auth_mw, "Gated by")
-    Rel(endpoint, service, "Delegates to")
-    Rel(service, driver_reg, "Looks up driver by host.kind")
-    Rel(driver_reg, github_drv, "Returns")
-    Rel(driver_reg, fake_drv, "Returns (tests)")
-    Rel(service, host_svc, "Resolves GitHost instance")
-    Rel(service, cred_svc, "Validates credential + URL pattern")
-    Rel(service, repo_svc, "Creates Repositories atomically")
-    Rel(service, rollback, "Pushes undo actions")
+    github_drv -->|"Create/delete (REST)"| git_host
+    host_svc --> db
+    cred_svc --> db
+    repo_svc --> db
 
-    Rel(github_drv, git_host, "Create/delete", "REST")
-    Rel(host_svc, db, "CRUD")
-    Rel(cred_svc, db, "CRUD")
-    Rel(repo_svc, db, "CRUD + invariant check")
+    classDef component fill:#85bbf0,stroke:#5d82a8,color:#000000,stroke-width:2px
+    classDef component_db fill:#85bbf0,stroke:#5d82a8,color:#000000,stroke-width:2px
+    classDef external fill:#999999,stroke:#666666,color:#ffffff,stroke-width:2px
+    class vtf_api plain
+    classDef plain fill:#ffffff,stroke:#444444,stroke-width:1px,stroke-dasharray:5 5
 ```
 
 Read this diagram together with §6 (code abstractions): `GitHostDriver` is the pluggable seam (P5), `RepoCredential`/`GitHost`/`Repository` services enforce invariants per aggregate (§5.6), and `RollbackStack` is the saga mechanism for cross-boundary consistency (§11).
