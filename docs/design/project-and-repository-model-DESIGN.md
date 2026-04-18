@@ -78,6 +78,8 @@ Executor (minutes later):
 - Mirror/replica repositories, bare-git-on-NFS, federated identity.
 - Async bootstrap with job polling. Bootstrap is synchronous; P95 target 5s, acceptable ceiling 30s.
 - Rate-limit handling beyond "record the provider's response header and expose as a metric".
+- `vtf` CLI commands for the new entities (`vtf project bootstrap`, `vtf credential list`, …). The CLI will gain these once the API surface is stable; not blocking for Phase 1. Architects and humans use the MCP surface and web UI respectively in the interim.
+- Web-frontend changes for admin UI of Credentials and GitHosts, and a Project-detail view listing Repositories. Staff can manage via Django admin during Phase 1; frontend lands as a dependent initiative.
 
 ---
 
@@ -481,6 +483,11 @@ Invariants:
 - A credential cannot be deleted while referenced by any `Repository` or `GitHost` (`on_delete=PROTECT` on those FKs). Soft-disable via `enabled=false`.
 - When a Project is deleted, its `scope=project` credentials cascade-delete with it (`on_delete=CASCADE`). Rationale: project-scoped credentials have no purpose outside their project; leaving orphans either clutters the credential namespace or risks accidental reuse across unrelated projects.
 
+**Indexes:**
+- `(scope, project_id, enabled)` — visibility queries ("credentials visible to user X in project Y") are the hot path for discovery endpoints.
+- `(target_type, enabled)` — architect listing ("show me github credentials").
+- `name` unique constraint.
+
 ### 5.2 `GitHost`
 
 A configured connection to a git management API — the authority used when creating new repositories during bootstrap (`mode=create`). Not needed for `mode=import`: imported repos reference a credential directly without a GitHost.
@@ -503,6 +510,10 @@ Invariants:
 - `credential.target_type == kind`.
 - `capabilities ⊆ kind-default-capabilities` (can restrict, not expand).
 
+**Indexes:**
+- `(kind, enabled)` — driver-availability queries.
+- `name` unique constraint.
+
 ### 5.3 `Repository`
 
 A first-class git repository within a Project. Exactly one per project has `role=primary`; all others are `secondary`.
@@ -510,28 +521,65 @@ A first-class git repository within a Project. Exactly one per project has `role
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | nanoid | no | Primary key |
-| `project_id` | FK Project | no | Parent aggregate |
+| `project_id` | FK Project | no | Parent aggregate (`on_delete=CASCADE`) |
 | `name` | varchar(100) | no | Unique within project (e.g. `backend`, `docs`) |
 | `role` | enum | no | `primary \| secondary` |
+| `status` | enum | no | `active \| archived \| deleted_upstream`; default `active` |
 | `type` | enum | no | Host type; same enum as `RepoCredential.target_type` |
-| `url` | varchar(500) | no | Canonical SSH URL |
+| `url` | varchar(500) | no | Canonical SSH URL (see format rules below) |
 | `https_url` | varchar(500) | yes | Computed for display (optional) |
 | `default_branch` | varchar(100) | no | Default "main" |
 | `credential_id` | FK RepoCredential | yes | Must have `git_auth` capability; null ⇒ public no-auth |
-| `clone_options` | JSONB | no | `{depth?, single_branch?, submodules?, sparse_paths?, ...}`; defaults to `{}` |
+| `clone_options` | JSONB | no | Allowlisted keys only — see below; defaults to `{}` |
 | `created_via_host_id` | FK GitHost | yes | Set by `mode=create`; null for `mode=import` |
-| `external_id` | varchar(255) | yes | Host-native ID (GitHub numeric repo id, GitLab path) for idempotent lifecycle ops |
+| `external_id` | varchar(255) | yes | Host-native ID (GitHub numeric repo id, GitLab path) for idempotent lifecycle ops and drift detection |
 | `clone_ready` | bool | no | True when default branch exists with ≥ 1 commit |
 | `created_by`, `updated_by`, timestamps | — | — | Standard |
 
+**Indexes:**
+- `(project_id, role)` — primary-lookup is the hot path on every executor claim (filtering on `role='primary'`).
+- `(project_id, name)` unique constraint — enforces per-project name uniqueness at the DB level.
+- `external_id` — drift-detection lookups; nullable column, partial index where not null.
+
+**`url` format validation.** Before pattern matching (§8.3), the URL must pass a strict shape check at write time:
+- SSH SCP form: `git@<host>(:<port>)?:<path>(.git)?` where `<host>` matches `[a-zA-Z0-9._-]+`, `<port>` matches `[0-9]+`, `<path>` matches `[a-zA-Z0-9._/-]+`.
+- SSH URI form: `ssh://git@<host>(:<port>)?/<path>(.git)?` with the same sub-patterns.
+- HTTPS: `https://<host>(:<port>)?/<path>(.git)?`.
+
+Anything else is rejected with `INVALID_REPOSITORY_URL_FORMAT`. The regex intentionally forbids shell metacharacters (`$`, `;`, `` ` ``, `|`, `&`, whitespace) that could survive into `git clone`'s argv. Pattern matching (§8.3) runs only after this format check passes.
+
+**`clone_options` allowlist.** The JSONB accepts only these keys; unknown keys are rejected with `INVALID_CLONE_OPTION`:
+
+| Key | Type | Purpose |
+|-----|------|---------|
+| `depth` | int, ≥ 1 | `--depth=N` for shallow clones |
+| `single_branch` | bool | `--single-branch` |
+| `branch` | str (git ref regex) | `--branch=<name>` — initial checkout target |
+| `submodules` | bool | `--recurse-submodules` |
+| `sparse_paths` | list[str], each matching git-path regex | Sparse-checkout cone list |
+| `lfs` | bool | Enable git-lfs for clone |
+
+The allowlist is enforced at Repository write time in vtf and re-checked at clone time by vafi's `CloneStrategy` before it constructs git's argv. Adding a new option requires a schema change + vafi strategy update + kind enumeration bump (§6.4).
+
 Invariants (enforced by the `Project` aggregate):
-- Per project, exactly one Repository with `role=primary`.
+- Per project, exactly one Repository with `role=primary` AND `status=active`. (Archived/deleted_upstream primaries do not satisfy the invariant; one of them must be replaced before the project can claim tasks.)
 - Repository names unique within a project.
 - `credential.capabilities ⊇ {git_auth}` if set.
 - `credential.target_type == type` (cross-host credential use is rejected).
-- `url` matches at least one pattern in `credential.allowed_url_patterns` (if credential set).
+- `credential.scope` permits use from the project (see §8.2).
+- `url` passes format validation AND matches at least one pattern in `credential.allowed_url_patterns` (if credential set).
+- `clone_options` keys conform to the allowlist.
 
 Operations on the primary-vs-secondary invariant go through `ProjectService.set_primary_repository(project_id, repo_id)` — atomic demote-and-promote; callers never perform the two field updates separately.
+
+**Host-side drift handling.** A repository may diverge from vtf's state if a human renames, archives, or deletes it directly on the git host. vtf does not poll — drift detection is reactive:
+
+- When vafi's clone fails with a "repository not found" or redirect response, vafi calls `POST /v1/repositories/{id}/refresh-from-host/`. vtf's handler calls the driver's `get_repo(external_id)` (a new capability added alongside `create_repo`), fetches current state, and:
+  - URL/name changed → update `url`, emit `RepositoryDriftDetected` event, return the refreshed Repository.
+  - Repo archived upstream → set `status=archived`, emit event.
+  - Repo gone (404) → set `status=deleted_upstream`, emit event, return `410 Gone`.
+- `Capability.GET_REPO` is added to the capability set; drivers that don't support lookup-by-external-id fail drift refresh with a documented error rather than silently guessing.
+- No automatic heal for deleted-upstream — requires operator decision (re-create, unregister, or accept `deleted_upstream` state).
 
 ### 5.4 `Project` (updated)
 
@@ -866,6 +914,8 @@ API responses include `name`, `display_name`, `target_type`, `kind`, `capabiliti
 - **ExternalSecrets Operator (preferred)**: a single source-of-truth `ExternalSecret` resource in each namespace points at the same upstream (Vault / AWS Secrets Manager / 1Password Connect). Rotation happens once upstream; both namespaces pick up changes without redeploy. Requires ESO installed in the cluster.
 - **Manual sync with checklist (bootstrap mode)**: a documented runbook (`docs/ops/credential-sync.md`, to be written in Slice 2) lists every Secret and its two namespace locations; operators update both when rotating. Acceptable short-term; error-prone long-term.
 
+**Namespace allowlist.** `secret_ref` can only reference namespaces on a settings-defined allowlist: `VTF_SECRET_NAMESPACE_ALLOWLIST = ["vtf-dev", "vafi-dev"]` (or `-prod` equivalents). Attempts to write a credential with `secret_ref=k8s-secret:other-team-ns/...` are rejected with `UNAUTHORIZED_SECRET_NAMESPACE` at credential create/update time. This prevents a compromised or careless staff user from pointing a credential at an unrelated namespace's Secret — a cross-tenant leakage vector that would be invisible without the allowlist (vtf's cluster-RBAC might permit the read, but policy-level authorization should not).
+
 vtf's credential-write path performs a startup-time sanity probe: on each pod startup, for every enabled credential, vtf attempts to read the referenced Secret in its own namespace. Failures are logged but non-fatal (vafi reads independently). vafi performs the same check on its side. Structured metric `credential_secret_resolution_errors` exposes the status per credential.
 
 **Future hardening (out of scope v1):** replace `secret_ref` with a vtf-managed encrypted store, exposing `GET /v1/credentials/<id>/material/` as an authenticated least-privilege API that vafi calls per-task. Gives audit, rotation, and revocation without restart. Design preserves compatibility — `kind` and `capabilities` don't change.
@@ -886,6 +936,14 @@ vtf's credential-write path performs a startup-time sanity probe: on each pod st
 ---
 
 ## 9. API surface
+
+**Versioning convention (applies to every endpoint in §9).** Every endpoint listed below is exposed at both `/v1/` and `/v2/` paths per vtf's existing `VersionedSerializerMixin` convention. v1 returns raw FK IDs; v2 returns embedded refs (per Phase 1 v2-API design). Request body shapes are version-independent. New clients should target v2. The version-specific paths are only called out explicitly for the bootstrap endpoint (§9.1) because the response shape difference there is substantial; for other endpoints, assume both paths exist.
+
+**Pagination.** All list endpoints (`/hosts/`, `/credentials/`, `/credential-kinds/`, `/host-kinds/`, `/repositories/`) use `VTFCursorPagination` — the existing vtf pagination convention. Default page size 50, max 200. Clients paginate via `next`/`previous` cursors in the response envelope.
+
+**Filtering.** List endpoints accept filter query params documented per-endpoint. Common filters across credential/host listings: `?target_type=`, `?kind=`, `?enabled=`, `?capability=`.
+
+**OpenAPI schema.** All new views carry `@extend_schema` decorators from `drf-spectacular`. The bootstrap endpoint's compound response (Project + Repository[] + Member[] + Workplan) requires an explicit `OpenApiResponse` declaration — the auto-inferred schema is insufficient for nested types. API tests (§15.4) include a smoke test that runs the schema generator and asserts zero warnings for new endpoints.
 
 ### 9.1 Bootstrap endpoint
 
@@ -993,15 +1051,22 @@ Both paths are supported per vtf's existing dual-versioning convention. `Version
 ### 9.2 Repository CRUD
 
 ```
-POST   /v1/projects/{project_id}/repositories/   — add secondary (create or import)
-GET    /v1/projects/{project_id}/repositories/   — list
-GET    /v1/repositories/{id}/                    — detail
-PATCH  /v1/repositories/{id}/                    — update name, clone_options, credential (not type/url)
-DELETE /v1/repositories/{id}/                    — delete (not allowed if role=primary unless project is being deleted)
-POST   /v1/repositories/{id}/promote/            — atomic promote-to-primary (demotes existing primary)
+POST   /v1/projects/{project_id}/repositories/        — add secondary (create or import)
+GET    /v1/projects/{project_id}/repositories/        — list
+GET    /v1/repositories/{id}/                         — detail
+PATCH  /v1/repositories/{id}/                         — update name, clone_options, credential, status (not type/url)
+DELETE /v1/repositories/{id}/                         — hard delete (constraints below)
+POST   /v1/repositories/{id}/promote/                 — atomic promote-to-primary (demotes existing primary)
+POST   /v1/repositories/{id}/refresh-from-host/       — drift detection: fetch live state via driver.get_repo, update url/status
 ```
 
 Permission: member of the project. Credential references subject to §8.2–8.3.
+
+**Deletion semantics.** Hard delete (row removed, FK constraints enforced). Allowed only for secondary repos — the invariant "every project has exactly one primary" must hold after the delete. To remove a primary repo, either (a) promote a secondary first via `POST .../promote/`, or (b) delete the entire Project (which cascades to its Repositories). Tasks do not reference Repositories directly (§5.5), so existing tasks are not affected by a repo deletion, but future task claims in that project will see whichever Repository is then primary. Executors with in-flight workdirs are not disturbed — workdirs are per-task scratch, not per-repo.
+
+**Archive.** A repo can be marked `status=archived` via PATCH — it stays in the model (for audit, for potentially re-activating) but does not satisfy the primary invariant. Archiving a primary requires demoting it first (same constraint as deletion).
+
+**Upstream drift.** `status=deleted_upstream` is set by `refresh-from-host/` when the driver reports 404. An upstream-deleted primary must be either re-created (promote a secondary + manually re-create the upstream repo) or removed (delete the project). Operators are alerted via the `RepositoryDriftDetected` event.
 
 ### 9.3 RepoCredential CRUD (staff)
 
@@ -1357,6 +1422,10 @@ def _infer_type_from_url(url: str) -> str:
 
 If the migration encounters an unmatched URL, it aborts loudly. Ops has two levers: add the self-hosted pattern to `VTF_SELFHOSTED_URL_PATTERNS`, or hand-seed the Repository row before running the migration. Silently defaulting to `raw_git` was rejected — it degrades to "everything import-only, no provider ops ever" which is hard to notice and harder to undo later.
 
+**Large-deployment strategy.** The Django migration above runs inline with deploy, inside a single transaction. For Viloforge's current scale (tens of Projects), this is seconds and safe. For larger deployments (>~1000 Projects), the per-Project loop risks: (a) transaction timeouts, (b) lock contention on the Project table during deploy, (c) memory pressure from the un-chunked query.
+
+For scale-safety, the seeding step is split out as a separate management command `python manage.py seed_repository_rows --batch-size=100 [--dry-run]` that is idempotent (reruns skip already-migrated projects via the `if project.repositories.exists(): continue` guard) and chunked (one transaction per batch). The Django migration itself only creates the `legacy-github-ssh` credential row (trivially fast) and schedules the command as a post-migrate signal. Operators can also run the command manually between deploy phases for controlled rollout. For the initial Viloforge deployment, running inline during the Slice 1a deploy is acceptable; document this as the chosen path with the batched command available for future growth.
+
 The migration is idempotent: reruns skip already-migrated projects. Rollback is a single DELETE of rows created during this migration (recorded via a marker on `Repository.created_by_migration`).
 
 ### 13.5 Contract test suite
@@ -1402,6 +1471,27 @@ Bootstrap emits a single compound event:
 ```
 
 Consumers reconstruct what happened from one event rather than correlating across ten. Rollback events (§11.3) reference this event by id via `bootstrap_request_id`.
+
+**Storage.** Project-scoped events land in a new `events.ProjectEvent` table (parallel structure to the existing `events.TaskEvent`). Schema:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | nanoid | Primary key (the `event_id` returned by bootstrap) |
+| `type` | varchar(64) | Namespaced event type (`project.bootstrapped`, `project.repository_added`, `project.repository_drift_detected`, …) |
+| `project_id` | FK Project | `on_delete=CASCADE` — project deletion purges its event history |
+| `actor_id` | FK User | Who asked (the effective `request.user`) |
+| `acting_via_id` | FK User | Who carried the request (the impersonation source, null for direct calls) |
+| `subject_type` | varchar(32) | `project`, `repository`, `credential`, `host` |
+| `subject_id` | varchar(32) | ID of the subject entity |
+| `data` | JSONB | Event-type-specific payload |
+| `created_at` | timestamp | Immutable write time |
+
+The table is insert-only — no `UPDATE` or `DELETE` paths in the application. Deletion is cascade-only via the parent Project. Read access:
+
+- `GET /v1/projects/{id}/events/` — paginated event log for a project (members-only)
+- `GET /v1/audit/events/?type=project.bootstrapped&since=...` — cross-project audit query (staff only)
+
+Events are not part of Phase 1's hot path but land in Slice 1c (`vtf-events-1` work item) because bootstrap is the first emitter.
 
 ---
 
