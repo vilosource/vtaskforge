@@ -831,27 +831,43 @@ strategy.prepare_workdir(repo_info, workdir)
 
 ```python
 class OnBehalfOfMiddleware:
-    """If the request carries both a service token AND an On-Behalf-Of header,
-    AND the service token user has `can_impersonate`, substitute the request
-    user while recording both identities for audit."""
+    """If the request carries both a service token AND a non-empty
+    On-Behalf-Of header, AND the service token user has
+    `can_impersonate`, substitute the request user while recording
+    both identities for audit.
+
+    Empty or whitespace-only header values are treated as absent — this
+    handles the case where pi-mcp-adapter substitutes an empty string
+    for unset environment variables (see pod-side note below)."""
     def __call__(self, request):
         authed_user = request.user  # set by TokenAuthMiddleware
-        target_username = request.headers.get("On-Behalf-Of")
+        target_username = (request.headers.get("On-Behalf-Of") or "").strip()
         if target_username and authed_user.has_perm("impersonation.can_impersonate"):
             request.acting_via = authed_user
             request.user = User.objects.get(username=target_username)
         return self.get_response(request)
 ```
 
-**Bridge-side (minor change in `bridge/app.py`):**
+**Bridge-side (minor change in `bridge/app.py::build_pi_env`):**
 
 ```python
-env_vars["VF_ON_BEHALF_OF"] = user["username"]  # human from require_auth
+env_vars["VF_ON_BEHALF_OF"] = user["username"]  # architect pods only
 ```
+
+Executor and judge pods do NOT receive `VF_ON_BEHALF_OF` — they act as the `vafi-agent` service account itself, and no impersonation header is sent.
 
 **pi-mcp-adapter / MCP client (in the pod):**
 
-When `VF_ON_BEHALF_OF` is set, adds the header to every MCP HTTP request.
+pi-mcp-adapter (verified v2.4.0, `server-manager.ts:150–163`) accepts arbitrary headers via the `headers` field on a server definition; no adapter changes are required. Viloforge's existing `vafi/images/agent/pi_config.py` already writes headers to `~/.pi/agent/mcp.json` at pod startup (the `Authorization: Token <vtf_token>` header goes through the same mechanism). Slice 0 adds one conditional:
+
+```python
+# in pi_config.py, inside the vtf server-entry block:
+on_behalf_of = os.environ.get("VF_ON_BEHALF_OF", "")
+if on_behalf_of:
+    headers["On-Behalf-Of"] = on_behalf_of
+```
+
+Literal-string rendering (not pi-mcp-adapter's `${VAR}` interpolation) is chosen because architect pods have a fixed identity for their full lifetime — one header write at pod start is clearer to debug than an always-present-possibly-empty interpolated header. Result: `On-Behalf-Of` is only present in mcp.json on pods that should impersonate; executor/judge pods produce no such header at all.
 
 **Audit:** every authenticated write records *both* identities: `TaskEvent.actor = <human>`, `TaskEvent.acting_via = <vafi-agent>`. Audit consumers see who asked and through what channel.
 
