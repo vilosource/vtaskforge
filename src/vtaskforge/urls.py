@@ -22,6 +22,7 @@ from prefs.views import (
     LockDetailView,
     LockView,
     ServiceAccountView,
+    ProjectSessionsView,
     SessionCreateView,
     SessionTokenView,
     TokenValidationView,
@@ -59,7 +60,13 @@ def serve_spa(request, path=''):
     for spa_index in candidates:
         if os.path.exists(spa_index):
             with open(spa_index, 'rb') as f:
-                return HttpResponse(f.read(), content_type='text/html')
+                response = HttpResponse(f.read(), content_type='text/html')
+                # index.html references content-hashed asset URLs. If browsers
+                # cache it, users will keep loading old bundles after deploys.
+                # Force a revalidation on every load. Browsers use conditional
+                # requests (ETag/Last-Modified), so this doesn't hurt performance.
+                response['Cache-Control'] = 'no-cache, must-revalidate'
+                return response
 
     # Fallback when the SPA hasn't been built (dev mode without Vite)
     return JsonResponse(
@@ -146,6 +153,7 @@ for _v in ('v1', 'v2'):
         path(f'{_v}/users/', UserListView.as_view(), name=f'{_v}-user-list'),
         path(f'{_v}/users/<int:pk>/', UserDetailView.as_view(), name=f'{_v}-user-detail'),
         path(f'{_v}/sessions/', SessionCreateView.as_view(), name=f'{_v}-session-create'),
+        path(f'{_v}/sessions/project/<str:project_id>/', ProjectSessionsView.as_view(), name=f'{_v}-sessions-project'),
         path(f'{_v}/service-accounts/', ServiceAccountView.as_view(), name=f'{_v}-service-accounts'),
         path(f'{_v}/profile/', include('prefs.urls')),
     ]
@@ -166,7 +174,11 @@ def serve_spa_asset(request, asset_path):
     for filepath in candidates:
         if os.path.exists(filepath):
             content_type, _ = mimetypes.guess_type(filepath)
-            return FileResponse(open(filepath, 'rb'), content_type=content_type or 'application/octet-stream')
+            response = FileResponse(open(filepath, 'rb'), content_type=content_type or 'application/octet-stream')
+            # Vite emits content-hashed filenames (index-<hash>.js). A given
+            # URL will never change content — safe to cache forever.
+            response['Cache-Control'] = 'public, max-age=31536000, immutable'
+            return response
 
     return JsonResponse({'detail': 'Not found.'}, status=404)
 

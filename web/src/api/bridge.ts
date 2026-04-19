@@ -144,3 +144,37 @@ export async function streamPrompt(
   }
   return res;
 }
+
+
+// Phase 9: project-scoped architect conversation history.
+// Messages include `username` on user turns; assistant turns have null.
+export interface PriorTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  session_id: string;
+  username: string | null;
+}
+
+export interface SessionHistoryResponse {
+  turns: PriorTurn[];
+  truncated: boolean;
+}
+
+export async function fetchSessionHistory(
+  project: string,
+  role: string,
+  opts: { limit?: number; maxAgeDays?: number } = {},
+): Promise<SessionHistoryResponse> {
+  const params = new URLSearchParams({ project, role });
+  if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+  if (opts.maxAgeDays !== undefined) params.set('max_age_days', String(opts.maxAgeDays));
+  const res = await fetch(`${BRIDGE_URL}/v1/sessions/history?${params}`, {
+    method: 'GET',
+    headers: {
+      ...authHeaders(),
+      Accept: 'application/json',
+    },
+  });
+  return handleResponse<SessionHistoryResponse>(res);
+}

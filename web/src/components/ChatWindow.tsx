@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react';
-import type { ChatMessage as ChatMessageType, LockStatus, ConnectionError } from '../types/chat';
+import type { ChatMessage as ChatMessageType, LockStatus, ConnectionError, PriorTurn } from '../types/chat';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
+import { PriorHistoryPanel } from './PriorHistoryPanel';
 
 interface ChatWindowProps {
   messages: ChatMessageType[];
@@ -11,6 +12,9 @@ interface ChatWindowProps {
   onSendMessage: (content: string) => void;
   onStop?: () => void;
   onRetry?: () => void;
+  // Phase 9
+  priorTurns?: PriorTurn[];
+  priorTurnsLoading?: boolean;
 }
 
 function errorMessage(connectionError: ConnectionError | null): string {
@@ -35,7 +39,7 @@ function errorMessage(connectionError: ConnectionError | null): string {
   }
 }
 
-export function ChatWindow({ messages, isStreaming, lockStatus, connectionError, onSendMessage, onStop, onRetry }: ChatWindowProps) {
+export function ChatWindow({ messages, isStreaming, lockStatus, connectionError, onSendMessage, onStop, onRetry, priorTurns = [], priorTurnsLoading = false }: ChatWindowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
@@ -91,7 +95,10 @@ export function ChatWindow({ messages, isStreaming, lockStatus, connectionError,
           </div>
         )}
 
-        {isConnected && messages.length === 0 && (
+        {/* Phase 9 — project-scoped architect history (collapsed by default) */}
+        <PriorHistoryPanel turns={priorTurns} loading={priorTurnsLoading} />
+
+        {isConnected && messages.length === 0 && priorTurns.length === 0 && !priorTurnsLoading && (
           <div data-testid="chat-empty-state" className="flex flex-col items-center justify-center py-12 text-center">
             <span className="material-symbols-outlined text-4xl text-primary/20 mb-3">chat</span>
             <p className="text-sm font-semibold text-on-surface mb-1">Bridge Chat</p>
