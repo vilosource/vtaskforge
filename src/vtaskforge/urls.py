@@ -22,6 +22,7 @@ from prefs.views import (
     LockDetailView,
     LockView,
     ServiceAccountView,
+    ProjectSessionsView,
     SessionCreateView,
     SessionTokenView,
     TokenValidationView,
@@ -146,6 +147,7 @@ for _v in ('v1', 'v2'):
         path(f'{_v}/users/', UserListView.as_view(), name=f'{_v}-user-list'),
         path(f'{_v}/users/<int:pk>/', UserDetailView.as_view(), name=f'{_v}-user-detail'),
         path(f'{_v}/sessions/', SessionCreateView.as_view(), name=f'{_v}-session-create'),
+        path(f'{_v}/sessions/project/<str:project_id>/', ProjectSessionsView.as_view(), name=f'{_v}-sessions-project'),
         path(f'{_v}/service-accounts/', ServiceAccountView.as_view(), name=f'{_v}-service-accounts'),
         path(f'{_v}/profile/', include('prefs.urls')),
     ]

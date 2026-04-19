@@ -87,6 +87,11 @@ class SessionRecord(models.Model):
     )
     project_id = models.CharField(max_length=50)
     role = models.CharField(max_length=30)
+    # Pi/harness session ID — links a SessionRecord row to JSONL files on the
+    # bridge's PVC for Phase 9 history attribution. Indexed but not unique:
+    # multiple SessionRecords for the same Pi session are tolerated (e.g.,
+    # acquire-then-release double-write).
+    session_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
     cxdb_context_id = models.IntegerField(null=True, blank=True)
     channel = models.CharField(max_length=30, blank=True, default="")
     started_at = models.DateTimeField(auto_now_add=True)

@@ -8,7 +8,7 @@ import type {
   ProjectRef,
 } from '../types/chat';
 import { BRIDGE_URL } from '../utils/bridgeConfig';
-import { checkLock, acquireLock, releaseLock, classifyBridgeError } from '../api/bridge';
+import { checkLock, acquireLock, releaseLock, classifyBridgeError, fetchSessionHistory } from '../api/bridge';
 import { useBridgeStream } from '../hooks/useBridgeStream';
 import { useLockHeartbeat } from '../hooks/useLockHeartbeat';
 import { useAuth } from '../App';
@@ -52,6 +52,8 @@ const DEFAULT_STATE: ChatWidgetState = {
   connectionError: null,
   messages: [],
   isStreaming: false,
+  priorTurns: [],
+  priorTurnsLoading: false,
 };
 
 // ---- Persistence ----
@@ -396,8 +398,23 @@ export function ChatWidgetProvider({ children }: { children: React.ReactNode }) 
 
   const open = useCallback((projectId: string, projectName?: string) => {
     const project: ProjectRef = { id: projectId, name: projectName || projectId };
-    setState((prev) => ({ ...prev, isOpen: true, project }));
+    setState((prev) => ({
+      ...prev, isOpen: true, project,
+      priorTurns: [], priorTurnsLoading: true,
+    }));
     acquireSession(projectId);
+
+    // Phase 9: fetch project-scoped architect history in parallel with lock
+    // acquire. Non-fatal: on error, show an empty history.
+    fetchSessionHistory(projectId, ROLE, { limit: 20, maxAgeDays: 14 })
+      .then((resp) => {
+        setState((prev) => ({
+          ...prev, priorTurns: resp.turns, priorTurnsLoading: false,
+        }));
+      })
+      .catch(() => {
+        setState((prev) => ({ ...prev, priorTurns: [], priorTurnsLoading: false }));
+      });
   }, [acquireSession]);
 
   // Release lock, clear everything, close widget

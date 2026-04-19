@@ -9,6 +9,7 @@ vi.mock('../../api/bridge', () => ({
   checkLock: vi.fn().mockResolvedValue([]),
   acquireLock: vi.fn().mockResolvedValue({ session_id: 'test-sess' }),
   releaseLock: vi.fn().mockResolvedValue(undefined),
+  fetchSessionHistory: vi.fn().mockResolvedValue({ turns: [], truncated: false }),
 }));
 
 // Mock stream hook

@@ -34,6 +34,17 @@ export interface ProjectRef {
   name: string;
 }
 
+// Phase 9: a prior-session turn retrieved from GET /v1/sessions/history.
+// `username` is null for assistant messages and for user messages whose
+// session predates Pre-Phase 0a (no SessionRecord was written).
+export interface PriorTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  session_id: string;
+  username: string | null;
+}
+
 export interface ChatWidgetState {
   isOpen: boolean;
   layout: ChatWidgetLayout;
@@ -46,6 +57,9 @@ export interface ChatWidgetState {
   connectionError: ConnectionError | null;
   messages: ChatMessage[];
   isStreaming: boolean;
+  // Phase 9 — project-scoped architect history loaded on widget open.
+  priorTurns: PriorTurn[];
+  priorTurnsLoading: boolean;
 }
 
 // ---- Bridge API types ----

@@ -7,6 +7,7 @@ vi.mock('../../api/bridge', () => ({
   checkLock: vi.fn().mockResolvedValue([]),
   acquireLock: vi.fn().mockResolvedValue({ session_id: 'sess-1' }),
   releaseLock: vi.fn().mockResolvedValue(undefined),
+  fetchSessionHistory: vi.fn().mockResolvedValue({ turns: [], truncated: false }),
 }));
 
 vi.mock('../../hooks/useBridgeStream', () => ({

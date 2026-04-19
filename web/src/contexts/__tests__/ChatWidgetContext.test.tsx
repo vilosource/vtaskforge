@@ -10,6 +10,8 @@ vi.mock('../../api/bridge', async (importOriginal) => {
     checkLock: vi.fn(),
     acquireLock: vi.fn(),
     releaseLock: vi.fn(),
+    // Phase 9: default to empty history so unrelated tests aren't affected.
+    fetchSessionHistory: vi.fn().mockResolvedValue({ turns: [], truncated: false }),
   };
 });
 

@@ -20,6 +20,8 @@ export function ChatWidget() {
     connectionError,
     messages,
     isStreaming,
+    priorTurns,
+    priorTurnsLoading,
     close,
     cancelStream,
     retryConnection,
@@ -170,6 +172,8 @@ export function ChatWidget() {
             onSendMessage={sendMessage}
             onStop={cancelStream}
             onRetry={retryConnection}
+            priorTurns={priorTurns}
+            priorTurnsLoading={priorTurnsLoading}
           />
         </div>
 

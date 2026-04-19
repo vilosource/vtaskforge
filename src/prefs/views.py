@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import AgentLock, ChannelProjectMapping, ExternalIdentity, ProjectMembership, RecentAccess, SessionRecord
+from .permissions import HasProjectMembership
 from .services import (
     LockConflict,
     acquire_lock,
@@ -43,11 +44,15 @@ class ExternalIdentitySerializer(serializers.ModelSerializer):
 
 
 class SessionRecordSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
     class Meta:
         model = SessionRecord
         fields = [
-            "id", "project_id", "role", "cxdb_context_id",
+            "id", "project_id", "role", "session_id", "cxdb_context_id",
             "channel", "started_at", "ended_at", "summary",
+            "user_id", "username",
         ]
 
 
@@ -199,7 +204,7 @@ class SessionRecordWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionRecord
         fields = [
-            "id", "user_id", "project_id", "role", "cxdb_context_id",
+            "id", "user_id", "project_id", "role", "session_id", "cxdb_context_id",
             "channel", "started_at", "ended_at", "summary",
         ]
         read_only_fields = ["id", "started_at"]
@@ -232,6 +237,30 @@ class SessionCreateView(APIView):
 
         serializer.save(user=target_user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ProjectSessionsView(APIView):
+    """GET /v1/sessions/project/<project_id>/ — list SessionRecords for a project.
+
+    Project-scoped: returns sessions across ALL users who've held the relevant
+    locks (architect/web_designer/etc.) on this project. Used by the bridge's
+    Phase 9 history endpoint to map session_id -> user for attribution.
+
+    Auth: project membership (or staff bypass).
+    Optional ?role=<role> filter.
+    """
+
+    permission_classes = [IsAuthenticated, HasProjectMembership]
+
+    def get(self, request, project_id):
+        qs = SessionRecord.objects.filter(project_id=project_id).select_related("user")
+        role = request.query_params.get("role")
+        if role:
+            qs = qs.filter(role=role)
+        # Cap at a reasonable upper bound to avoid runaway queries.
+        qs = qs[:500]
+        serializer = SessionRecordSerializer(qs, many=True)
+        return Response({"results": serializer.data})
 
 
 class LockView(APIView):
