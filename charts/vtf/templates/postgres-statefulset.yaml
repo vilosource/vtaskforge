@@ -55,7 +55,9 @@ spec:
           resources:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: pgdata
       spec:
         accessModes: ["ReadWriteOnce"]

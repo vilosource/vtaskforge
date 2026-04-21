@@ -10,6 +10,12 @@ metadata:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation
+    # Argo CD does not honor helm.sh/hook annotations. These mirrors keep
+    # the Job behaving as a hook under both helm and Argo CD: PostSync runs
+    # after the Deployments roll, and BeforeHookCreation deletes the prior
+    # Job so a new image tag isn't blocked by Job spec immutability.
+    "argocd.argoproj.io/hook": PostSync
+    "argocd.argoproj.io/hook-delete-policy": BeforeHookCreation
 spec:
   backoffLimit: {{ .Values.migrate.backoffLimit }}
   ttlSecondsAfterFinished: {{ .Values.migrate.ttlSecondsAfterFinished }}
