@@ -102,11 +102,18 @@ cd web && npm install && npm run dev    # Development (port 3000, proxies API)
 
 ## Deployment
 
-vtf deploys via Helm chart at `charts/vtf/`. Environment-specific values and release scripts live in a separate deploy repo.
+vtf is deployed via **Argo CD** (GitOps). The Helm chart in `charts/vtf/` is rendered by Argo CD using values from the separate `vtf-deploy` repo (`environments/dev.yaml`, `environments/prod.yaml`).
+
+To roll out a new vtf image, all 4 workloads (api, mcp, celery, celery-beat) move atomically:
 
 ```bash
-helm upgrade --install vtf charts/vtf/ -n vtf-dev -f values.yaml
+# 1. Build + push (vtf-deploy/scripts/release.sh dev)
+# 2. Edit vtf-deploy/environments/dev.yaml: image.tag=<git-sha>
+# 3. Commit + push to vtf-deploy main — Argo CD syncs within ~3 min
+#    (force immediate: argocd app sync vtf-dev)
 ```
+
+Direct `helm upgrade` and `kubectl set image` will be reverted by Argo CD's selfHeal.
 
 ## Running tests
 
