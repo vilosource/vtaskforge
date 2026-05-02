@@ -175,3 +175,4 @@ test_command:
 ## License
 
 MIT
+<!-- ci smoketest 2026-05-02T09:32:40Z -->
