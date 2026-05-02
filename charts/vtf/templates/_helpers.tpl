@@ -45,7 +45,11 @@ app.kubernetes.io/component: {{ .component }}
 Secret name used by all components.
 */}}
 {{- define "vtf.secretName" -}}
+{{- if .Values.secret.name -}}
+{{- .Values.secret.name -}}
+{{- else -}}
 {{ include "vtf.fullname" . }}-secrets
+{{- end -}}
 {{- end }}
 
 {{/*

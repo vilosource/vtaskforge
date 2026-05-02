@@ -15,6 +15,25 @@ nameOverride: ""
 fullnameOverride: ""
 
 # ---------------------------------------------------------------------------
+# Application Secret — DATABASE_URL, CELERY_BROKER_URL, SECRET_KEY,
+# POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD.
+#
+# Default behavior (create=true): chart materializes the Secret from inline
+# values (database.password, django.secretKey, etc.). Suitable for local dev
+# and tests.
+#
+# When integrating with External Secrets Operator: set create=false and
+# provide a Secret named per `secret.name` containing all 6 keys above.
+# Both the API/celery/mcp deployments AND the bundled Postgres StatefulSet
+# (when postgresql.enabled=true) read from this Secret, so the values must
+# be self-consistent.
+# ---------------------------------------------------------------------------
+secret:
+  create: true
+  # When unset, defaults to "<release>-vtf-secrets".
+  name: ""
+
+# ---------------------------------------------------------------------------
 # VTF API — Django/gunicorn application server
 # ---------------------------------------------------------------------------
 api:
