@@ -39,6 +39,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "vtf.secretName" . }}
                   key: POSTGRES_PASSWORD
+            # PGDATA is a subdirectory of the mount so initdb doesn't see
+            # lost+found at the mount root (ext4-formatted PVCs like Longhorn
+            # always have it; this fails initdb's "directory is empty" check).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/postgresql/data
