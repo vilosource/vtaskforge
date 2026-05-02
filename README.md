@@ -177,3 +177,4 @@ test_command:
 MIT
 <!-- ci smoketest 2026-05-02T09:32:40Z -->
 <!-- ci smoketest 2 2026-05-02T09:35:10Z -->
+<!-- ci smoketest 3 2026-05-02T09:37:00Z -->
