@@ -248,6 +248,32 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
         record_event(task, "claimed", data={"agent_id": agent_id},
                      trigger_source="claim", actor=agent.user)
 
+        # Auto-grant project membership on first claim into a project the
+        # agent isn't already a member of. Per docs/agent-project-membership-DECISION.md:
+        # demand-driven, idempotent, audited. Without this, an agent's
+        # subsequent list/poll calls return empty silently because the
+        # task-list filter requires HasProjectMembership.
+        if task.project_id:
+            from prefs.models import ProjectMembership
+            _, membership_created = ProjectMembership.objects.get_or_create(
+                user=agent.user,
+                project_id=task.project_id,
+                defaults={"role": "member"},
+            )
+            if membership_created:
+                record_event(
+                    task,
+                    "auto_membership_grant",
+                    data={
+                        "project_id": task.project_id,
+                        "user_id": agent.user.id,
+                        "agent_id": agent_id,
+                        "source": "claim",
+                    },
+                    trigger_source="claim",
+                    actor=agent.user,
+                )
+
     return task
 
 
