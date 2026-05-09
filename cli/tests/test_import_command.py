@@ -69,12 +69,10 @@ def test_import_task_fields_mapped_correctly(runner, mock_client, successful_imp
     assert len(t11["acceptance_criteria"]) == 2
 
 
-def test_import_passes_requires_field(runner, mock_client, successful_import_response):
-    """`requires` from task YAML must round-trip into the bulk-import payload.
-
-    Regression for the silent-drop bug where `vtf import` built the task entry
-    without including `requires`, so capability-tag filtering never worked
-    on imported tasks.
+def test_import_routes_legacy_requires_to_required_tags(runner, mock_client, successful_import_response):
+    """Legacy YAML `requires:` (capability tag strings) must land in payload
+    `required_tags` after migration 0014. Backward-compat for task YAML
+    written before the field was renamed.
     """
     mock_client.bulk.do_import.return_value = successful_import_response
     with patch("vtf.cli.get_client", return_value=mock_client):
@@ -84,8 +82,33 @@ def test_import_passes_requires_field(runner, mock_client, successful_import_res
     tasks = payload["milestones"][0]["tasks"]
     task_map = {t["ref"]: t for t in tasks}
     # 1.1 has `requires: [executor, pi]` in its YAML; 1.2 has none.
-    assert task_map["task-1.1"]["requires"] == ["executor", "pi"]
-    assert task_map["task-1.2"]["requires"] == []
+    assert task_map["task-1.1"]["required_tags"] == ["executor", "pi"]
+    assert task_map["task-1.2"]["required_tags"] == []
+    # `requires` in the task entry is reserved for task dep refs (built
+    # from depends_on/dag.yaml via the links list); not present on entries.
+    assert "requires" not in task_map["task-1.1"]
+
+
+def test_import_prefers_explicit_required_tags_over_legacy_requires(runner, mock_client, successful_import_response, tmp_path):
+    """When YAML has both `required_tags` and legacy `requires`, both merge
+    into payload required_tags (required_tags first, no duplicates).
+    """
+    # Build a one-off fixture
+    ms = tmp_path / "ms"
+    (ms / "tasks").mkdir(parents=True)
+    (ms / "MILESTONE.md").write_text("# Test\n")
+    (ms / "tasks" / "1.yaml").write_text(
+        "id: '1'\nname: 'T'\ndepends_on: []\n"
+        "required_tags: [executor, gpu]\n"
+        "requires: [executor, pi]\n"
+    )
+    mock_client.bulk.do_import.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(ms)])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.bulk.do_import.call_args[1]["payload"]
+    tasks = payload["milestones"][0]["tasks"]
+    assert tasks[0]["required_tags"] == ["executor", "gpu", "pi"]
 
 
 def test_import_prints_ref_map(runner, mock_client, successful_import_response):

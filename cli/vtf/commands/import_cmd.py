@@ -64,12 +64,22 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
         task_id = str(spec["id"])
         ref = f"task-{task_id}"
         task_refs[task_id] = ref
+        # Capability tag strings live under YAML's `required_tags`. The
+        # legacy field name was `requires`; accept it for backward compat
+        # but route to required_tags. Task-to-task dependency refs are
+        # built from `depends_on`/dag.yaml via the links list below — they
+        # never travel through the task entry's `requires`.
+        legacy_requires = spec.get("requires", []) or []
+        new_required_tags = spec.get("required_tags", []) or []
+        merged_tags = list(new_required_tags) + [
+            t for t in legacy_requires if t not in new_required_tags
+        ]
         task_entry = {
             "ref": ref,
             "title": spec["name"],
             "description": spec.get("description", ""),
             "acceptance_criteria": spec.get("acceptance_criteria", []),
-            "requires": spec.get("requires", []),
+            "required_tags": merged_tags,
             "spec": spec.get("_raw_yaml", ""),
             "agent_model": spec.get("agent_model", ""),
             "test_command": spec.get("test_command", {}),

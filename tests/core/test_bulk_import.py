@@ -199,6 +199,35 @@ def test_bulk_import_tasks_fields_stored_correctly(api_client):
 
 
 @pytest.mark.django_db
+def test_bulk_import_stores_required_tags(api_client):
+    """Bulk import accepts required_tags (split from requires in 0014)."""
+    payload = {
+        "project": {"name": "Test Project"},
+        "workplan": {"name": "WP"},
+        "milestones": [
+            {
+                "ref": "phase-1",
+                "name": "Milestone One",
+                "tasks": [
+                    {
+                        "ref": "task-1",
+                        "title": "Tagged task",
+                        "required_tags": ["executor", "pi"],
+                    }
+                ],
+            }
+        ],
+        "links": [],
+    }
+    response = api_client.post(BULK_IMPORT_URL, data=payload, format="json")
+    assert response.status_code == 201
+    ref_map = response.json()["ref_map"]
+    task = Task.objects.get(id=ref_map["task-1"])
+    assert task.required_tags == ["executor", "pi"]
+    assert task.requires == []
+
+
+@pytest.mark.django_db
 def test_bulk_import_links_resolved_from_refs(api_client):
     payload = {
         "project": {"name": "Test Project"},
