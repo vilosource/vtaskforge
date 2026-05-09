@@ -14,6 +14,7 @@ from core.views import (
     HealthCheckView,
     console_login_redirect,
 )
+from reviews.views import PendingReviewsView
 from prefs.views import (
     ChannelMappingDetailView,
     ChannelMappingView,
@@ -123,6 +124,8 @@ urlpatterns = [
     path('v2/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('v2/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('v2/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    # Cross-project endpoint for judge agents (v2 only by design — see vtaskforge#6)
+    path('v2/reviews/pending/', PendingReviewsView.as_view(), name='reviews-pending'),
 ]
 
 # Build versioned URL patterns for both v1 and v2
