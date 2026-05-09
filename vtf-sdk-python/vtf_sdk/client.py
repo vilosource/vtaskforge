@@ -9,6 +9,7 @@ from .managers import (
     MemberManager,
     MilestoneManager,
     ProjectManager,
+    ReviewsManager,
     ServiceAccountManager,
     TaskManager,
     UserManager,
@@ -52,6 +53,7 @@ class VtfClient:
         self.channel_mappings = ChannelMappingManager(self._transport)
         self.service_accounts = ServiceAccountManager(self._transport)
         self.bulk = BulkManager(self._transport)
+        self.reviews = ReviewsManager(self._transport)
 
     def health(self) -> dict:
         """Check API health."""

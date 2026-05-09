@@ -389,6 +389,20 @@ class BulkManager(_BaseManager):
         return self._transport.post("/v2/bulk/import", json=payload)
 
 
+class ReviewsManager(_BaseManager):
+    """Cross-project review-coordination endpoints (v2 only).
+
+    Use this manager for fleet-wide judge polling. The `pending` method
+    deliberately bypasses project-membership scoping that the generic
+    `tasks.list(status=...)` path applies — see vtaskforge#6 for context.
+    """
+
+    def pending(self, *, page_size: int = 50) -> PagedResult[Task]:
+        """Tasks awaiting judge review across every project the fleet sees."""
+        data = self._transport.get("/v2/reviews/pending/", params={"page_size": page_size})
+        return _parse_paged(data, Task)
+
+
 def _parse_paged_raw(data: dict) -> PagedResult:
     """Parse paginated response keeping items as raw dicts."""
     items = data.get("results", [])

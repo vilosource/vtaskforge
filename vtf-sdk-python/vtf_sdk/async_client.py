@@ -135,6 +135,17 @@ class AsyncAgentManager(_AsyncBaseManager):
         return Agent.model_validate(data)
 
 
+class AsyncReviewsManager(_AsyncBaseManager):
+    """Cross-project review-coordination endpoints (v2 only).
+
+    Mirrors managers.ReviewsManager for async callers — see vtaskforge#6.
+    """
+
+    async def pending(self, *, page_size: int = 50) -> PagedResult[Task]:
+        data = await self._transport.get("/v2/reviews/pending/", params={"page_size": page_size})
+        return _parse_paged(data, Task)
+
+
 class AsyncVtfClient:
     """Asynchronous vtaskforge API client."""
 
@@ -153,6 +164,7 @@ class AsyncVtfClient:
         self.tasks = AsyncTaskManager(self._transport)
         self.projects = AsyncProjectManager(self._transport)
         self.agents = AsyncAgentManager(self._transport)
+        self.reviews = AsyncReviewsManager(self._transport)
 
     async def close(self):
         await self._transport.close()
