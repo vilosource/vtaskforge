@@ -8,3 +8,7 @@ description: |
 acceptance_criteria:
   - "The task completes successfully"
   - "Output is produced"
+
+requires:
+  - executor
+  - pi

@@ -69,6 +69,7 @@ def import_cmd(ctx, milestone_dir, workplan, project, dry_run):
             "title": spec["name"],
             "description": spec.get("description", ""),
             "acceptance_criteria": spec.get("acceptance_criteria", []),
+            "requires": spec.get("requires", []),
             "spec": spec.get("_raw_yaml", ""),
             "agent_model": spec.get("agent_model", ""),
             "test_command": spec.get("test_command", {}),

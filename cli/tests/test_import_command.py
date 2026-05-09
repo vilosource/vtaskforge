@@ -69,6 +69,25 @@ def test_import_task_fields_mapped_correctly(runner, mock_client, successful_imp
     assert len(t11["acceptance_criteria"]) == 2
 
 
+def test_import_passes_requires_field(runner, mock_client, successful_import_response):
+    """`requires` from task YAML must round-trip into the bulk-import payload.
+
+    Regression for the silent-drop bug where `vtf import` built the task entry
+    without including `requires`, so capability-tag filtering never worked
+    on imported tasks.
+    """
+    mock_client.bulk.do_import.return_value = successful_import_response
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, ["import", str(FIXTURES_DIR)])
+    assert result.exit_code == 0, result.output
+    payload = mock_client.bulk.do_import.call_args[1]["payload"]
+    tasks = payload["milestones"][0]["tasks"]
+    task_map = {t["ref"]: t for t in tasks}
+    # 1.1 has `requires: [executor, pi]` in its YAML; 1.2 has none.
+    assert task_map["task-1.1"]["requires"] == ["executor", "pi"]
+    assert task_map["task-1.2"]["requires"] == []
+
+
 def test_import_prints_ref_map(runner, mock_client, successful_import_response):
     mock_client.bulk.do_import.return_value = successful_import_response
     with patch("vtf.cli.get_client", return_value=mock_client):
