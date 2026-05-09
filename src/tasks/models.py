@@ -55,7 +55,13 @@ class Task(ProjectScopedModel, NanoIDMixin, TimestampMixin):
     needs_review_before_start = models.BooleanField(null=True, blank=True, default=None)
     needs_review_on_completion = models.BooleanField(null=True, blank=True, default=True)
     review_return_to = models.CharField(max_length=30, null=True, blank=True, default=None)
+    # `requires` historically was overloaded: callers stored bare capability
+    # tag strings ("executor", "pi") AND task dependency ref dicts.
+    # find_claimable_tasks treated it as the former; the SDK typed it as
+    # list[TaskRef]. Migration 0014 splits them: bare strings move to
+    # `required_tags`; dep refs stay in `requires`.
     requires = models.JSONField(default=list, blank=True)
+    required_tags = models.JSONField(default=list, blank=True)
     assigned_to = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="assigned_tasks",
