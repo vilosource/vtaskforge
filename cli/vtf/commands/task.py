@@ -71,6 +71,8 @@ def show(ctx, id, as_json):
     click.echo(f"Claimed by:  {t.claimed_by or 'none'}")
     requires = ', '.join(str(r) for r in t.requires) if t.requires else ''
     click.echo(f"Requires:    {requires}")
+    if t.required_tags:
+        click.echo(f"Req. tags:   {', '.join(t.required_tags)}")
     if t.agent_model:
         click.echo(f"Agent model: {t.agent_model}")
     if t.isolation and t.isolation != 'sequential':
@@ -203,8 +205,10 @@ def claimable(ctx, tags, project):
 @click.option("--milestone", help="Milestone ID")
 @click.option("--labels", default="", help="Comma-separated labels")
 @click.option("--description", default="", help="Task description")
+@click.option("--required-tags", "required_tags", default=None,
+              help="Comma-separated capability tags (e.g. 'executor,pi') the claiming agent must have")
 @click.pass_context
-def create(ctx, title, project, workplan, milestone, labels, description):
+def create(ctx, title, project, workplan, milestone, labels, description, required_tags):
     """Create a new task."""
     client = ctx.obj["client"]
     cfg = Config()
@@ -221,6 +225,8 @@ def create(ctx, title, project, workplan, milestone, labels, description):
         kwargs["milestone"] = milestone
     if labels:
         kwargs["labels"] = [l.strip() for l in labels.split(",")]
+    if required_tags is not None:
+        kwargs["required_tags"] = [t.strip() for t in required_tags.split(",") if t.strip()]
 
     try:
         t = client.tasks.create(title=title, project=proj, **kwargs)
@@ -384,13 +390,17 @@ def delete(ctx, id, yes):
 @click.option("--workplan", default=None, help="Workplan ID")
 @click.option("--milestone", default=None, help="Milestone ID")
 @click.option("--acceptance-criteria", default=None, help="JSON array of criteria")
-@click.option("--requires", default=None, help="Comma-separated task IDs")
+@click.option("--requires", default=None,
+              help="DEPRECATED for capability tags — use --required-tags. "
+                   "Comma-separated task IDs for dep refs (wrapped as TaskRef).")
+@click.option("--required-tags", "required_tags", default=None,
+              help="Comma-separated capability tags the claiming agent must have")
 @click.option("--test-command", default=None, help="JSON test command dict")
 @click.option("--needs-review-before-start/--no-review-before-start", default=None, help="Require review before start")
 @click.option("--needs-review-on-completion/--no-review-on-completion", default=None, help="Require review on completion")
 @click.pass_context
 def update(ctx, id, title, description, labels, spec, spec_file, agent_model, judge, isolation,
-           workplan, milestone, acceptance_criteria, requires, test_command,
+           workplan, milestone, acceptance_criteria, requires, required_tags, test_command,
            needs_review_before_start, needs_review_on_completion):
     """Update task fields."""
     kwargs = {}
@@ -422,7 +432,22 @@ def update(ctx, id, title, description, labels, spec, spec_file, agent_model, ju
             click.echo("Error: --acceptance-criteria has invalid JSON", err=True)
             raise SystemExit(1)
     if requires is not None:
-        kwargs["requires"] = [t.strip() for t in requires.split(",")]
+        items = [t.strip() for t in requires.split(",") if t.strip()]
+        # Heuristic: bare strings that don't look like task IDs are almost
+        # certainly capability tags from the pre-0014 era. Steer the user
+        # to --required-tags rather than silently writing the wrong field.
+        if items and not all(it.startswith(("tsk-", "tsk_")) for it in items):
+            click.echo(
+                "Warning: --requires now expects task IDs (e.g. 'tsk-abc') for "
+                "dependency refs. For capability tags, use --required-tags. "
+                "Sending values to required_tags. (vtaskforge#4)",
+                err=True,
+            )
+            kwargs["required_tags"] = items
+        else:
+            kwargs["requires"] = [{"id": it} for it in items]
+    if required_tags is not None:
+        kwargs["required_tags"] = [t.strip() for t in required_tags.split(",") if t.strip()]
     if test_command is not None:
         try:
             kwargs["test_command"] = json.loads(test_command)

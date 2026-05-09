@@ -254,6 +254,18 @@ def test_task_create_api_error(runner, mock_client):
     assert result.exit_code == 1
 
 
+def test_task_create_required_tags(runner, mock_client):
+    mock_client.tasks.create.return_value = make_task(id="task-new", title="New Task")
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, [
+            "task", "create", "New Task", "--project", "p1",
+            "--required-tags", "executor,pi",
+        ])
+    assert result.exit_code == 0
+    _, kwargs = mock_client.tasks.create.call_args
+    assert kwargs.get("required_tags") == ["executor", "pi"]
+
+
 # --- review ---
 
 def test_task_review_success(runner, mock_client):
@@ -393,6 +405,41 @@ def test_task_update_api_error(runner, mock_client):
     with patch("vtf.cli.get_client", return_value=mock_client):
         result = runner.invoke(cli, ["task", "update", "task-abc", "--title", "Fail"])
     assert result.exit_code == 1
+
+
+def test_task_update_required_tags(runner, mock_client):
+    mock_client.tasks.update.return_value = make_task()
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, [
+            "task", "update", "task-abc", "--required-tags", "executor,pi",
+        ])
+    assert result.exit_code == 0
+    args, kwargs = mock_client.tasks.update.call_args
+    assert kwargs.get("required_tags") == ["executor", "pi"]
+
+
+def test_task_update_requires_with_task_ids_wraps_as_taskref(runner, mock_client):
+    mock_client.tasks.update.return_value = make_task()
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, [
+            "task", "update", "task-abc", "--requires", "tsk-aaa,tsk-bbb",
+        ])
+    assert result.exit_code == 0
+    _, kwargs = mock_client.tasks.update.call_args
+    assert kwargs.get("requires") == [{"id": "tsk-aaa"}, {"id": "tsk-bbb"}]
+
+
+def test_task_update_requires_with_bare_strings_warns_and_routes_to_required_tags(runner, mock_client):
+    mock_client.tasks.update.return_value = make_task()
+    with patch("vtf.cli.get_client", return_value=mock_client):
+        result = runner.invoke(cli, [
+            "task", "update", "task-abc", "--requires", "executor,pi",
+        ])
+    assert result.exit_code == 0
+    assert "use --required-tags" in result.output.lower()
+    _, kwargs = mock_client.tasks.update.call_args
+    assert kwargs.get("required_tags") == ["executor", "pi"]
+    assert "requires" not in kwargs
 
 
 # --- events ---
