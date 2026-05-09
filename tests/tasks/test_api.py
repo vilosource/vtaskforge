@@ -641,6 +641,80 @@ class TestTaskReset:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_reset_to_non_terminal_reactivates_completed_milestone(self, api_client, milestone, workplan):
+        """Force-resetting a task in a completed milestone back to a non-terminal
+        status must reactivate the milestone, otherwise the task is silently
+        invisible to the claimable filter (which requires milestone.status='active').
+        """
+        from events.models import TaskEvent
+        # Set up: milestone completed, task done.
+        done_task = TaskFactory(title="Done Task", milestone=milestone, workplan=workplan, status="done")
+        milestone.status = "completed"
+        milestone.save()
+
+        response = api_client.post(
+            f"/v1/tasks/{done_task.id}/reset/",
+            {"status": "todo", "reason": "rerun for canary monitoring"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "todo"
+
+        milestone.refresh_from_db()
+        assert milestone.status == "active", (
+            "Force-resetting a task to non-terminal must reactivate a completed milestone"
+        )
+
+        event = TaskEvent.objects.filter(task=done_task, event_type="force_transition").first()
+        assert event is not None
+        assert event.data.get("milestone_reactivated") == milestone.id
+
+    def test_reset_to_terminal_leaves_completed_milestone_alone(self, api_client, milestone, workplan):
+        """Resetting to a still-terminal status (cancelled/done) shouldn't reactivate."""
+        from events.models import TaskEvent
+        done_task = TaskFactory(title="Done Task", milestone=milestone, workplan=workplan, status="done")
+        milestone.status = "completed"
+        milestone.save()
+
+        response = api_client.post(
+            f"/v1/tasks/{done_task.id}/reset/",
+            {"status": "cancelled", "reason": "won't ship after all"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        milestone.refresh_from_db()
+        assert milestone.status == "completed"
+
+        event = TaskEvent.objects.filter(task=done_task, event_type="force_transition").first()
+        assert event is not None
+        assert "milestone_reactivated" not in event.data
+
+    def test_reset_in_active_milestone_is_noop_for_milestone(self, api_client, task, milestone):
+        """Resetting in an already-active milestone shouldn't touch milestone state."""
+        milestone.status = "active"
+        milestone.save()
+        response = api_client.post(
+            f"/v1/tasks/{task.id}/reset/",
+            {"status": "todo", "reason": "ordinary reset"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        milestone.refresh_from_db()
+        assert milestone.status == "active"
+
+    def test_reset_task_without_milestone_does_not_error(self, api_client):
+        """Tasks without a milestone are valid (backlog tasks); reset must not crash."""
+        from tests.factories import BacklogTaskFactory
+        backlog_task = BacklogTaskFactory(title="Backlog Task", status="done")
+        response = api_client.post(
+            f"/v1/tasks/{backlog_task.id}/reset/",
+            {"status": "todo", "reason": "reopen"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["status"] == "todo"
+
 
 # ---------------------------------------------------------------------------
 # Field normalization

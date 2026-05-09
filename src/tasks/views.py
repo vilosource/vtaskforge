@@ -522,10 +522,20 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
             update_fields += ["claimed_by", "claimed_at", "claim_expires_at"]
         task.save(update_fields=update_fields)
 
+        # If the task is now in a non-terminal status but its milestone is
+        # 'completed', reactivate the milestone so the task isn't silently
+        # invisible to the claimable filter.
+        from workplans.completion import maybe_reactivate_milestone
+        reactivated = maybe_reactivate_milestone(task)
+
+        event_data = {"from": old_status, "to": target_status, "reason": reason}
+        if reactivated is not None:
+            event_data["milestone_reactivated"] = reactivated.id
+
         record_event(
             task,
             "force_transition",
-            data={"from": old_status, "to": target_status, "reason": reason},
+            data=event_data,
             trigger_source="admin",
         )
 

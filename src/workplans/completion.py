@@ -26,3 +26,30 @@ def maybe_complete_milestone(task):
     milestone.status = "completed"
     milestone.save(update_fields=["status", "updated_at"])
     return milestone
+
+
+def maybe_reactivate_milestone(task):
+    """Reactivate a completed milestone when one of its tasks is force-reset
+    back to a non-terminal status.
+
+    Mirror of `maybe_complete_milestone`. Without this, force-resetting a
+    task into a completed milestone leaves the task in (e.g.) 'todo' but
+    invisible to the claimable filter — a silent fail. This is admin-only
+    territory (the reset endpoint is admin force-transition), so the
+    implicit milestone state change is acceptable.
+
+    Returns the milestone if it was reactivated, None otherwise.
+    """
+    milestone = getattr(task, "milestone", None)
+    if milestone is None:
+        return None
+
+    if milestone.status != "completed":
+        return None
+
+    if task.status in TERMINAL_STATUSES:
+        return None
+
+    milestone.status = "active"
+    milestone.save(update_fields=["status", "updated_at"])
+    return milestone
