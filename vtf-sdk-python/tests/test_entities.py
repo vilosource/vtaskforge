@@ -16,6 +16,7 @@ V2_TASK = {
     "needs_review_on_completion": True,
     "review_return_to": None,
     "requires": [{"id": "tsk-dep", "title": "Create user model", "status": "done"}],
+    "required_tags": ["executor", "pi"],
     "assigned_to": {"type": "agent", "id": "agt-001", "name": "executor-1", "pod_name": "pod-abc"},
     "claimed_by": {"type": "agent", "id": "agt-001", "name": "executor-1", "pod_name": "pod-abc"},
     "claimed_at": "2026-04-03T10:00:00Z",
@@ -157,6 +158,23 @@ class TestTaskEntity:
         from vtf_sdk.entities import Task
         task = Task.model_validate(V2_TASK)
         assert str(task) == "Add auth endpoint"
+
+    def test_task_requires_and_required_tags_are_split(self):
+        """requires holds TaskRef deps; required_tags holds capability strings."""
+        from vtf_sdk.entities import Task
+        from vtf_sdk.refs import TaskRef
+        task = Task.model_validate(V2_TASK)
+        assert task.required_tags == ["executor", "pi"]
+        assert len(task.requires) == 1
+        assert isinstance(task.requires[0], TaskRef)
+        assert task.requires[0].id == "tsk-dep"
+
+    def test_task_required_tags_default_empty(self):
+        """required_tags defaults to [] when omitted from response."""
+        from vtf_sdk.entities import Task
+        payload = {k: v for k, v in V2_TASK.items() if k != "required_tags"}
+        task = Task.model_validate(payload)
+        assert task.required_tags == []
 
 
 class TestOtherEntities:

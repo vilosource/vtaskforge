@@ -62,6 +62,7 @@ class Task(VtfModel):
     needs_review_on_completion: bool | None = None
     review_return_to: str | None = None
     requires: list[TaskRef] = []
+    required_tags: list[str] = []
     assigned_to: ActorRef | None = None
     claimed_by: ActorRef | None = None
     claimed_at: datetime | None = None

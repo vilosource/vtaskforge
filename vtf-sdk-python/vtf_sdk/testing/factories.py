@@ -26,6 +26,7 @@ def build_task(**overrides) -> Task:
         "labels": [],
         "acceptance_criteria": [],
         "requires": [],
+        "required_tags": [],
         "spec": "",
         "agent_model": "sonnet",
         "test_command": {},
