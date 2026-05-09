@@ -46,6 +46,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "needs_review_on_completion",
             "review_return_to",
             "requires",
+            "required_tags",
             "assigned_to",
             "claimed_by",
             "claimed_at",

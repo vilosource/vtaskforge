@@ -111,13 +111,14 @@ def find_claimable_tasks(
     """Return tasks that are claimable, optionally filtered by project, tags, and agent.
 
     Finds tasks in 'todo' status, excludes tasks with unresolved dependencies,
-    filters by tag matching (task.requires must be a subset of given tags),
+    filters by tag matching (task.required_tags must be a subset of given tags),
     and filters by assignment (unassigned or assigned to agent_id).
 
     Args:
         project_id: If given, only return tasks belonging to this project.
-        tags:       Agent's capability tags. If provided, task.requires must be
-                    a subset of these tags. If None or empty, tag filtering is skipped.
+        tags:       Agent's capability tags. If provided, task.required_tags
+                    must be a subset of these tags. If None or empty, tag
+                    filtering is skipped.
         agent_id:   If given, exclude tasks assigned to other agents.
 
     Returns:
@@ -139,9 +140,13 @@ def find_claimable_tasks(
     unmet_task_ids = get_tasks_with_unresolved_deps(all_task_ids)
     tasks = tasks.exclude(id__in=unmet_task_ids)
 
-    # Filter by tags if provided — task.requires must be subset of provided tags
+    # Filter by tags if provided — task.required_tags must be subset of provided tags.
+    # Empty required_tags means "any agent can claim".
     if tags:
-        filtered_ids = [t.id for t in tasks if not t.requires or set(t.requires).issubset(set(tags))]
+        filtered_ids = [
+            t.id for t in tasks
+            if not t.required_tags or set(t.required_tags).issubset(set(tags))
+        ]
         tasks = tasks.filter(id__in=filtered_ids)
 
     # Filter by assignment — exclude tasks assigned to other agents
@@ -207,15 +212,15 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
                 status_code=403,
             )
 
-        # Tag matching — task.requires must be subset of agent_tags
-        if task.requires:
-            if not set(task.requires).issubset(set(agent_tags)):
+        # Tag matching — task.required_tags must be subset of agent_tags
+        if task.required_tags:
+            if not set(task.required_tags).issubset(set(agent_tags)):
                 raise ClaimError(
                     message="Agent tags do not match task requirements",
                     code="tag_mismatch",
                     status_code=422,
                     details={
-                        "requires": task.requires,
+                        "required_tags": task.required_tags,
                         "agent_tags": agent_tags,
                     },
                 )

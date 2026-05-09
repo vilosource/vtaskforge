@@ -286,7 +286,7 @@ class TestClaimForbidden:
 @pytest.mark.django_db
 class TestClaimTagMismatch:
     def test_missing_required_tag_returns_422(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=["executor", "opus"])
+        task = make_task(milestone, workplan, required_tags=["executor", "opus"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["executor"]},
@@ -295,7 +295,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_missing_required_tag_error_code(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": []},
@@ -304,18 +304,18 @@ class TestClaimTagMismatch:
         assert response.data["error"]["code"] == "VALIDATION_ERROR"
 
     def test_missing_required_tag_includes_details(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["other"]},
             format="json",
         )
         details = response.data["error"]["details"]
-        assert "requires" in details
+        assert "required_tags" in details
         assert "agent_tags" in details
 
     def test_exact_tag_match_succeeds(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["executor"]},
@@ -324,7 +324,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_200_OK
 
     def test_superset_tags_succeed(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": ["executor", "opus", "extra"]},
@@ -333,7 +333,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_200_OK
 
     def test_empty_requires_any_agent_can_claim(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=[])
+        task = make_task(milestone, workplan, required_tags=[])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id, "tags": []},
@@ -342,7 +342,7 @@ class TestClaimTagMismatch:
         assert response.status_code == status.HTTP_200_OK
 
     def test_no_tags_provided_empty_requires_succeeds(self, api_client, milestone, workplan, agent1):
-        task = make_task(milestone, workplan, requires=[])
+        task = make_task(milestone, workplan, required_tags=[])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent1.id},
@@ -578,22 +578,22 @@ class TestClaimableEndpoint:
         assert len(response.data["results"]) == 0
 
     def test_claimable_tag_filter_includes_matching(self, api_client, milestone, workplan):
-        make_task(milestone, workplan, requires=["executor"])
-        make_task(milestone, workplan, requires=[])
+        make_task(milestone, workplan, required_tags=["executor"])
+        make_task(milestone, workplan, required_tags=[])
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2
 
     def test_claimable_tag_filter_excludes_non_matching(self, api_client, milestone, workplan):
-        make_task(milestone, workplan, requires=["opus"])
-        make_task(milestone, workplan, requires=["executor"])
+        make_task(milestone, workplan, required_tags=["opus"])
+        make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         assert len(response.data["results"]) == 1
-        assert response.data["results"][0]["requires"] == ["executor"]
+        assert response.data["results"][0]["required_tags"] == ["executor"]
 
     def test_claimable_no_tags_returns_all_todo(self, api_client, milestone, workplan):
-        make_task(milestone, workplan, requires=["executor"])
-        make_task(milestone, workplan, requires=[])
+        make_task(milestone, workplan, required_tags=["executor"])
+        make_task(milestone, workplan, required_tags=[])
         response = api_client.get("/v1/tasks/claimable/")
         assert len(response.data["results"]) == 2
 
@@ -650,7 +650,7 @@ class TestClaimableEndpoint:
 
     def test_claimable_combined_tags_and_deps(self, api_client, milestone, workplan):
         dep = make_task(milestone, workplan, "done", title="Dep")
-        task_with_dep = make_task(milestone, workplan, requires=["executor"], title="With dep")
+        task_with_dep = make_task(milestone, workplan, required_tags=["executor"], title="With dep")
         Link.objects.create(
             source_type="task",
             source_id=task_with_dep.id,
@@ -658,7 +658,7 @@ class TestClaimableEndpoint:
             target_id=dep.id,
             link_type="depends_on",
         )
-        task_no_dep = make_task(milestone, workplan, requires=["executor"], title="No dep")
+        task_no_dep = make_task(milestone, workplan, required_tags=["executor"], title="No dep")
         response = api_client.get("/v1/tasks/claimable/?tags=executor")
         ids = [t["id"] for t in response.data["results"]]
         assert task_with_dep.id in ids
@@ -697,7 +697,7 @@ class TestClaimDBTagLookup:
     def test_claim_uses_db_tags_when_no_body_tags(self, api_client, milestone, workplan):
         """When no tags in request body, agent's DB tags are used for matching."""
         agent = AgentFactory(tags=["executor"])
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent.id},
@@ -708,7 +708,7 @@ class TestClaimDBTagLookup:
     def test_claim_db_tags_mismatch_returns_422(self, api_client, milestone, workplan):
         """When agent DB tags don't match task requires, 422 is returned."""
         agent = AgentFactory(tags=["other"])
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
             {"agent_id": agent.id},
@@ -720,7 +720,7 @@ class TestClaimDBTagLookup:
     def test_claim_body_tags_override_db_tags(self, api_client, milestone, workplan):
         """When tags are provided in request body, they override agent's DB tags."""
         agent = AgentFactory(tags=["other"])
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         # Providing matching tags in the body should succeed even though DB tags don't match
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
@@ -732,7 +732,7 @@ class TestClaimDBTagLookup:
     def test_claim_body_tags_can_cause_mismatch(self, api_client, milestone, workplan):
         """Body tags that don't match task requires return 422 even if DB tags would match."""
         agent = AgentFactory(tags=["executor"])
-        task = make_task(milestone, workplan, requires=["executor"])
+        task = make_task(milestone, workplan, required_tags=["executor"])
         # Providing non-matching tags in the body should fail even though DB tags match
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/",
@@ -774,8 +774,8 @@ class TestClaimableDBTagLookup:
     def test_claimable_with_agent_id_uses_db_tags(self, api_client, milestone, workplan):
         """claimable?agent_id= uses agent's DB tags for filtering when no tags param."""
         agent = AgentFactory(tags=["executor"])
-        make_task(milestone, workplan, requires=["executor"], title="Matching task")
-        make_task(milestone, workplan, requires=["opus"], title="Non-matching task")
+        make_task(milestone, workplan, required_tags=["executor"], title="Matching task")
+        make_task(milestone, workplan, required_tags=["opus"], title="Non-matching task")
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent.id}")
         assert response.status_code == status.HTTP_200_OK
         titles = [t["title"] for t in response.data["results"]]
@@ -785,8 +785,8 @@ class TestClaimableDBTagLookup:
     def test_claimable_tags_param_overrides_db_tags(self, api_client, milestone, workplan):
         """Explicit tags param overrides DB agent tags in claimable endpoint."""
         agent = AgentFactory(tags=["executor"])
-        make_task(milestone, workplan, requires=["opus"], title="Opus task")
-        make_task(milestone, workplan, requires=["executor"], title="Executor task")
+        make_task(milestone, workplan, required_tags=["opus"], title="Opus task")
+        make_task(milestone, workplan, required_tags=["executor"], title="Executor task")
         # Explicit tags=opus in query param should override agent's DB tags (executor)
         response = api_client.get(f"/v1/tasks/claimable/?agent_id={agent.id}&tags=opus")
         titles = [t["title"] for t in response.data["results"]]
@@ -797,8 +797,8 @@ class TestClaimableDBTagLookup:
         self, api_client, milestone, workplan
     ):
         """claimable with non-existent agent_id falls back to no tag filtering."""
-        make_task(milestone, workplan, requires=[], title="No requires")
-        make_task(milestone, workplan, requires=["executor"], title="Needs executor")
+        make_task(milestone, workplan, required_tags=[], title="No requires")
+        make_task(milestone, workplan, required_tags=["executor"], title="Needs executor")
         response = api_client.get("/v1/tasks/claimable/?agent_id=nonexistent")
         # With empty tags from failed DB lookup, tag filter is skipped — all todo tasks returned
         assert response.status_code == status.HTTP_200_OK
@@ -924,7 +924,7 @@ class TestClaimAutoMembership:
         membership grant — both happen in the same transaction.
         """
         from prefs.models import ProjectMembership
-        task = make_task(milestone, workplan, requires=["specialist"])
+        task = make_task(milestone, workplan, required_tags=["specialist"])
         # agent1 has no tags so the tag check fails
         response = api_client.post(
             f"/v1/tasks/{task.id}/claim/", {"agent_id": agent1.id}, format="json"

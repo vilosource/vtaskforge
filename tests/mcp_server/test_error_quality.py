@@ -53,7 +53,7 @@ def _parse(raw: str) -> dict:
 @pytest.mark.django_db
 def test_claim_tag_mismatch_error(agent1):
     """tag_mismatch: error is actionable and has available_actions."""
-    task = TaskFactory(status="todo", requires=["python", "docker"])
+    task = TaskFactory(status="todo", required_tags=["python", "docker"])
 
     result = _parse(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id, tags="python"))
 

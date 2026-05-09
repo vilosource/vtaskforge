@@ -42,7 +42,7 @@ class TaskV2Serializer(serializers.ModelSerializer):
             "project", "workplan", "milestone",
             "labels", "acceptance_criteria",
             "needs_review_before_start", "needs_review_on_completion",
-            "review_return_to", "requires",
+            "review_return_to", "requires", "required_tags",
             "assigned_to", "claimed_by", "claimed_at",
             "claim_timeout", "claim_expires_at",
             "created_by", "spec", "agent_model",
@@ -70,11 +70,13 @@ class TaskV2Serializer(serializers.ModelSerializer):
             data["milestone"] = MilestoneRefSerializer(instance.milestone).data
         else:
             data["milestone"] = None
-        # `requires` is a list of agent-tag strings — the claiming agent's
-        # tags must be a superset. Task-to-task dependencies live in the
-        # Link table (link_type=depends_on), not here. See interface
-        # CONTRACT §6 and services.claimable_tasks filter at services.py:144.
+        # `required_tags` is the list of agent capability tag strings — the
+        # claiming agent's tags must be a superset. `requires` is reserved
+        # for task-to-task dependency refs. See migration 0014 for the
+        # split rationale and the find_claimable_tasks filter in
+        # services.py.
         data["requires"] = list(instance.requires or [])
+        data["required_tags"] = list(instance.required_tags or [])
         return data
 
     def get_permissions(self, obj):

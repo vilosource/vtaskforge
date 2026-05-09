@@ -214,7 +214,7 @@ class TestClaimTaskErrors:
     def test_claim_task_tag_mismatch_raises(self, db):
         """ClaimError raised when agent tags do not satisfy task.requires."""
         agent = AgentFactory(tags=["other"])
-        task = TaskFactory(status="todo", requires=["executor"])
+        task = TaskFactory(status="todo", required_tags=["executor"])
         with pytest.raises(ClaimError) as exc_info:
             claim_task(task.id, agent.id, ["other"])
         assert exc_info.value.code == "tag_mismatch"
@@ -346,10 +346,10 @@ class TestFindClaimableTasks:
 
     def test_find_claimable_filters_by_tags(self, db):
         """task.requires must be a subset of provided tags; tasks with unmatched requires excluded."""
-        task_no_requires = TaskFactory(status="todo", requires=[], title="No requires")
-        task_executor = TaskFactory(status="todo", requires=["executor"], title="Needs executor")
-        task_opus = TaskFactory(status="todo", requires=["opus"], title="Needs opus")
-        task_both = TaskFactory(status="todo", requires=["executor", "opus"], title="Needs both")
+        task_no_requires = TaskFactory(status="todo", required_tags=[], title="No requires")
+        task_executor = TaskFactory(status="todo", required_tags=["executor"], title="Needs executor")
+        task_opus = TaskFactory(status="todo", required_tags=["opus"], title="Needs opus")
+        task_both = TaskFactory(status="todo", required_tags=["executor", "opus"], title="Needs both")
 
         # Tags: only executor — should see no-requires and executor tasks
         result_ids = [t.id for t in find_claimable_tasks(tags=["executor"])]

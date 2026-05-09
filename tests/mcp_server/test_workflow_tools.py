@@ -48,9 +48,9 @@ def test_next_work_matches_agent_tags():
     """vtf_next_work filters out tasks whose requirements the agent cannot meet."""
     project = ProjectFactory()
     # Task requires "python" — agent with "docker" only cannot claim it
-    requires_python = TaskFactory(project=project, status="todo", requires=["python"])
+    requires_python = TaskFactory(project=project, status="todo", required_tags=["python"])
     # Task with no requirements — any agent can claim it
-    no_requirements = TaskFactory(project=project, status="todo", requires=[])
+    no_requirements = TaskFactory(project=project, status="todo", required_tags=[])
 
     result = json.loads(vtf_next_work(project_id=project.id, tags="docker"))
 
@@ -301,7 +301,7 @@ def test_claim_and_start_includes_available_actions(agent1):
 @pytest.mark.django_db
 def test_claim_and_start_tag_mismatch_error(agent1):
     """vtf_claim_and_start returns actionable error when agent tags don't match task requirements."""
-    task = TaskFactory(status="todo", requires=["python", "docker"])
+    task = TaskFactory(status="todo", required_tags=["python", "docker"])
 
     # Agent only has "python" — missing "docker"
     result = json.loads(vtf_claim_and_start(task_id=task.id, agent_id=agent1.id, tags="python"))

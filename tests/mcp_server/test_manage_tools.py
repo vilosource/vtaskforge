@@ -680,7 +680,7 @@ def test_update_acceptance_criteria():
 @pytest.mark.django_db
 def test_update_requires():
     """vtf_manage_task(action=update) modifies requires field on existing task."""
-    task = TaskFactory(status="draft", requires=[])
+    task = TaskFactory(status="draft", required_tags=[])
     dep = TaskFactory(status="draft", project=task.project)
 
     result = json.loads(vtf_manage_task(
