@@ -17,7 +17,7 @@
 
 services:
   dogfood-api:
-    restart: unless-stopped
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.prod
@@ -38,7 +38,7 @@ services:
       - ALLOWED_HOSTS=localhost,127.0.0.1
 
   dogfood-db:
-    restart: unless-stopped
+    restart: "no"
     image: postgres:16-alpine
     volumes:
       - dogfood-pgdata:/var/lib/postgresql/data
@@ -53,11 +53,11 @@ services:
       retries: 5
 
   dogfood-redis:
-    restart: unless-stopped
+    restart: "no"
     image: redis:7-alpine
 
   dogfood-celery:
-    restart: unless-stopped
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.prod
@@ -76,7 +76,7 @@ services:
       - SECRET_KEY=dogfood-secret-change-in-real-prod
 
   dogfood-celery-beat:
-    restart: unless-stopped
+    restart: "no"
     build:
       context: .
       dockerfile: Dockerfile.prod
