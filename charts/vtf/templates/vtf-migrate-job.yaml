@@ -50,11 +50,15 @@ spec:
               python manage.py shell -c "
               from django.contrib.auth import get_user_model
               User = get_user_model()
-              if not User.objects.filter(username='{{ .Values.migrate.superuser.username }}').exists():
-                  User.objects.create_superuser('{{ .Values.migrate.superuser.username }}', '', '{{ .Values.migrate.superuser.password }}')
-                  print('Superuser created')
-              else:
-                  print('Superuser already exists')
+              u, created = User.objects.get_or_create(
+                  username='{{ .Values.migrate.superuser.username }}',
+                  defaults={'is_staff': True, 'is_superuser': True},
+              )
+              u.set_password('{{ .Values.migrate.superuser.password }}')
+              u.is_staff = True
+              u.is_superuser = True
+              u.save()
+              print('Superuser created' if created else 'Superuser password synced')
               "
               {{- end }}
           env:
