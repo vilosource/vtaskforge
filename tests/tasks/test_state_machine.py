@@ -89,7 +89,12 @@ class TestGetValidTransitions:
 
     def test_pending_completion_review_transitions(self):
         result = get_valid_transitions("pending_completion_review")
-        assert set(result) == {"done", "changes_requested", "cancelled", "deferred"}
+        # R3: + needs_attention (review-lease-expired escalation to the
+        # human terminal; see docs/review-phase-lease-DESIGN.md).
+        assert set(result) == {
+            "done", "changes_requested", "cancelled", "deferred",
+            "needs_attention",
+        }
 
     def test_changes_requested_transitions(self):
         result = get_valid_transitions("changes_requested")

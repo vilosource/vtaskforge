@@ -162,7 +162,17 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'tasks.celery_tasks.expire_stale_claims',
         'schedule': timedelta(seconds=60),
     },
+    # R3 (I2 backstop for vafi#18): escalate stalled
+    # pending_completion_review tasks. Sibling of the claim reaper.
+    'expire-stale-reviews': {
+        'task': 'tasks.celery_tasks.expire_stale_reviews',
+        'schedule': timedelta(seconds=60),
+    },
 }
+
+# R3: review-phase lease duration (minutes). Aligns with the claim
+# timeout default. Single source consumed by tasks.state_machine.
+REVIEW_TIMEOUT_MINUTES = int(os.environ.get('VTF_REVIEW_TIMEOUT_MINUTES', '30'))
 
 # CXDB — execution trace store (read-only consumer)
 CXDB_BASE_URL = os.environ.get('CXDB_BASE_URL', 'http://cxdb-server.vafi-agents.svc.cluster.local')

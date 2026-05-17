@@ -41,3 +41,31 @@ def expire_stale_claims():
         count += 1
 
     return count
+
+
+@shared_task
+def expire_stale_reviews():
+    """R3 (I2 backstop for vafi#18): escalate tasks stuck in
+    'pending_completion_review' past their review lease to
+    'needs_attention' (the human terminal), recording a 'review_expired'
+    TaskEvent. Sibling of expire_stale_claims — the system never rests
+    in a silent non-terminal state, enforced server-side independent of
+    the controller. See docs/review-phase-lease-DESIGN.md.
+
+    Returns the count of reviews escalated.
+    """
+    now = timezone.now()
+    stale = Task.objects.filter(
+        status="pending_completion_review",
+        review_expires_at__lt=now,
+    )
+
+    count = 0
+    for task in stale:
+        task.review_expires_at = None
+        task.save(update_fields=["review_expires_at"])
+        perform_transition(task, "needs_attention", trigger_source="system")
+        record_event(task, "review_expired", data={}, trigger_source="system")
+        count += 1
+
+    return count
