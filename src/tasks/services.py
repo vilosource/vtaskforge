@@ -253,31 +253,14 @@ def claim_task(task_id: str, agent_id: str, agent_tags: list = None) -> Task:
         record_event(task, "claimed", data={"agent_id": agent_id},
                      trigger_source="claim", actor=agent.user)
 
-        # Auto-grant project membership on first claim into a project the
-        # agent isn't already a member of. Per docs/agent-project-membership-DECISION.md:
-        # demand-driven, idempotent, audited. Without this, an agent's
-        # subsequent list/poll calls return empty silently because the
-        # task-list filter requires HasProjectMembership.
-        if task.project_id:
-            from prefs.models import ProjectMembership
-            _, membership_created = ProjectMembership.objects.get_or_create(
-                user=agent.user,
-                project_id=task.project_id,
-                defaults={"role": "member"},
-            )
-            if membership_created:
-                record_event(
-                    task,
-                    "auto_membership_grant",
-                    data={
-                        "project_id": task.project_id,
-                        "user_id": agent.user.id,
-                        "agent_id": agent_id,
-                        "source": "claim",
-                    },
-                    trigger_source="claim",
-                    actor=agent.user,
-                )
+        # R2 (architecture Bet B / scope S1): the claim-time
+        # ProjectMembership auto-grant is REMOVED. Fleet agents are
+        # service principals authorised by role across the instance
+        # (core.authorization.is_fleet_principal) — they no longer need
+        # a per-project membership row. This supersedes the *frame* of
+        # docs/agent-project-membership-DECISION.md (which patched the
+        # executor but left the judge unmembered ⇒ vafi#18).
+        # See docs/fleet-principal-authorization-DESIGN.md.
 
     return task
 
