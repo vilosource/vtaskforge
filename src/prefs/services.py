@@ -67,6 +67,22 @@ def get_or_create_profile(user):
         return UserProfile.objects.create(user=user, user_type=user_type)
 
 
+def ensure_service_profile(user):
+    """Idempotently mark `user` as a fleet service principal
+    (UserProfile.user_type='service'). Called at agent registration so
+    fleet agents are authorised by role, not per-project membership
+    (architecture R2 / Bet B). See
+    docs/fleet-principal-authorization-DESIGN.md.
+    """
+    profile, created = UserProfile.objects.get_or_create(
+        user=user, defaults={"user_type": "service"}
+    )
+    if not created and profile.user_type != "service":
+        profile.user_type = "service"
+        profile.save(update_fields=["user_type", "updated_at"])
+    return profile
+
+
 def create_service_account(name):
     """Create a service account user with token and profile. Returns (user, token)."""
     user = User.objects.create_user(username=name)
