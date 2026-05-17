@@ -3,14 +3,28 @@
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
-from prefs.models import ProjectMembership
+from prefs.models import ProjectMembership, UserProfile
+
+
+def is_fleet_principal(user) -> bool:
+    """A fleet service principal — authenticated + UserProfile.user_type
+    == 'service'. Authorised by fleet role across the whole instance
+    (scope S1), with NO ProjectMembership row: fleet agents are
+    deployment infrastructure serving every project, not project
+    collaborators. See vtaskforge/docs/fleet-principal-authorization-DESIGN.md
+    (architecture R2, Bet B). Humans are unaffected.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return False
+    return UserProfile.objects.filter(user=user, user_type="service").exists()
 
 
 def scope_queryset_to_user_projects(qs, user, model_class):
-    """Filter queryset to user's project memberships. Staff sees all."""
+    """Filter queryset to user's project memberships. Staff and fleet
+    principals see all (the latter by instance-wide role)."""
     if not user.is_authenticated:
         return qs.none()
-    if user.is_staff:
+    if user.is_staff or is_fleet_principal(user):
         return qs
     filter_path = getattr(model_class, "project_filter_path", None)
     if filter_path is None:
@@ -22,8 +36,8 @@ def scope_queryset_to_user_projects(qs, user, model_class):
 
 
 def check_project_membership(user, project_id: str) -> bool:
-    """Return True if user is staff or has membership in the project."""
-    if user.is_staff:
+    """True if user is staff, a fleet principal, or a project member."""
+    if user.is_staff or is_fleet_principal(user):
         return True
     return ProjectMembership.objects.filter(
         user=user, project_id=project_id
@@ -40,7 +54,7 @@ class ProjectScopedPermission(BasePermission):
     """Object-level permission via obj.get_project_id()."""
 
     def has_object_permission(self, request, view, obj):
-        if request.user.is_staff:
+        if request.user.is_staff or is_fleet_principal(request.user):
             return True
         project_id = getattr(obj, "get_project_id", lambda: None)()
         if project_id is None:
@@ -51,7 +65,15 @@ class ProjectScopedPermission(BasePermission):
 
 
 class RoleBasedPermission(BasePermission):
-    """Enforce owner/member/viewer roles on write operations."""
+    """Enforce owner/member/viewer roles on write operations.
+
+    A fleet principal is bounded to **member-equivalent** capability
+    instance-wide: it may create and update its own/claimed objects but
+    NOT delete, and gets no owner-only escalation and no membership-admin
+    (those stay staff/owner). This is exactly what executor (claim +
+    own-task writes) and judge (review writes) need and nothing more
+    (scope S1; finer per-tag bounding is YAGNI / future S3).
+    """
 
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff:
@@ -61,14 +83,20 @@ class RoleBasedPermission(BasePermission):
         project_id = getattr(obj, "get_project_id", lambda: None)()
         if project_id is None:
             return True
-        membership = ProjectMembership.objects.filter(
-            user=request.user, project_id=project_id
-        ).first()
-        if not membership:
-            return False
-        if membership.role == "owner":
+
+        if is_fleet_principal(request.user):
+            role = "member"  # bounded; no membership row, no owner ops
+        else:
+            membership = ProjectMembership.objects.filter(
+                user=request.user, project_id=project_id
+            ).first()
+            if not membership:
+                return False
+            role = membership.role
+
+        if role == "owner":
             return True
-        if membership.role == "viewer":
+        if role == "viewer":
             return False
         # member: can create, can update own, cannot delete.
         # An agent that claimed a task is also considered "own" for the

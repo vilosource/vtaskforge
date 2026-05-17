@@ -11,6 +11,7 @@ from tasks.models import Task
 from tasks.serializers import TaskSerializer
 
 from core.versioning import VersionedSerializerMixin
+from prefs.services import ensure_service_profile
 from .models import Agent
 from .serializers import AgentSerializer
 from .serializers_v2 import AgentV2Serializer
@@ -52,6 +53,9 @@ class AgentViewSet(VersionedSerializerMixin, ModelViewSet):
                     existing.user = user
                     existing.save(update_fields=["user"])
 
+                # R2: fleet agents are service principals (role-authorised)
+                ensure_service_profile(user)
+
                 data = serializer.data
                 data["token"] = token.key
                 return Response(data, status=status.HTTP_200_OK)
@@ -68,6 +72,11 @@ class AgentViewSet(VersionedSerializerMixin, ModelViewSet):
         # Link Agent → User via FK
         agent.user = user
         agent.save(update_fields=["user"])
+
+        # R2: fleet agents are service principals (role-authorised
+        # instance-wide, not per-project members). See
+        # docs/fleet-principal-authorization-DESIGN.md.
+        ensure_service_profile(user)
 
         data = serializer.data
         data["token"] = token.key
