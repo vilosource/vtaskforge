@@ -73,6 +73,9 @@ class Task(ProjectScopedModel, NanoIDMixin, TimestampMixin):
     claimed_at = models.DateTimeField(null=True, blank=True, default=None)
     claim_timeout = models.DurationField(null=True, blank=True, default=None)
     claim_expires_at = models.DateTimeField(null=True, blank=True, default=None)
+    # R3: review-phase lease — set on entry to pending_completion_review;
+    # expire_stale_reviews escalates to needs_attention if exceeded.
+    review_expires_at = models.DateTimeField(null=True, blank=True, default=None)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="created_tasks",

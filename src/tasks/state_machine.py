@@ -1,5 +1,15 @@
+from datetime import timedelta
+
+from django.conf import settings
+from django.utils import timezone
+
 from events.services import record_event
 from tasks.exceptions import GuardViolation, InvalidTransition
+
+# R3: review-phase lease. A task entering pending_completion_review
+# gets a deadline; expire_stale_reviews escalates it to needs_attention
+# if no verdict is recorded in time (the I2 backstop for vafi#18).
+DEFAULT_REVIEW_TIMEOUT_MINUTES = 30
 
 TERMINAL_STATUSES = {"done", "cancelled"}
 
@@ -42,6 +52,10 @@ VALID_TRANSITIONS = {
         "changes_requested",     # rejected
         "cancelled",
         "deferred",
+        "needs_attention",       # R3: review lease expired / verdict
+                                 # unrecordable → escalate to the human
+                                 # terminal (I2 backstop; reaper-driven).
+                                 # See docs/review-phase-lease-DESIGN.md
     ],
     "changes_requested": [
         "doing",                     # executor reclaims for rework (vafi)
@@ -138,7 +152,13 @@ def perform_transition(task, new_status: str, trigger_source: str = "", actor=No
     _run_guards(task, task.status, new_status)
     old_status = task.status
     task.status = new_status
-    task.save(update_fields=["status", "updated_at"])
+    _fields = ["status", "updated_at"]
+    if new_status == "pending_completion_review":
+        mins = getattr(settings, "REVIEW_TIMEOUT_MINUTES",
+                       DEFAULT_REVIEW_TIMEOUT_MINUTES)
+        task.review_expires_at = timezone.now() + timedelta(minutes=mins)
+        _fields.append("review_expires_at")
+    task.save(update_fields=_fields)
     record_event(task, "status_changed", data={"from": old_status, "to": new_status},
                  trigger_source=trigger_source, actor=actor)
 
