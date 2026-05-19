@@ -56,6 +56,10 @@ class Task(VtfModel):
     project: ProjectRef
     workplan: WorkplanRef | None = None
     milestone: MilestoneRef | None = None
+    # WC-1/C2: server-derived base_ref (milestone integration branch or
+    # project default). The SoR owns the rule; consumers (the vafi
+    # controller, WC-2) read this and never re-derive it.
+    base_ref: str = ""
     labels: list[str] = []
     acceptance_criteria: list[str] = []
     needs_review_before_start: bool | None = None
