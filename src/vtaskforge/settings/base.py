@@ -168,11 +168,23 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'tasks.celery_tasks.expire_stale_reviews',
         'schedule': timedelta(seconds=60),
     },
+    # WC-1/C4 (I2 at DAG granularity): reap tasks stuck in 'integrating'
+    # past their lease. Sibling of the claim/review reapers.
+    'expire-stale-integrations': {
+        'task': 'tasks.celery_tasks.expire_stale_integrations',
+        'schedule': timedelta(seconds=60),
+    },
 }
 
 # R3: review-phase lease duration (minutes). Aligns with the claim
 # timeout default. Single source consumed by tasks.state_machine.
 REVIEW_TIMEOUT_MINUTES = int(os.environ.get('VTF_REVIEW_TIMEOUT_MINUTES', '30'))
+
+# WC-1/C4: workgraph integration lease duration (minutes). Single source
+# consumed by tasks.state_machine on entry to 'integrating'.
+INTEGRATION_TIMEOUT_MINUTES = int(
+    os.environ.get('VTF_INTEGRATION_TIMEOUT_MINUTES', '30')
+)
 
 # CXDB — execution trace store (read-only consumer)
 CXDB_BASE_URL = os.environ.get('CXDB_BASE_URL', 'http://cxdb-server.vafi-agents.svc.cluster.local')

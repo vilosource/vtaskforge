@@ -1,6 +1,10 @@
 # WC-1 — Workgraph Composition contract (vtaskforge) — DESIGN
 
-**Status:** DRAFT v0.1 — 2026-05-17. Design-first; not implemented.
+**Status:** IMPLEMENTED v0.2 — 2026-05-19. Forks ratified (F-A
+server-derived base_ref; F-B milestone select_for_update + 'integrating';
+OAQ-7 deferred). C1–C4 delivered north-star TDD on
+`feat/wc1-composition-contract`; full suite green. Deploy deferred to a
+home session (office cannot reach the cluster).
 **Architecture:** R-slice WC-1 of `agentic-pipeline-ARCHITECTURE.md`
 §10 (Workgraph Composition substrate). **Kind:** feature (north-star
 TDD; system-of-record contract change — same per-merge gate as R2).

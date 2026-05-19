@@ -34,12 +34,15 @@ class TaskV2Serializer(serializers.ModelSerializer):
     claimed_by = ActorRefField(read_only=True)
     created_by = ActorRefField(read_only=True)
     permissions = serializers.SerializerMethodField()
+    # WC-1/C2: server-derived base_ref. The rule lives in the SoR; the
+    # controller consumes this and never re-derives it.
+    base_ref = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             "id", "title", "description", "status",
-            "project", "workplan", "milestone",
+            "project", "workplan", "milestone", "base_ref",
             "labels", "acceptance_criteria",
             "needs_review_before_start", "needs_review_on_completion",
             "review_return_to", "requires", "required_tags",
@@ -52,7 +55,7 @@ class TaskV2Serializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id", "created_at", "updated_at", "status", "retry_count",
-            "created_by", "claimed_by", "permissions",
+            "created_by", "claimed_by", "permissions", "base_ref",
         ]
 
     def to_representation(self, instance):
@@ -78,6 +81,10 @@ class TaskV2Serializer(serializers.ModelSerializer):
         data["requires"] = list(instance.requires or [])
         data["required_tags"] = list(instance.required_tags or [])
         return data
+
+    def get_base_ref(self, obj):
+        from tasks.services import resolve_base_ref
+        return resolve_base_ref(obj)
 
     def get_permissions(self, obj):
         request = self.context.get("request")

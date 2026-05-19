@@ -9,6 +9,7 @@ TASK_STATUS_CHOICES = [
     ("todo", "To Do"),
     ("doing", "Doing"),
     ("pending_completion_review", "Pending Completion Review"),
+    ("integrating", "Integrating"),
     ("changes_requested", "Changes Requested"),
     ("needs_attention", "Needs Attention"),
     ("blocked", "Blocked"),
@@ -76,6 +77,10 @@ class Task(ProjectScopedModel, NanoIDMixin, TimestampMixin):
     # R3: review-phase lease — set on entry to pending_completion_review;
     # expire_stale_reviews escalates to needs_attention if exceeded.
     review_expires_at = models.DateTimeField(null=True, blank=True, default=None)
+    # WC-1/C4: workgraph integration lease — set on entry to 'integrating';
+    # expire_stale_integrations escalates to needs_attention if exceeded
+    # (I2 at DAG granularity; closes the silent non-terminal C3 introduces).
+    integration_expires_at = models.DateTimeField(null=True, blank=True, default=None)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="created_tasks",

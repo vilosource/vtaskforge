@@ -476,3 +476,90 @@ def get_board_summary(project_id: str = None, workplan_id: str = None) -> dict:
         "pending_reviews": pending_reviews,
         "active_agents": active_agents,
     }
+
+
+# ---------------------------------------------------------------------------
+# WC-1 — Workgraph Composition contract (the SoR half).
+# ---------------------------------------------------------------------------
+
+class MergeSlotError(Exception):
+    """Raised by take_merge_slot() when the milestone's single in-flight
+    integration slot is already occupied (F-B serialization)."""
+
+    def __init__(self, message: str, status_code: int = 409, details: dict = None):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.details = details or {}
+
+
+def is_workgraph_task(task) -> bool:
+    """A task is a workgraph task iff its milestone owns an integration
+    branch. Non-workgraph tasks keep the V16 straight-to-done path."""
+    return bool(task.milestone_id and task.milestone.integration_branch)
+
+
+def resolve_base_ref(task) -> str:
+    """WC-1/C2 — server-derived base_ref. The rule lives in the SoR; the
+    controller (WC-2) consumes it and never re-derives it.
+
+        task.milestone.integration_branch  or  project.default_branch
+
+    Single-task / no-milestone ⇒ project default (V16 unchanged).
+    """
+    if task.milestone_id and task.milestone.integration_branch:
+        return task.milestone.integration_branch
+    return task.project.default_branch or "main"
+
+
+def take_merge_slot(task) -> Task:
+    """WC-1/C3 (F-B) — the serialized merge point.
+
+    The controller calls this to take the milestone's single integration
+    slot before merging an approved workgraph task. Reuses the exact
+    claim_task idiom: ``transaction.atomic()`` + ``select_for_update()``
+    on the **Milestone** row ⇒ at most one task per milestone in
+    'integrating' at a time; contenders are rejected (and retry later).
+
+    Raises MergeSlotError if the slot is occupied or the task is not an
+    approvable workgraph task.
+    """
+    from tasks.state_machine import perform_transition
+    from workplans.models import Milestone
+
+    if not is_workgraph_task(task):
+        raise MergeSlotError(
+            "Task is not a workgraph task (milestone has no integration "
+            "branch); it does not use the merge slot.",
+            status_code=409,
+        )
+
+    with transaction.atomic():
+        # Serialize on the milestone row — the F-B primitive.
+        Milestone.objects.select_for_update().get(pk=task.milestone_id)
+
+        occupied = (
+            Task.objects.filter(
+                milestone_id=task.milestone_id, status="integrating"
+            )
+            .exclude(pk=task.pk)
+            .exists()
+        )
+        if occupied:
+            raise MergeSlotError(
+                "Milestone merge slot is occupied — another task is "
+                "integrating. Retry once it completes.",
+                status_code=409,
+                details={"milestone_id": task.milestone_id},
+            )
+
+        perform_transition(task, "integrating", trigger_source="merge_slot")
+
+    record_event(
+        task, "merge_slot_taken",
+        data={"milestone_id": task.milestone_id,
+              "integration_branch": task.milestone.integration_branch},
+        trigger_source="merge_slot",
+    )
+    task.refresh_from_db()
+    return task

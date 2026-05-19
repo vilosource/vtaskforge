@@ -51,7 +51,14 @@ def submit_review(
         if task.status == "pending_start_review":
             perform_transition(task, "todo")
         else:  # pending_completion_review
-            perform_transition(task, "done")
+            # WC-1/C3: an approved *workgraph* task takes the milestone's
+            # serialized merge slot (→ integrating) instead of going
+            # straight to done. Non-workgraph tasks: V16 unchanged.
+            from tasks.services import is_workgraph_task, take_merge_slot
+            if is_workgraph_task(task):
+                take_merge_slot(task)
+            else:
+                perform_transition(task, "done")
     else:
         # rejected or changes_requested — set review_return_to BEFORE transitioning
         task.review_return_to = task.status

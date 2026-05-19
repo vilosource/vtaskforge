@@ -69,3 +69,33 @@ def expire_stale_reviews():
         count += 1
 
     return count
+
+
+@shared_task
+def expire_stale_integrations():
+    """WC-1/C4 (I2 at DAG granularity): escalate tasks stuck in
+    'integrating' past their integration lease to 'needs_attention',
+    recording an 'integration_expired' TaskEvent. Closes the silent
+    non-terminal that the C3 merge slot introduces (a controller that
+    dies mid-merge would otherwise hold the milestone slot forever).
+    Sibling of expire_stale_claims / expire_stale_reviews — no
+    cross-talk: it filters strictly on status='integrating'.
+
+    Returns the count of integrations escalated.
+    """
+    now = timezone.now()
+    stale = Task.objects.filter(
+        status="integrating",
+        integration_expires_at__lt=now,
+    )
+
+    count = 0
+    for task in stale:
+        task.integration_expires_at = None
+        task.save(update_fields=["integration_expires_at"])
+        perform_transition(task, "needs_attention", trigger_source="system")
+        record_event(task, "integration_expired", data={},
+                     trigger_source="system")
+        count += 1
+
+    return count

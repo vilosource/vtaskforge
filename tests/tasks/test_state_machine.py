@@ -41,10 +41,11 @@ class TestInvalidTransitionException:
 
 
 class TestValidTransitionsStructure:
-    def test_all_11_statuses_are_keys(self):
+    def test_all_12_statuses_are_keys(self):
+        # WC-1/C3: + 'integrating' (the serialized milestone merge point).
         expected = {
             "draft", "pending_start_review", "todo", "doing",
-            "pending_completion_review", "changes_requested",
+            "pending_completion_review", "integrating", "changes_requested",
             "needs_attention", "blocked", "deferred",
             "cancelled", "done",
         }
@@ -91,9 +92,19 @@ class TestGetValidTransitions:
         result = get_valid_transitions("pending_completion_review")
         # R3: + needs_attention (review-lease-expired escalation to the
         # human terminal; see docs/review-phase-lease-DESIGN.md).
+        # WC-1/C3: + integrating (approved workgraph task takes the
+        # milestone merge slot; see docs/wc1-composition-contract-DESIGN.md).
         assert set(result) == {
-            "done", "changes_requested", "cancelled", "deferred",
-            "needs_attention",
+            "done", "integrating", "changes_requested", "cancelled",
+            "deferred", "needs_attention",
+        }
+
+    def test_integrating_transitions(self):
+        # WC-1/C3: the serialized merge point — controller reports
+        # success (→done) or conflict / lease-expiry (→needs_attention).
+        result = get_valid_transitions("integrating")
+        assert set(result) == {
+            "done", "needs_attention", "cancelled", "deferred",
         }
 
     def test_changes_requested_transitions(self):
