@@ -72,6 +72,19 @@ class AsyncTaskManager(_AsyncBaseManager):
         data = await self._transport.post(f"/v2/tasks/{id}/fail/")
         return Task.model_validate(data)
 
+    async def integration_result(
+        self, id: str, *, success: bool, detail: str = ""
+    ) -> Task:
+        """WC-2: report a workgraph task's post-approve integration
+        outcome. success ⇒ integrating→done; not success ⇒
+        integrating→needs_attention (+ a note carrying `detail`).
+        Idempotent if the task is already resolved (reaper race)."""
+        data = await self._transport.post(
+            f"/v2/tasks/{id}/integration-result/",
+            json={"success": success, "detail": detail},
+        )
+        return Task.model_validate(data)
+
     async def heartbeat(self, id: str) -> None:
         await self._transport.post(f"/v2/tasks/{id}/heartbeat/")
 
