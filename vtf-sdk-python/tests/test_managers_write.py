@@ -80,6 +80,26 @@ class TestTaskTransitions:
         task = vtf.tasks.fail("tsk-abc-123")
         assert task.status == "needs_attention"
 
+    def test_task_integration_result_success(self, client):
+        """WC-2 reporting seam — success ⇒ done."""
+        vtf, router = client
+        done = {**V2_TASK, "status": "done"}
+        router.post("/v2/tasks/tsk-abc-123/integration-result/").respond(
+            200, json=done)
+        task = vtf.tasks.integration_result(
+            "tsk-abc-123", success=True, detail="merged abc123")
+        assert task.status == "done"
+
+    def test_task_integration_result_conflict(self, client):
+        """WC-2 reporting seam — conflict ⇒ needs_attention."""
+        vtf, router = client
+        na = {**V2_TASK, "status": "needs_attention"}
+        router.post("/v2/tasks/tsk-abc-123/integration-result/").respond(
+            200, json=na)
+        task = vtf.tasks.integration_result(
+            "tsk-abc-123", success=False, detail="CONFLICT: a.py")
+        assert task.status == "needs_attention"
+
     def test_task_block(self, client):
         """DoD #8"""
         vtf, router = client

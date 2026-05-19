@@ -95,6 +95,19 @@ class TaskManager(_BaseManager):
         data = self._transport.post(f"/v2/tasks/{id}/fail/")
         return Task.model_validate(data)
 
+    def integration_result(
+        self, id: str, *, success: bool, detail: str = ""
+    ) -> Task:
+        """WC-2: report a workgraph task's post-approve integration
+        outcome. success ⇒ integrating→done; not success ⇒
+        integrating→needs_attention (+ a note carrying `detail`).
+        Idempotent if the task is already resolved (reaper race)."""
+        data = self._transport.post(
+            f"/v2/tasks/{id}/integration-result/",
+            json={"success": success, "detail": detail},
+        )
+        return Task.model_validate(data)
+
     def recover(self, id: str, *, target: str, reason: str = "") -> Task:
         data = self._transport.post(f"/v2/tasks/{id}/recover/", json={"target": target, "reason": reason})
         return Task.model_validate(data)

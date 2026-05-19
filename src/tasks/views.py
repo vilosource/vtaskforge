@@ -327,6 +327,66 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         serializer = self.get_serializer(task)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["post"], url_path="integration-result")
+    def integration_result(self, request, pk=None):
+        """WC-2 reporting seam (completes WC-1/C3's controller-report
+        half). The controller reports the post-approve integration
+        outcome for a workgraph task:
+
+          success=true  → integrating → done
+          success=false → integrating → needs_attention + a note
+                           carrying `detail` (conflicting paths / push
+                           error) for bounded rework.
+
+        Idempotent / re-entrant with the WC-1/C4 reaper: if the task is
+        already resolved (done / needs_attention / cancelled) the call
+        is a no-op returning the current state — not an error — so a
+        controller report that races the reaper (or a retry) is safe.
+        Reporting on a non-integration, non-resolved state is misuse.
+        """
+        task = self.get_object()
+        if "success" not in request.data:
+            return Response(
+                {"error": {"code": "MISSING_FIELD",
+                           "message": "'success' (bool) is required"}},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        success = bool(request.data.get("success"))
+        detail = str(request.data.get("detail", ""))
+
+        if task.status != "integrating":
+            if task.status in ("done", "needs_attention", "cancelled"):
+                serializer = self.get_serializer(task)
+                return Response(serializer.data)  # idempotent no-op
+            return Response(
+                {"error": {"code": "NOT_INTEGRATING",
+                           "message": f"Task is '{task.status}', not "
+                                      f"'integrating'"}},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if success:
+            try:
+                perform_transition(task, "done", trigger_source="integration")
+            except InvalidTransition as exc:
+                return invalid_transition_response(exc)
+            record_event(task, "integration_succeeded",
+                         data={"detail": detail}, trigger_source="integration")
+        else:
+            try:
+                perform_transition(task, "needs_attention",
+                                   trigger_source="integration")
+            except InvalidTransition as exc:
+                return invalid_transition_response(exc)
+            if detail:
+                Note.objects.create(
+                    task=task, text=f"Integration failed: {detail}")
+            record_event(task, "integration_failed",
+                         data={"detail": detail}, trigger_source="integration")
+
+        serializer = self.get_serializer(task)
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"])
     def recover(self, request, pk=None):
         """needs_attention -> todo (re-queue) or draft (major rework)."""
