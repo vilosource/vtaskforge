@@ -70,6 +70,11 @@ class Milestone(ProjectScopedModel, NanoIDMixin, TimestampMixin):
         choices=MILESTONE_STATUS_CHOICES,
         default="pending",
     )
+    # WC-1/C1: the system-of-record half of the integration-branch model.
+    # vtaskforge records only the *name*; the controller (WC-2) creates and
+    # owns the actual git ref. Blank ⇒ single-task milestone, base_ref falls
+    # back to project.default_branch (V16 — today's behaviour unchanged).
+    integration_branch = models.CharField(max_length=255, blank=True, default="")
     order = models.IntegerField(default=0)
     default_needs_review_before_start = models.BooleanField(null=True, blank=True, default=None)
     default_needs_review_on_completion = models.BooleanField(null=True, blank=True, default=None)

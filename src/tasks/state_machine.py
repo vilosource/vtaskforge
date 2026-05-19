@@ -15,9 +15,13 @@ TERMINAL_STATUSES = {"done", "cancelled"}
 
 NON_TERMINAL_STATUSES = {
     "draft", "pending_start_review", "todo", "doing",
-    "pending_completion_review", "changes_requested",
+    "pending_completion_review", "integrating", "changes_requested",
     "needs_attention", "blocked", "deferred"
 }
+
+# WC-1/C4: workgraph integration lease (minutes). Set on entry to
+# 'integrating'; expire_stale_integrations reaps past this.
+DEFAULT_INTEGRATION_TIMEOUT_MINUTES = 30
 
 VALID_TRANSITIONS = {
     "draft": [
@@ -48,7 +52,9 @@ VALID_TRANSITIONS = {
         "deferred",
     ],
     "pending_completion_review": [
-        "done",                  # approved
+        "done",                  # approved (non-workgraph — V16 unchanged)
+        "integrating",           # WC-1/C3: approved workgraph task takes
+                                 # the milestone merge slot
         "changes_requested",     # rejected
         "cancelled",
         "deferred",
@@ -56,6 +62,13 @@ VALID_TRANSITIONS = {
                                  # unrecordable → escalate to the human
                                  # terminal (I2 backstop; reaper-driven).
                                  # See docs/review-phase-lease-DESIGN.md
+    ],
+    "integrating": [             # WC-1/C3: serialized merge point
+        "done",                  # controller reports merge success
+        "needs_attention",       # conflict (I2) or integration lease
+                                 # expired → bounded rework
+        "cancelled",
+        "deferred",
     ],
     "changes_requested": [
         "doing",                     # executor reclaims for rework (vafi)
@@ -116,8 +129,27 @@ def guard_milestone_active(task):
 # ENTRY_GUARDS[status] — fires on ANY transition INTO that status
 # EXIT_GUARDS[status] — fires on ANY transition FROM that status
 
+def guard_done_via_integration(task):
+    """WC-1/C3 (I4): a workgraph task (its milestone owns an integration
+    branch) may only reach 'done' through a recorded successful
+    integration — i.e. from 'integrating'. Non-workgraph tasks are
+    unaffected (V16 — straight pending_completion_review → done)."""
+    is_workgraph = bool(
+        task.milestone_id and task.milestone.integration_branch
+    )
+    if is_workgraph and task.status != "integrating":
+        raise GuardViolation(
+            task.status, "done",
+            guard_name="guard_done_via_integration",
+            message="Workgraph task cannot reach 'done' directly: it must "
+                    "pass through 'integrating' (a recorded successful "
+                    f"merge into '{task.milestone.integration_branch}').",
+        )
+
+
 ENTRY_GUARDS = {
     "todo": [guard_has_workplan],
+    "done": [guard_done_via_integration],
 }
 
 EXIT_GUARDS = {
@@ -158,6 +190,11 @@ def perform_transition(task, new_status: str, trigger_source: str = "", actor=No
                        DEFAULT_REVIEW_TIMEOUT_MINUTES)
         task.review_expires_at = timezone.now() + timedelta(minutes=mins)
         _fields.append("review_expires_at")
+    if new_status == "integrating":
+        mins = getattr(settings, "INTEGRATION_TIMEOUT_MINUTES",
+                       DEFAULT_INTEGRATION_TIMEOUT_MINUTES)
+        task.integration_expires_at = timezone.now() + timedelta(minutes=mins)
+        _fields.append("integration_expires_at")
     task.save(update_fields=_fields)
     record_event(task, "status_changed", data={"from": old_status, "to": new_status},
                  trigger_source=trigger_source, actor=actor)

@@ -202,6 +202,11 @@ class MilestoneViewSet(VersionedSerializerMixin, ModelViewSet):
         else:
             milestone.status = "active"
         milestone.save()
+        # WC-1/C1: assign the integration-branch name for DAG-composing
+        # milestones (≥2 tasks or any depends_on edge). No-op otherwise.
+        if milestone.status == "active":
+            from workplans.services import set_integration_branch_on_activate
+            set_integration_branch_on_activate(milestone)
         serializer = self.get_serializer(milestone)
         return Response(serializer.data)
 
