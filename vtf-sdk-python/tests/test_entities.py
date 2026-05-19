@@ -10,6 +10,7 @@ V2_TASK = {
     "project": {"id": "p1", "name": "Auth System"},
     "workplan": {"id": "wp1", "name": "Platform Hardening"},
     "milestone": {"id": "ms1", "name": "Phase 1 Core", "status": "active"},
+    "base_ref": "vafi/wg-ms1",
     "labels": ["backend", "security"],
     "acceptance_criteria": ["Token validated", "Tests pass"],
     "needs_review_before_start": False,
@@ -158,6 +159,16 @@ class TestTaskEntity:
         from vtf_sdk.entities import Task
         task = Task.model_validate(V2_TASK)
         assert str(task) == "Add auth endpoint"
+
+    def test_task_base_ref(self):
+        """WC-1/C2: base_ref flows through (extra='ignore' would drop it
+        without the explicit field). The vafi controller consumes this."""
+        from vtf_sdk.entities import Task
+        task = Task.model_validate(V2_TASK)
+        assert task.base_ref == "vafi/wg-ms1"
+        # Absent ⇒ empty default (single-task / older API — V16).
+        no_base = {k: v for k, v in V2_TASK.items() if k != "base_ref"}
+        assert Task.model_validate(no_base).base_ref == ""
 
     def test_task_requires_and_required_tags_are_split(self):
         """requires holds TaskRef deps; required_tags holds capability strings."""
