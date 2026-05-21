@@ -540,3 +540,71 @@ class TestGuardMilestoneActive:
         task = make_task("draft", workplan=wp, milestone=ms)
         with pytest.raises(GuardViolation, match="milestone"):
             perform_transition(task, "cancelled")
+
+
+# ---------------------------------------------------------------------------
+# R6 — spec-admission gate (guard_spec_admissible on todo entry)
+# ---------------------------------------------------------------------------
+
+_FAIL_LOUD = (
+    "If a required step cannot be completed, report the failure explicitly "
+    "in your completion notes — do not rationalize partial completion as "
+    "success."
+)
+
+
+@pytest.mark.django_db
+class TestSpecAdmissionGuard:
+    """R6/MQ-F3: a spec with acceptance_criteria is admissible to `todo`
+    only if every AC id has a labelled gate assertion in test_command,
+    test_command is non-empty, and the fail-loud directive is present."""
+
+    def test_admissible_spec_reaches_todo(self):
+        task = make_task(
+            "draft",
+            acceptance_criteria=["health ok", "create returns 201"],
+            test_command={"command": "pytest -q  # assert ..., 'AC1'; assert ..., 'AC2'"},
+            spec="Build it. " + _FAIL_LOUD,
+        )
+        result = perform_transition(task, "todo")
+        assert result.status == "todo"
+
+    def test_uncovered_ac_is_rejected(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task(
+            "draft",
+            acceptance_criteria=["health ok", "create returns 201"],
+            test_command={"command": "echo run; assert x, 'AC1'"},  # AC2 missing
+            spec="Build it. " + _FAIL_LOUD,
+        )
+        with pytest.raises(GuardViolation, match="AC2"):
+            perform_transition(task, "todo")
+
+    def test_empty_test_command_with_acs_is_rejected(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task(
+            "draft",
+            acceptance_criteria=["health ok"],
+            test_command={},
+            spec="Build it. " + _FAIL_LOUD,
+        )
+        with pytest.raises(GuardViolation, match="test_command"):
+            perform_transition(task, "todo")
+
+    def test_missing_fail_loud_directive_is_rejected(self):
+        from tasks.exceptions import GuardViolation
+        task = make_task(
+            "draft",
+            acceptance_criteria=["health ok"],
+            test_command={"command": "assert x, 'AC1'"},
+            spec="Build it. No directive here.",
+        )
+        with pytest.raises(GuardViolation, match="fail-loud"):
+            perform_transition(task, "todo")
+
+    def test_zero_ac_task_is_exempt(self):
+        """OQ-R6a: a bare task (no acceptance_criteria) is not an SDD spec
+        and stays admissible — the delivery gate backstops it."""
+        task = make_task("draft", acceptance_criteria=[], test_command={}, spec="")
+        result = perform_transition(task, "todo")
+        assert result.status == "todo"
