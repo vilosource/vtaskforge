@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -147,8 +148,67 @@ def guard_done_via_integration(task):
         )
 
 
+# R6 (MQ-F3): the canonical fail-loud directive clause (spec-author
+# bugfix.md R3 / verifier V7). Distinctive enough to match deterministically
+# regardless of surrounding wording; compared lower-cased.
+FAIL_LOUD_SIGNATURE = "do not rationalize partial completion as success"
+
+
+def guard_spec_admissible(task):
+    """R6 spec-admission gate — the recursive image of the delivery gate.
+
+    A spec is admissible to ``todo`` (the claimable state) only if its
+    machine-checkable claims are actually gated. Enforces the deterministic,
+    field-local floor (semantic checks remain the verifier-agent's job; see
+    docs/r6-spec-admission-gate-DESIGN.md):
+
+    - **A1 — F2 AC-id coverage:** AC ids are 1-based positional (the Nth
+      acceptance_criteria item is ``AC<N>``); every id must appear as a
+      labelled assertion in ``test_command.command``. An uncovered AC is
+      decorative ⇒ inadmissible.
+    - **A2 — non-empty gate:** a task with ACs but no ``test_command`` has
+      no machine gate.
+    - **A3 — fail-loud directive present** in the spec body.
+
+    Tasks with **no** acceptance_criteria are exempt (OQ-R6a): they are not
+    SDD specs, and the always-present delivery gate already backstops them
+    against ghost-completion (F7/F10).
+    """
+    acs = task.acceptance_criteria or []
+    if not acs:
+        return
+    command = ((task.test_command or {}).get("command") or "")
+    if not command.strip():
+        raise GuardViolation(
+            task.status, "todo",
+            guard_name="guard_spec_admissible",
+            message="Spec inadmissible: has acceptance_criteria but empty "
+                    "test_command (no machine gate). [A2]",
+        )
+    # Word-boundary match, not substring containment: 'AC1' is a substring of
+    # 'AC10'..'AC19', so plain `in` would falsely count single-digit ids as
+    # covered for specs with >=10 ACs — re-opening the decorative-AC hole.
+    uncovered = [f"AC{i}" for i in range(1, len(acs) + 1)
+                 if not re.search(rf"\bAC{i}\b", command)]
+    if uncovered:
+        raise GuardViolation(
+            task.status, "todo",
+            guard_name="guard_spec_admissible",
+            message=f"Spec inadmissible: acceptance criteria with no "
+                    f"AC-id-labelled gate assertion: {uncovered}. Every AC "
+                    f"needs >=1 labelled assertion in test_command (F2). [A1]",
+        )
+    if FAIL_LOUD_SIGNATURE not in (task.spec or "").lower():
+        raise GuardViolation(
+            task.status, "todo",
+            guard_name="guard_spec_admissible",
+            message="Spec inadmissible: missing fail-loud directive in the "
+                    "spec body (V7/R3). [A3]",
+        )
+
+
 ENTRY_GUARDS = {
-    "todo": [guard_has_workplan],
+    "todo": [guard_has_workplan, guard_spec_admissible],
     "done": [guard_done_via_integration],
 }
 
