@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -184,8 +185,11 @@ def guard_spec_admissible(task):
             message="Spec inadmissible: has acceptance_criteria but empty "
                     "test_command (no machine gate). [A2]",
         )
+    # Word-boundary match, not substring containment: 'AC1' is a substring of
+    # 'AC10'..'AC19', so plain `in` would falsely count single-digit ids as
+    # covered for specs with >=10 ACs — re-opening the decorative-AC hole.
     uncovered = [f"AC{i}" for i in range(1, len(acs) + 1)
-                 if f"AC{i}" not in command]
+                 if not re.search(rf"\bAC{i}\b", command)]
     if uncovered:
         raise GuardViolation(
             task.status, "todo",

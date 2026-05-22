@@ -608,3 +608,38 @@ class TestSpecAdmissionGuard:
         task = make_task("draft", acceptance_criteria=[], test_command={}, spec="")
         result = perform_transition(task, "todo")
         assert result.status == "todo"
+
+    def test_double_digit_ac_uncovered_is_rejected(self):
+        """Regression: AC-id coverage must use word-boundary matching, not
+        substring containment. With >=10 ACs, 'AC1' is a substring of 'AC10'
+        etc. — a spec labelling only AC10..AC12 must NOT report AC1/AC2 as
+        covered, or a non-compliant spec slips into todo (the exact decorative
+        -AC hole R6 exists to close)."""
+        from tasks.exceptions import GuardViolation
+        acs = [f"criterion {i}" for i in range(1, 13)]  # 12 ACs → AC1..AC12
+        # command labels only the double-digit ids; AC1..AC9 are uncovered.
+        command = "pytest -q  # " + "; ".join(
+            f"assert x, 'AC{i}'" for i in range(10, 13))
+        task = make_task(
+            "draft",
+            acceptance_criteria=acs,
+            test_command={"command": command},
+            spec="Build it. " + _FAIL_LOUD,
+        )
+        with pytest.raises(GuardViolation, match=r"AC1\b"):
+            perform_transition(task, "todo")
+
+    def test_double_digit_ac_fully_covered_is_admissible(self):
+        """Companion to the regression: when every AC1..AC12 is labelled with
+        word boundaries, the >=10-AC spec is admissible."""
+        acs = [f"criterion {i}" for i in range(1, 13)]
+        command = "pytest -q  # " + "; ".join(
+            f"assert x, 'AC{i}'" for i in range(1, 13))
+        task = make_task(
+            "draft",
+            acceptance_criteria=acs,
+            test_command={"command": command},
+            spec="Build it. " + _FAIL_LOUD,
+        )
+        result = perform_transition(task, "todo")
+        assert result.status == "todo"
