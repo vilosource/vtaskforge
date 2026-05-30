@@ -14,8 +14,8 @@ from prefs.mixins import TrackAccessMixin
 from projects.models import Project
 
 from .admission import near_matches
-from .models import ProjectVariable
-from .serializers import ProjectVariableSerializer
+from .models import ProjectVariable, VariableAudit
+from .serializers import ProjectVariableSerializer, VariableAuditSerializer
 
 
 class ProjectVariableViewSet(TrackAccessMixin, ModelViewSet):
@@ -92,3 +92,21 @@ class ProjectVariableViewSet(TrackAccessMixin, ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         return super().partial_update(request, *args, **kwargs)
+
+
+class VariableAuditViewSet(TrackAccessMixin, ModelViewSet):
+    """Append-only variable-fetch audit rows (vafi controller → vtaskforge).
+
+    `create`: the controller posts one row per Vault read. `list`: forensic,
+    scoped to the user's projects. No update/delete (audit is append-only).
+    NOTE: production should tighten `create` to the controller service account.
+    """
+
+    access_resource_type = "variable_audit"
+    serializer_class = VariableAuditSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        qs = VariableAudit.objects.select_related("task", "project").all()
+        return scope_queryset_to_user_projects(qs, self.request.user, VariableAudit)
