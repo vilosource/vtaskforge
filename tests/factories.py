@@ -3,6 +3,7 @@ Factory Boy factories for all vtaskforge models.
 """
 import factory
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 from agents.models import Agent
 from core.mixins import generate_nanoid
@@ -11,6 +12,7 @@ from links.models import Link
 from projects.models import Project
 from reviews.models import Review
 from tasks.models import Note, Task
+from variables.models import ProjectVariable, VariableAudit
 from workplans.models import Milestone, Workplan
 
 
@@ -125,3 +127,33 @@ class TaskEventFactory(factory.django.DjangoModelFactory):
     data = factory.Dict({"from": "draft", "to": "todo"})
     trigger_source = "test"
     actor = None
+
+
+class ProjectVariableFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ProjectVariable
+
+    project = factory.SubFactory(ProjectFactory)
+    name = factory.Sequence(lambda n: f"VAR_{n}")
+    role = "executor"
+    scope = "project"
+    required = True
+
+
+class VariableAuditFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = VariableAudit
+
+    project = factory.SubFactory(ProjectFactory)
+    task = factory.SubFactory(TaskFactory)
+    timestamp = factory.LazyFunction(timezone.now)
+    variable_name = factory.Sequence(lambda n: f"VAR_{n}")
+    variable_scope = "project"
+    vault_path = factory.LazyAttribute(
+        lambda o: f"secret/apps/vtaskforge/dev/projects/{o.project.id}/executor/{o.variable_name}"
+    )
+    vault_version = 1
+    result = "success"
+    size_bytes = 47
+    duration_ms = 12
+    controller_id = "controller-0"

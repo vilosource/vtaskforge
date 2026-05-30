@@ -25,6 +25,10 @@ class Task(ProjectScopedModel, NanoIDMixin, TimestampMixin):
 
     title = models.CharField(max_length=500)
     description = models.TextField(blank=True, default="")
+    # Snapshot of { variable_name: vault_version } captured at spawn time by the
+    # vafi controller (populated in C.3); enables forensic replay. Nullable —
+    # tasks without a `variables:` block leave it None. See variables substrate.
+    secrets_snapshot = models.JSONField(null=True, blank=True)
     status = models.CharField(
         max_length=30,
         choices=TASK_STATUS_CHOICES,
