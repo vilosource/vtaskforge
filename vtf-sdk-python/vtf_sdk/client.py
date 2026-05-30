@@ -9,6 +9,7 @@ from .managers import (
     MemberManager,
     MilestoneManager,
     ProjectManager,
+    ProjectVariableManager,
     ReviewsManager,
     ServiceAccountManager,
     TaskManager,
@@ -43,6 +44,7 @@ class VtfClient:
         )
         self.tasks = TaskManager(self._transport)
         self.projects = ProjectManager(self._transport)
+        self.project_variables = ProjectVariableManager(self._transport)
         self.workplans = WorkplanManager(self._transport)
         self.milestones = MilestoneManager(self._transport)
         self.agents = AgentManager(self._transport)

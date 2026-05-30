@@ -1,6 +1,6 @@
 """Helper utilities for mocking the SDK client in CLI tests."""
 from unittest.mock import MagicMock
-from vtf_sdk.entities import Task, Project, Workplan, Milestone, Agent, Review, Note, TaskEvent
+from vtf_sdk.entities import Task, Project, ProjectVariable, Workplan, Milestone, Agent, Review, Note, TaskEvent
 from vtf_sdk.pagination import PagedResult
 from vtf_sdk.refs import ProjectRef, WorkplanRef, MilestoneRef, TaskRef, UserActor
 from vtf_sdk.exceptions import VtfError
@@ -26,6 +26,15 @@ def make_project(**overrides):
     }
     defaults.update(overrides)
     return Project.model_validate(defaults)
+
+
+def make_project_variable(**overrides):
+    defaults = {
+        "id": "var-001", "name": "GH_TOKEN", "role": "executor",
+        "scope": "project", "description": None, "required": True,
+    }
+    defaults.update(overrides)
+    return ProjectVariable.model_validate(defaults)
 
 
 def make_paged(items, has_more=False):

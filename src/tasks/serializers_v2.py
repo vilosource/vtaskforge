@@ -48,7 +48,7 @@ class TaskV2Serializer(serializers.ModelSerializer):
             "review_return_to", "requires", "required_tags",
             "assigned_to", "claimed_by", "claimed_at",
             "claim_timeout", "claim_expires_at",
-            "created_by", "spec", "agent_model",
+            "created_by", "spec", "variables", "agent_model",
             "test_command", "judge", "isolation",
             "retry_count", "execution_summary",
             "created_at", "updated_at", "permissions",
@@ -142,6 +142,13 @@ class TaskV2Serializer(serializers.ModelSerializer):
                 )
             if review is None:
                 data['needs_review_on_completion'] = True
+
+        # Variables substrate admission (parity with v1).
+        if 'variables' in data:
+            from variables.admission import validate_task_variables
+            errors = validate_task_variables(data.get('variables'), project)
+            if errors:
+                raise serializers.ValidationError({"variables": errors})
 
         return data
 

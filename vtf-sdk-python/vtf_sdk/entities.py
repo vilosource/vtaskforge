@@ -112,6 +112,22 @@ class Project(VtfModel):
         return self.name
 
 
+class ProjectVariable(VtfModel):
+    """A project's secret-variable declaration (the value lives in Vault)."""
+
+    id: str
+    name: str
+    role: str
+    scope: str = "project"
+    description: str | None = None
+    required: bool = True
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    def __str__(self) -> str:
+        return f"{self.role}/{self.name}"
+
+
 class Workplan(VtfModel):
     id: str
     name: str

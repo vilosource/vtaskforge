@@ -59,3 +59,12 @@ class TestTaskModel:
         assert task1.id != task2.id
         assert len(task1.id) == 21
         assert len(task2.id) == 21
+
+    def test_secrets_snapshot_defaults_to_none(self):
+        task = TaskFactory()
+        assert task.secrets_snapshot is None
+
+    def test_secrets_snapshot_roundtrips_json(self):
+        task = TaskFactory(secrets_snapshot={"GH_TOKEN": 3, "NPM_TOKEN": 1})
+        task.refresh_from_db()
+        assert task.secrets_snapshot == {"GH_TOKEN": 3, "NPM_TOKEN": 1}

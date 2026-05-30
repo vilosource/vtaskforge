@@ -54,6 +54,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "claim_expires_at",
             "created_by",
             "spec",
+            "variables",
             "agent_model",
             "test_command",
             "judge",
@@ -151,6 +152,14 @@ class TaskSerializer(serializers.ModelSerializer):
                 )
             if review is None:
                 data['needs_review_on_completion'] = True
+
+        # Variables substrate admission — schema, required-set coverage
+        # (executor role), and binding-collision. No Vault round-trip.
+        if 'variables' in data:
+            from variables.admission import validate_task_variables
+            errors = validate_task_variables(data.get('variables'), project)
+            if errors:
+                raise serializers.ValidationError({"variables": errors})
 
         return data
 
