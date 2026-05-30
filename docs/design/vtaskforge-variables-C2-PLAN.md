@@ -88,12 +88,17 @@ both `/v1/` and `/v2/`. `ProjectVariable` has **no actor/user FKs**, so v1 and v
 identical. **Recommendation: one `ProjectVariableSerializer`** registered for both versions (no v2 variant
 needed); revisit only if a computed/permission field is later added.
 
-### Q4 — `VariableAudit` write path in C.2?
-The design has vafi (C.3) "emit `VariableAudit` rows via the vtaskforge API." C.2 lands the **model**;
-the **write endpoint** it consumes is logically C.2 (so C.3 has something to call). **Recommendation:**
-land the model in Slice 1 and a minimal create-only `VariableAudit` endpoint in Slice 4 (service-token
-auth, controller-only), explicitly read-mostly for now. **Confirm** whether you want the endpoint in C.2
-or deferred to land with its C.3 consumer.
+### Q4 — RESOLVED (2026-05-30): `VariableAudit` write endpoint DEFERRED to C.3
+The model lands in C.2 (Slice 1). The create-only write endpoint is **deferred to ship with its C.3 vafi
+consumer** — building an unused write endpoint now adds surface (auth model, contract) with no caller. C.3
+adds it alongside the controller that emits to it.
+
+### Slice 4 note (2026-05-30): `Task.variables` field added here
+The design's task-spec `variables:` shape needs a structured home, and `Task.spec` is free-text — so Slice 4
+adds `Task.variables = JSONField(default=list)` (migration 0018) with its validation. (It was an omission in
+the Slice-1 model list.) **Required-set coverage validates against the EXECUTOR role** — the executor always
+runs and is the primary consumer; authoritative judge-role + shared-scope coverage is pre-spawn's job (C.3).
+Additive + default `[]` → tasks without variables are unaffected.
 
 ### Q5 — `vtf task lint` data source
 `vtf task lint <spec.yaml>` does **local** fuzzy-match (Levenshtein ≤2 or 25% of name length) of declared

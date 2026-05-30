@@ -25,6 +25,11 @@ class Task(ProjectScopedModel, NanoIDMixin, TimestampMixin):
 
     title = models.CharField(max_length=500)
     description = models.TextField(blank=True, default="")
+    # Declared secret-variable references for this task (the `variables:` spec
+    # field). Validated at admission (variables.admission.validate_task_variables)
+    # and consumed by the vafi controller at spawn (C.3). Defaults to [] — tasks
+    # without variables are unaffected.
+    variables = models.JSONField(default=list, blank=True)
     # Snapshot of { variable_name: vault_version } captured at spawn time by the
     # vafi controller (populated in C.3); enables forensic replay. Nullable —
     # tasks without a `variables:` block leave it None. See variables substrate.
