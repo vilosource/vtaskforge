@@ -147,6 +147,7 @@ for _v in ('v1', 'v2'):
         path(f'{_v}/', include('events.urls')),
         path(f'{_v}/', include('links.urls')),
         path(f'{_v}/', include('reviews.urls')),
+        path(f'{_v}/', include('variables.urls')),
         path(f'{_v}/external-identities/', ExternalIdentityView.as_view(), name=f'{_v}-external-identities'),
         path(f'{_v}/external-identities/<int:pk>/', ExternalIdentityDetailView.as_view(), name=f'{_v}-external-identity-detail'),
         path(f'{_v}/locks/', LockView.as_view(), name=f'{_v}-locks'),

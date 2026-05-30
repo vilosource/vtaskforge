@@ -159,8 +159,15 @@ migration backfills existing rows to valid unique slugs.
   - **Near-match warning + `?force=true`** on `create`: if the new `name` is within Levenshtein ≤2 (or 25% of
     name length) of an existing variable name for the same (project, role), reject 400 with a "did you mean…"
     payload unless `?force=true`. (Shared Levenshtein helper reused by `vtf task lint`.)
-  - `destroy`: 200 + warning listing task specs that reference the name (best-effort scan; non-blocking).
-  - `partial_update`: only `description`, `required`, `scope` mutable; `name`/`role` immutable (409/400 if attempted).
+  - `destroy`: 204 hard delete. (Reference-warning scan of referencing task specs deferred to Slice 4/5 when
+    the `variables:` task-spec field exists.)
+  - `partial_update`: only `description`, `required`, `scope` mutable; `name`/`role` immutable (400 if changed).
+  - **DECISION (2026-05-30):** detail routes address variables by their **surrogate PK** (`.../variables/<pk>/`),
+    NOT by `{name}` as sketched above — a name is not unique without the role (`(project, name, role)`), so PK
+    addressing is unambiguous. The CLI (Slice 5) resolves `name` (+ `role`) → PK via a list call. Parent project
+    is resolved by **slug-or-PK**. Exact-duplicate is checked explicitly in `create()` (project is URL-bound, so
+    DRF can't attach a UniqueTogetherValidator). Project-scoping uses `scope_queryset_to_user_projects` (staff
+    bypass applies, as everywhere); a non-member is scoped out (404).
 - `variables/urls.py`: nested route `path("projects/<str:project_id>/variables/...")` per the existing nesting
   convention (like `projects/{id}/members/`). Either a router on a nested basename or explicit `APIView`s —
   **recommend** routing the ViewSet with a `project_id` URL kwarg + a small mixin to inject it, matching members.

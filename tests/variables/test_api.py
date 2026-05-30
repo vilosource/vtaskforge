@@ -25,6 +25,18 @@ def project(db, api_client):
     return p
 
 
+@pytest.fixture
+def outsider_client(db):
+    """Authenticated NON-staff user with no project memberships."""
+    from rest_framework.authtoken.models import Token
+    from rest_framework.test import APIClient
+    user = User.objects.create_user(username="outsider", password="x", is_staff=False)
+    token = Token.objects.create(user=user)
+    c = APIClient()
+    c.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    return c
+
+
 @pytest.mark.django_db
 class TestCreate:
     def test_create_201_with_defaults(self, api_client, project):
@@ -147,10 +159,11 @@ class TestAuth:
         r = unauthenticated_client.get(f"/v1/projects/{project.id}/variables/")
         assert r.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
-    def test_non_member_cannot_see(self, api_client):
+    def test_non_member_cannot_see(self, outsider_client):
         other = ProjectFactory()
         ProjectVariableFactory(project=other, name="A", role="executor")
-        r = api_client.get(f"/v1/projects/{other.id}/variables/")
-        assert r.status_code == status.HTTP_403_FORBIDDEN or (
+        r = outsider_client.get(f"/v1/projects/{other.id}/variables/")
+        # Scoped out of the user's projects → not found / forbidden / empty.
+        assert r.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND) or (
             r.status_code == status.HTTP_200_OK and len(_results(r)) == 0
         )
