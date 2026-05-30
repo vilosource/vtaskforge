@@ -12,6 +12,7 @@ from .entities import (
     Milestone,
     Note,
     Project,
+    ProjectVariable,
     Review,
     Task,
     TaskEvent,
@@ -209,6 +210,40 @@ class ProjectManager(_BaseManager):
 
     def delete(self, id: str) -> None:
         self._transport.delete(f"/v2/projects/{id}/")
+
+
+class ProjectVariableManager(_BaseManager):
+    """Manage a project's secret-variable declarations (nested under projects)."""
+
+    def _base(self, project_id: str) -> str:
+        return f"/v2/projects/{project_id}/variables/"
+
+    def list(self, project_id: str, *, role: str | None = None,
+             page_size: int = 100) -> PagedResult[ProjectVariable]:
+        params = {"page_size": page_size}
+        if role:
+            params["role"] = role
+        data = self._transport.get(self._base(project_id), params=params)
+        return _parse_paged(data, ProjectVariable)
+
+    def get(self, project_id: str, pk: str) -> ProjectVariable:
+        data = self._transport.get(f"{self._base(project_id)}{pk}/")
+        return ProjectVariable.model_validate(data)
+
+    def create(self, project_id: str, *, name: str, role: str,
+               force: bool = False, **kwargs) -> ProjectVariable:
+        path = self._base(project_id)
+        if force:
+            path += "?force=true"
+        data = self._transport.post(path, json={"name": name, "role": role, **kwargs})
+        return ProjectVariable.model_validate(data)
+
+    def update(self, project_id: str, pk: str, **kwargs) -> ProjectVariable:
+        data = self._transport.patch(f"{self._base(project_id)}{pk}/", json=kwargs)
+        return ProjectVariable.model_validate(data)
+
+    def delete(self, project_id: str, pk: str) -> None:
+        self._transport.delete(f"{self._base(project_id)}{pk}/")
 
 
 class WorkplanManager(_BaseManager):
