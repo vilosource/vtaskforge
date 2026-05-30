@@ -470,3 +470,75 @@ def update(ctx, id, title, description, labels, spec, spec_file, agent_model, ju
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1)
     click.echo(f"Updated task {id}")
+
+
+def _levenshtein(a, b):
+    if a == b:
+        return 0
+    if not a or not b:
+        return len(a) + len(b)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _near(name, known):
+    thr = max(2, len(name) // 4)
+    return [k for k in known if 0 < _levenshtein(name, k) <= thr]
+
+
+@task.command("lint")
+@click.argument("spec_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--project", required=True, help="Project id/slug to validate against")
+@click.option("--role", type=click.Choice(["executor", "judge"]), default="executor")
+@click.pass_context
+def lint(ctx, spec_file, project, role):
+    """Lint a task spec's variables: against a project's declared schema (local)."""
+    import yaml
+
+    client = ctx.obj["client"]
+    with open(spec_file) as f:
+        spec = yaml.safe_load(f) or {}
+    declared = spec.get("variables") or []
+
+    try:
+        result = client.project_variables.list(project, role=role)
+    except VtfError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+    known = {v.name for v in result.items}
+
+    problems = []
+    env_seen = {}
+    for i, entry in enumerate(declared):
+        if not isinstance(entry, dict) or not entry.get("name"):
+            problems.append(f"variables[{i}]: missing 'name'")
+            continue
+        name = entry["name"]
+        source = entry.get("source") or {}
+        kind = source.get("kind", "vault")
+        scope = source.get("scope", "project")
+        if kind == "vault" and scope == "project" and name not in known:
+            near = _near(name, known)
+            hint = f" — did you mean {', '.join(near)}?" if near else ""
+            problems.append(f"'{name}' is not a declared {role} variable{hint}")
+        if "target" not in entry:
+            env = name
+        else:
+            env = (entry.get("target") or {}).get("env")
+        if env:
+            if env in env_seen:
+                problems.append(f"target.env '{env}' collides ('{name}' vs '{env_seen[env]}')")
+            else:
+                env_seen[env] = name
+
+    if problems:
+        for p in problems:
+            click.echo(f"  ✗ {p}")
+        click.echo(f"FAIL: {len(problems)} issue(s)")
+        raise SystemExit(1)
+    click.echo("OK: variables lint passed")
