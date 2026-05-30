@@ -14,7 +14,7 @@ class ProjectV2Serializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
-            "id", "name", "description", "status", "repo_url",
+            "id", "slug", "name", "description", "status", "repo_url",
             "default_branch", "tags", "owner", "created_by",
             "created_at", "updated_at", "permissions",
         ]

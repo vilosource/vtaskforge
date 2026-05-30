@@ -46,11 +46,16 @@ class TestProjectSlugModel:
         p.refresh_from_db()
         assert p.slug == original  # rename of display name never changes slug
 
-    @pytest.mark.parametrize("bad", ["BadSlug", "bad_slug", "-bad", "bad-", "a" * 64, "bad slug", ""])
+    @pytest.mark.parametrize("bad", ["BadSlug", "bad_slug", "-bad", "bad-", "a" * 64, "bad slug"])
     def test_validator_rejects_invalid(self, bad):
         p = Project(name="X", slug=bad)
         with pytest.raises(ValidationError):
             p.full_clean()
+
+    def test_blank_slug_autoderives_from_name(self):
+        # blank="" is not a validator error (blank=True) — save() derives instead.
+        p = Project.objects.create(name="Hello World", slug="")
+        assert p.slug == "hello-world"
 
 
 @pytest.mark.django_db

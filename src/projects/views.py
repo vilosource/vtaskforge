@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import IntegrityError
-from django.db.models import Count, ProtectedError
+from django.db.models import Count, ProtectedError, Q
+from django.http import Http404
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -40,6 +41,17 @@ class ProjectViewSet(VersionedSerializerMixin, TrackAccessMixin, ModelViewSet):
         qs = scope_queryset_to_user_projects(qs, self.request.user, Project)
         return qs
 
+    def get_object(self):
+        # Resolve a project by either its nanoid PK or its slug, so operators
+        # can use the human-meaningful slug interchangeably with the PK.
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup = self.kwargs.get(self.lookup_field)
+        obj = queryset.filter(Q(pk=lookup) | Q(slug=lookup)).first()
+        if obj is None:
+            raise Http404
+        self.check_object_permissions(self.request, obj)
+        return obj
+
     def perform_create(self, serializer):
         kwargs = {}
         if self.request.user.is_authenticated:
@@ -59,6 +71,12 @@ class ProjectViewSet(VersionedSerializerMixin, TrackAccessMixin, ModelViewSet):
             return Response(
                 {"detail": "Method not allowed. Use PATCH for partial updates."},
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
+        # The slug is immutable — it backs the Vault path + per-project SA name.
+        if "slug" in request.data and request.data.get("slug") != self.get_object().slug:
+            return Response(
+                {"slug": ["The project slug is immutable and cannot be changed."]},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         return super().update(request, *args, **kwargs)
 

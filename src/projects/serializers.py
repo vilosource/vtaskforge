@@ -15,6 +15,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = [
             "id",
+            "slug",
             "name",
             "description",
             "status",
@@ -26,4 +27,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        # slug is writable on create (optional — auto-derived from name) but
+        # immutable thereafter; the viewset rejects changes on update.
         read_only_fields = ["id", "created_at", "updated_at", "owner", "created_by"]
