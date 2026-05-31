@@ -1,6 +1,11 @@
 # vtaskforge — Design Gaps Analysis
 
-Status: Active (2026-03-19)
+> **⚠️ ARCHIVED — Phase 0–2 historical reference only (archived 2026-05-31).**
+> All six gaps below were Resolved during Milestones 0–7. This doc no longer
+> directs new work; kept as a record of early design questions. For current
+> direction see [`../../ROADMAP.md`](../../ROADMAP.md).
+
+Status: Complete (Phase 0–2 reference; all gaps Resolved)
 
 Identified gaps in the current design that need resolution before or during implementation.
 

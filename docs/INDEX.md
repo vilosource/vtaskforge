@@ -4,6 +4,7 @@
 
 | Document | When to read |
 |----------|-------------|
+| [ROADMAP.md](ROADMAP.md) | **Where vtf / VFSF is going next — the Ingest Cycle (vtfkb → project init → ingest engine). Start here for direction.** |
 | [README.md](../README.md) | First time — what vtf is, quick start, CLI reference |
 | [Quickstart Guide](guides/quickstart-GUIDE.md) | Getting from zero to running with your first workplan |
 | [CLAUDE.md](../CLAUDE.md) | Dev setup, commands, project structure (auto-loaded by Claude Code) |
@@ -49,12 +50,14 @@ Learnings from building and using vtf.
 | Document | Purpose |
 |----------|---------|
 | [Process Retrospective](design/process-retrospective-ANALYSIS.md) | What worked and what didn't across Milestones 0-4. Blast radius discovery, simulation gap, deployment testing |
-| [Design Gaps Analysis](design/design-gaps-ANALYSIS.md) | Identified and resolved gaps in the original design |
-| [Simulation Gap Analysis](design/simulation-gap-ANALYSIS.md) | Gap analysis for testing and simulation capabilities |
+| [Design Gaps Analysis](design/archive/design-gaps-ANALYSIS.md) | *(archived)* Phase 0–2 gaps, all resolved |
+| [Simulation Gap Analysis](design/archive/simulation-gap-ANALYSIS.md) | *(archived)* Gap analysis for testing and simulation capabilities |
 
 ## Proposals
 
-Future system extensions, not yet implemented.
+Future system extensions, not yet implemented. *(These predate the 2026-05-31
+project-first / ingest pivot — re-evaluate against [ROADMAP.md](ROADMAP.md)
+before acting on them.)*
 
 | Document | Purpose |
 |----------|---------|
