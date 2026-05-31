@@ -46,6 +46,11 @@ class Config:
     def get_token(self):
         return self.get("token")
 
+    def get_probe_url(self):
+        """Base URL of the vafi controller's onboarding-probe endpoint
+        (VTF_PROBE_URL or `probe_url` in config). Used by `vtf project var probe`."""
+        return self.get("probe_url")
+
     @property
     def api_url(self):
         return self.get_api_url()

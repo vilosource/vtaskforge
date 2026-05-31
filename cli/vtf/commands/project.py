@@ -207,4 +207,60 @@ def var_remove(ctx, project, name, role):
     click.echo(f"Removed {role} variable {name}")
 
 
+# Map a probe result to (symbol, human text). ✓ on resolvable, ✗ on failure.
+_PROBE_RESULT_TEXT = {
+    "success": ("✓", "vault: read OK, value present, {n} bytes"),
+    "empty": ("✓", "vault: read OK, value present but empty"),
+    "not_found": ("✗", "vault: 404 not found at expected path"),
+    "permission_denied": ("✗", "vault: 403 permission denied"),
+    "unreachable": ("✗", "vault: unreachable"),
+    "not_probed": ("–", "not probed (judge SA — β)"),
+}
+
+
+@var.command("probe")
+@click.argument("project")
+@click.option("--probe-url", default=None,
+              help="vafi controller probe base URL (overrides VTF_PROBE_URL / config probe_url)")
+@click.pass_context
+def var_probe(ctx, project, probe_url):
+    """Pre-flight: resolve PROJECT's declared variables in Vault and report
+    status (no values). Exits non-zero on required-variable failures."""
+    import httpx
+    from vtf.config import Config
+
+    cfg = Config()
+    base = probe_url or cfg.get_probe_url()
+    if not base:
+        click.echo("Error: probe URL not set — pass --probe-url, set VTF_PROBE_URL, "
+                   "or `vtf config set probe_url <url>`.", err=True)
+        raise SystemExit(2)
+    try:
+        resp = httpx.post(f"{base.rstrip('/')}/admin/probe", params={"project": project},
+                          headers={"Authorization": f"Token {cfg.token or ''}"}, timeout=30.0)
+    except httpx.HTTPError as e:
+        click.echo(f"Error reaching probe endpoint: {e}", err=True)
+        raise SystemExit(1)
+    if resp.status_code != 200:
+        try:
+            msg = resp.json().get("error", resp.text)
+        except Exception:
+            msg = resp.text
+        click.echo(f"Error: HTTP {resp.status_code}: {msg}", err=True)
+        raise SystemExit(1)
+
+    rep = resp.json()
+    click.echo(f"Project: {rep['project']}  (slug: {rep.get('slug', '?')})")
+    click.echo(f"Environment: {rep.get('environment', '?')}\n")
+    click.echo("Executor variables:")
+    for v in rep.get("variables", []):
+        symbol, text = _PROBE_RESULT_TEXT.get(v["result"], ("?", v["result"]))
+        detail = text.format(n=v.get("size_bytes"))
+        suffix = "  [optional]" if not v.get("required", True) else ""
+        click.echo(f"  {symbol} {v['name']:<24} ({detail}){suffix}")
+    result = rep.get("result", "FAIL")
+    click.echo(f"\nResult: {result}")
+    raise SystemExit(0 if result == "PASS" else 1)
+
+
 project.add_command(var)
