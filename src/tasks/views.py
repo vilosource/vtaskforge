@@ -182,6 +182,26 @@ class TaskViewSet(TrackAccessMixin, ModelViewSet):
         serializer = self.get_serializer(task)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["post"], url_path="secrets-snapshot")
+    def secrets_snapshot(self, request, pk=None):
+        """Controller-facing: persist the {variable_name: vault_version} snapshot
+        the vafi controller captured at spawn (C.3). Idempotent whole-value
+        replace of Task.secrets_snapshot — not exposed on the general Task
+        serializer so only the spawning controller writes it (same project
+        scoping as claim/complete). Body: {"snapshot": {"NAME": <version>, ...}}.
+        """
+        task = self.get_object()
+        snapshot = request.data.get("snapshot")
+        if not isinstance(snapshot, dict):
+            return Response(
+                {"error": {"code": "VALIDATION_ERROR",
+                           "message": "snapshot (object) required"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        task.secrets_snapshot = snapshot
+        task.save(update_fields=["secrets_snapshot"])
+        return Response({"id": task.id, "secrets_snapshot": task.secrets_snapshot})
+
     @action(detail=True, methods=["post"])
     def claim(self, request, pk=None):
         """todo -> doing. Atomic claim with tag matching, assignment, and dependency checks."""
